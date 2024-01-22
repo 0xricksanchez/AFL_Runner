@@ -1,11 +1,23 @@
 [package]
 name = "afl_runner"
+authors = ["0x434b <admin@0x434b.dev"]
+repository = "https://github.com/0xricksanchez/AFL_Runner"
+description = "AFL Runner is a tool to run an efficient multi-core AFLPlusPlus campaign."
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+keywords = ["afl", "fuzzing", "fuzzer", "fuzz"]
+license = "MIT"
 
 [dependencies]
 clap = { version = "4.4.18", features = ["wrap_help", "string", "derive"] }
 rand = "0.8.5"
+sysinfo = "0.30.5"
 tmux_interface = "0.3.1"
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = true
+codegen-units = 1
+panic = "abort"
+overflow-checks = true
