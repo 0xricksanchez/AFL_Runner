@@ -23,8 +23,23 @@ Alternatively you can install via `crates.io`:
 cargo install afl_runner
 ```
 
+## Features
+
+The tools allows for setting the most necessary AFLPlusPlus flags and mimics to some degree the same syntax as AFLplusplus for these things:
+
+- Supported AFLplusplus flags:
+
+  - [x] corpus directory
+  - [x] output directory
+  - [x] dictionary file
+  - [x] Custom `afl-fuzz` binary path
+  - [x] Amount of runner commands to generate
+
+- Other features:
+  - [x] Add Tmux option to automatically create an appropriate layout for all runners
+
 ## TODO
 
-- [ ] Add Tmux option to automatically create an appropriate layout for all runners
+- [ ] Add remote option.
 - [ ] Add more sensible defaults for other options
 - [ ] Add more configuration options

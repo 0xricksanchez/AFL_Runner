@@ -5,6 +5,8 @@ mod harness;
 use harness::Harness;
 mod afl_cmd_gen;
 use afl_cmd_gen::AFLCmdGenerator;
+mod tmux;
+use tmux::Session;
 
 /// Default corpus directory
 const AFL_CORPUS: &str = "/tmp/afl_input";
@@ -117,7 +119,13 @@ fn main() {
     let cmds = afl_runner.generate_afl_commands();
 
     if cli_args.use_tmux {
-        println!("TODO");
+        let tmux = Session::new("afl_runner", &cmds);
+        if let Err(e) = tmux.run() {
+            println!("Error running tmux session: {e}");
+            let _ = tmux.kill_session();
+            return;
+        }
+        tmux.attach().unwrap();
     } else {
         for cmd in cmds {
             println!("{cmd}");

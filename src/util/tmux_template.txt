@@ -1,0 +1,35 @@
+#!/bin/bash
+set -eu
+
+# Set HISTCONTROL to ignorespace
+HISTCONTROL="ignorespace"
+
+# Define the session name
+SESSION_NAME="{{ session_name }}"
+LOG_FILE="{{ log_file }}"
+# Array of commands to run in separate windows
+COMMANDS=(
+	{% for command in commands %}
+	"{{ command }}"
+	{% endfor %}
+)
+
+# Start a new tmux session (detached)
+tmux -2u new-session -d -s $SESSION_NAME
+
+# Create and rename a window for each command
+for i in "${!COMMANDS[@]}"; do
+	WINDOW_NAME="window-$i"
+	if [ $i -eq 0 ]; then
+		# For the first command, send it to the first window and rename it
+    tmux send-keys -t $SESSION_NAME " ${COMMANDS[$i]}" C-m
+		tmux rename-window -t $SESSION_NAME $WINDOW_NAME
+	else
+		# For subsequent commands, create new windows and rename them
+		tmux new-window -t $SESSION_NAME -n $WINDOW_NAME
+    tmux send-keys -t $SESSION_NAME:$WINDOW_NAME " ${COMMANDS[$i]}" C-m
+	fi
+done
+
+# Redirect tmux server log to a specific file
+tmux pipe-pane -o -t $SESSION_NAME "cat >> $LOG_FILE"

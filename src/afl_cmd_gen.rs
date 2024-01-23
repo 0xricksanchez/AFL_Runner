@@ -163,10 +163,10 @@ impl AFLCmdGenerator {
             .expect("Failed to execute 'which'");
         if output.status.success() {
             let afl_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !afl_path.is_empty() {
-                Some(PathBuf::from(afl_path))
-            } else {
+            if afl_path.is_empty() {
                 None
+            } else {
+                Some(PathBuf::from(afl_path))
             }
         } else {
             None
