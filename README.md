@@ -1,4 +1,4 @@
-## AFLRunner (WIP)
+## AFLRunner
 
 `AFL_Runner` is a simple CLI tool to make running efficient multi-core [AFLPlusPlus](https://github.com/AFLplusplus/AFLplusplus)
 campaigns easier. The default configuration is based on the section [_Using multiple cores_](https://aflplus.plus/docs/fuzzing_in_depth/#c-using-multiple-cores)
@@ -17,10 +17,11 @@ cargo build --release
 ./target/release/afl_runner --help
 ```
 
-Alternatively you can install via `crates.io`:
+Alternatively you can install via [crates.io](https://crates.io/crates/afl_runner):
 
 ```bash
 cargo install afl_runner
+afl-runner --help
 ```
 
 ## Features
@@ -32,7 +33,8 @@ The tools allows for setting the most necessary AFLPlusPlus flags and mimics to 
   - [x] corpus directory
   - [x] output directory
   - [x] dictionary file
-  - [x] Custom `afl-fuzz` binary path
+  - [x] Custom `afl-fuzz` binary path for all instances
+  - [x] Supply arguments to target binary (including @@)
   - [x] Amount of runner commands to generate
 
 - Other features:
@@ -43,3 +45,4 @@ The tools allows for setting the most necessary AFLPlusPlus flags and mimics to 
 - [ ] Add remote option.
 - [ ] Add more sensible defaults for other options
 - [ ] Add more configuration options
+- [ ] Allow AFLPlusPlus forks to be used on some amount of runners
