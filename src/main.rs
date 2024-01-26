@@ -96,8 +96,8 @@ pub struct Args {
         help = "Spin up a custom tmux session with the fuzzers",
         required = false
     )]
-    /// When used all generated commands will be put into a tmux session
-    use_tmux: bool,
+    /// Only show the generated commands, don't run them
+    dry_run: bool,
 }
 
 fn main() {
@@ -118,7 +118,12 @@ fn main() {
     );
     let cmds = afl_runner.generate_afl_commands();
 
-    if cli_args.use_tmux {
+    if cli_args.dry_run {
+        println!("Generated commands:");
+        for (i, cmd) in cmds.iter().enumerate() {
+            println!("  {i:3}. {cmd}");
+        }
+    } else {
         let tmux = Session::new("afl_runner", &cmds);
         if let Err(e) = tmux.run() {
             println!("Error running tmux session: {e}");
@@ -126,9 +131,5 @@ fn main() {
             return;
         }
         tmux.attach().unwrap();
-    } else {
-        for cmd in cmds {
-            println!("{cmd}");
-        }
     }
 }
