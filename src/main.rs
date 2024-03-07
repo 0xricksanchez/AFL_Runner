@@ -41,10 +41,11 @@ pub struct Args {
     #[arg(
         short = 'a',
         long,
-        help = "Target binary arguments, including @@ if needed",
+        help = "Target binary arguments, including @@ if needed. Example: `-a -- @@`",
+        raw = true,
         required = false
     )]
-    target_args: Option<String>,
+    target_args: Option<Vec<String>>,
     /// Amount of processes to spin up
     #[arg(
         short,
@@ -102,11 +103,21 @@ pub struct Args {
 
 fn main() {
     let cli_args = Args::parse();
+    let target_args = cli_args.target_args.as_ref().map(|targs| {
+        let pos = targs.iter().position(|arg| arg == "--");
+        let start_index = pos.map_or(0, |p| p + 1);
+        targs
+            .iter()
+            .skip(start_index)
+            .map(|s| s.as_str()) // Convert &String to &str for joining
+            .collect::<Vec<&str>>()
+            .join(" ")
+    });
     let harness = Harness::new(
         cli_args.target,
         cli_args.san_target,
         cli_args.cmpl_target,
-        cli_args.target_args,
+        target_args,
     );
     let afl_runner = AFLCmdGenerator::new(
         harness,
