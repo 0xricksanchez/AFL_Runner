@@ -235,7 +235,7 @@ impl AFLCmdGenerator {
     }
 
     fn apply_queue_selection(strings: &mut [String], rng: &mut impl Rng) {
-        // Applt sequential queue selection to 20% of the configs
+        // Apply sequential queue selection to 20% of the configs
         apply_args(strings, "-Z", 0.2, rng);
     }
 
@@ -367,6 +367,7 @@ impl AFLCmdGenerator {
                     self.apply_normal_instrumentation(strings, num_cmplog_cfgs);
                 }
             }
+            self.apply_normal_instrumentation(strings, num_cmplog_cfgs);
         } else {
             self.apply_normal_instrumentation(strings, 0);
         }
