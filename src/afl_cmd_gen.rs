@@ -76,7 +76,7 @@ impl Default for AFLCmdGenerator {
     fn default() -> Self {
         Self {
             afl_binary: PathBuf::new(),
-            harness: Harness::new(String::new(), None, None, None),
+            harness: Harness::new(String::new(), None, None, None, None),
             input_dir: PathBuf::new(),
             output_dir: PathBuf::new(),
             runners: 1,
@@ -181,12 +181,13 @@ impl AFLCmdGenerator {
         Self::apply_mutation_strategies(&mut strings, &mut rng);
         Self::apply_queue_selection(&mut strings, &mut rng);
         Self::apply_power_schedules(&mut strings);
-        self.set_directories(&mut strings);
-        self.set_fuzzer_roles(&mut strings);
+        self.apply_directory(&mut strings);
+        self.apply_fuzzer_roles(&mut strings);
         self.apply_dictionary(&mut strings);
-        self.set_sanitizer_or_target_binary(&mut strings);
-        self.configure_cmplog(&mut strings, &mut rng);
+        self.apply_sanitizer_or_target_binary(&mut strings);
+        self.apply_cmplog(&mut strings, &mut rng);
         self.apply_target_args(&mut strings);
+        self.apply_cmpcov(&mut strings, &mut rng);
 
         strings
     }
@@ -247,7 +248,7 @@ impl AFLCmdGenerator {
         });
     }
 
-    fn set_directories(&self, strings: &mut Vec<String>) {
+    fn apply_directory(&self, strings: &mut Vec<String>) {
         for s in strings {
             s.push_str(&format!(
                 " -i {} -o {}",
@@ -257,7 +258,7 @@ impl AFLCmdGenerator {
         }
     }
 
-    fn set_fuzzer_roles(&self, strings: &mut [String]) {
+    fn apply_fuzzer_roles(&self, strings: &mut [String]) {
         let target_fname = self
             .harness
             .target_binary
@@ -283,7 +284,7 @@ impl AFLCmdGenerator {
         }
     }
 
-    fn set_sanitizer_or_target_binary(&self, strings: &mut [String]) {
+    fn apply_sanitizer_or_target_binary(&self, strings: &mut [String]) {
         // Set the first one to be a sanitizer_binary if available, otherwise the target_binary
         let binary = self
             .harness
@@ -293,7 +294,7 @@ impl AFLCmdGenerator {
         strings[0].push_str(&format!(" -- {}", binary.display()));
     }
 
-    fn configure_cmplog(&self, strings: &mut [String], rng: &mut impl Rng) {
+    fn apply_cmplog(&self, strings: &mut [String], rng: &mut impl Rng) {
         if let Some(cmplog_binary) = self.harness.cmplog_binary.as_ref() {
             let num_cmplog_cfgs = (f64::from(self.runners) * 0.3) as usize;
             match num_cmplog_cfgs {
@@ -364,7 +365,6 @@ impl AFLCmdGenerator {
                     // - 10% for -l 3
                     // - 20% for -l 2AT.
                     self.apply_cmplog_instrumentation(strings, num_cmplog_cfgs, cmplog_binary, rng);
-                    self.apply_normal_instrumentation(strings, num_cmplog_cfgs);
                 }
             }
             self.apply_normal_instrumentation(strings, num_cmplog_cfgs);
@@ -405,6 +405,50 @@ impl AFLCmdGenerator {
         if let Some(target_args) = self.harness.target_args.as_ref() {
             for s in strings {
                 s.push_str(format!(" {target_args}").as_str());
+            }
+        }
+    }
+
+    fn apply_cmpcov(&self, strings: &mut [String], rng: &mut impl Rng) {
+        // Use 1-3 CMPCOV instances if available.
+        // We want the following distribution:
+        // - 1 instance when >= 3 && < 8 runners
+        // - 2 instances when >= 8 && < 16 runners
+        // - 3 instances when >= 16 runners
+        // Unlike CMPLOG we need to replace the target binary with the cmpcov binary
+        // We never want to replace instace[0] as that one houses a SAN binary
+        // It is unclear if we want to pair CMPLOG with CMPCOV but let's attempt to avoid it
+        if self.harness.cmpcov_binary.as_ref().is_some() {
+            let max_cmpcov_instances = if self.runners >= 16 {
+                3
+            } else if self.runners >= 8 {
+                2
+            } else if self.runners >= 3 {
+                1
+            } else {
+                0
+            };
+            // Find instances that don't have CMPLOG (-c) and replace the target binary with CMPLOG)
+            // Also skip instance[0] as that one houses a SAN binary
+            let mut cmpcov_indices = (1..strings.len())
+                .filter(|i| !strings[*i].contains("-c"))
+                .collect::<Vec<_>>();
+            // Shuffle the indices so we don't always replace the same instances
+            // Stylepoints only
+            cmpcov_indices.shuffle(rng);
+            // Find and replace the target binary string after the -- with the cmpcov binary
+            for i in cmpcov_indices.iter().take(max_cmpcov_instances) {
+                let target_binary = self.harness.target_binary.display().to_string();
+                let cmpcov_binary = self
+                    .harness
+                    .cmpcov_binary
+                    .as_ref()
+                    .unwrap()
+                    .display()
+                    .to_string();
+                if let Some(pos) = strings[*i].find(&target_binary) {
+                    strings[*i].replace_range(pos..pos + target_binary.len(), &cmpcov_binary);
+                }
             }
         }
     }

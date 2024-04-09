@@ -19,7 +19,7 @@ const AFL_OUTPUT: &str = "/tmp/afl_output";
 #[derive(Parser, Debug)]
 #[command(name = "Parallelized AFLPlusPlus Campaign Runner")]
 #[command(author = "C.K. <admin@0x434b.dev>")]
-#[command(version = "0.1.6")]
+#[command(version = "0.1.7")]
 pub struct Args {
     /// Target binary to fuzz
     #[arg(short, long, help = "Instrumented target binary to fuzz")]
@@ -40,6 +40,14 @@ pub struct Args {
         required = false
     )]
     cmpl_target: Option<String>,
+    /// Laf-Intel/CMPCOV binary to use
+    #[arg(
+        short = 'l',
+        long,
+        help = "Instrumented with Laf-intel/CMPCOV binary to use",
+        required = false
+    )]
+    cmpc_target: Option<String>,
     /// Target binary arguments
     #[arg(
         help = "Target binary arguments, including @@ if needed. Example: `<...> -- @@`",
@@ -124,6 +132,7 @@ fn create_harness(cli_args: &Args, target_args: Option<String>) -> Harness {
         cli_args.target.clone(),
         cli_args.san_target.clone(),
         cli_args.cmpl_target.clone(),
+        cli_args.cmpc_target.clone(),
         target_args,
     )
 }
