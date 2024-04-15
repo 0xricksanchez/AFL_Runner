@@ -19,6 +19,7 @@ tmux -2u new-session -d -s $SESSION_NAME
 
 # Create and rename a window for each command
 for i in "${!COMMANDS[@]}"; do
+	sleep 0.1
 	WINDOW_NAME="window-$i"
 	if [ $i -eq 0 ]; then
 		# For the first command, send it to the first window and rename it

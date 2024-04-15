@@ -16,11 +16,11 @@ pub struct Harness {
 }
 
 impl Harness {
-    pub fn new<P: Into<PathBuf> + std::convert::AsRef<std::ffi::OsStr> + std::fmt::Display>(
-        target_binary: P,
-        sanitizer_binary: Option<P>,
-        cmplog_binary: Option<P>,
-        cmpcov_binary: Option<P>,
+    pub fn new(
+        target_binary: PathBuf,
+        sanitizer_binary: Option<PathBuf>,
+        cmplog_binary: Option<PathBuf>,
+        cmpcov_binary: Option<PathBuf>,
         target_args: Option<String>,
     ) -> Self {
         let target_binary = Self::_get_target_binary(target_binary);
@@ -29,13 +29,12 @@ impl Harness {
         let sanitizer_binary = Self::_get_binary(sanitizer_binary);
         let cmplog_binary = Self::_get_binary(cmplog_binary);
         let cmpcov_binary = Self::_get_binary(cmpcov_binary);
-
         Self {
             target_binary: target_binary.unwrap(),
             sanitizer_binary,
             cmplog_binary,
             cmpcov_binary,
-            target_args: target_args.map(std::convert::Into::into),
+            target_args,
         }
     }
 

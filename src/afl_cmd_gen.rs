@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::ffi::OsStr;
-use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::{fs, process::Command};
 
@@ -70,41 +69,43 @@ pub struct AFLCmdGenerator {
     pub runners: u32,
     /// Dictionary
     pub dictionary: Option<String>,
+    /// Other raw AFL++ flags
+    pub raw_afl_flags: Option<String>,
 }
 
 impl Default for AFLCmdGenerator {
     fn default() -> Self {
         Self {
             afl_binary: PathBuf::new(),
-            harness: Harness::new(String::new(), None, None, None, None),
+            harness: Harness::new(PathBuf::new(), None, None, None, None),
             input_dir: PathBuf::new(),
             output_dir: PathBuf::new(),
             runners: 1,
             dictionary: None,
+            raw_afl_flags: None,
         }
     }
 }
 
 impl AFLCmdGenerator {
-    pub fn new<P: Into<PathBuf> + AsRef<OsStr> + Copy + Display>(
+    pub fn new(
         harness: Harness,
         runners: u32,
-        afl_binary: Option<P>,
-        input_dir: P,
-        output_dir: P,
-        dictionary: Option<P>,
+        afl_binary: Option<String>,
+        input_dir: PathBuf,
+        output_dir: PathBuf,
+        dictionary: Option<PathBuf>,
+        raw_afl_flags: Option<String>,
     ) -> Self {
         let afl_binary = Self::get_afl_fuzz(afl_binary).expect("Could not find afl-fuzz binary");
-
         Self::mkdir_helper(&input_dir, false);
-        fs::write(format!("{input_dir}/1"), "fuzz").expect("Failed to write to file");
+        fs::write(input_dir.join("1"), "fuzz").expect("Failed to write to file");
 
         Self::mkdir_helper(&output_dir, true);
 
         let dict = dictionary.and_then(|d| {
-            let dict_path = d.into();
-            if dict_path.exists() && dict_path.is_file() {
-                dict_path.to_str().map(String::from)
+            if d.exists() && d.is_file() {
+                d.to_str().map(String::from)
             } else {
                 None
             }
@@ -113,24 +114,25 @@ impl AFLCmdGenerator {
         Self {
             afl_binary,
             harness,
-            input_dir: input_dir.into(),
-            output_dir: output_dir.into(),
+            input_dir,
+            output_dir,
             runners,
             dictionary: dict,
+            raw_afl_flags,
         }
     }
 
-    fn mkdir_helper<P: Into<PathBuf> + AsRef<OsStr> + Copy>(dir: &P, check_empty: bool) {
-        let dir: PathBuf = dir.into();
+    fn mkdir_helper(dir: &Path, check_empty: bool) {
         assert!(!dir.is_file(), "{} is a file", dir.display());
         if check_empty {
             let is_empty = dir.read_dir().map_or(true, |mut i| i.next().is_none());
             assert!(is_empty, "{} exists and is not empty", dir.display());
         }
         if !dir.exists() {
-            fs::create_dir(&dir).expect("Failed to create directory");
+            fs::create_dir(dir).expect("Failed to create directory");
         }
     }
+
     fn get_afl_fuzz<P: Into<PathBuf> + AsRef<OsStr>>(afl_fuzz: Option<P>) -> Option<PathBuf> {
         afl_fuzz
             .map(Into::into)
@@ -218,9 +220,10 @@ impl AFLCmdGenerator {
             .iter()
             .map(|config| {
                 format!(
-                    "{} {}",
+                    "{} {} {:?}",
                     config.generate_afl_env_cmd(),
-                    self.afl_binary.display()
+                    self.afl_binary.display(),
+                    self.raw_afl_flags
                 )
             })
             .collect()

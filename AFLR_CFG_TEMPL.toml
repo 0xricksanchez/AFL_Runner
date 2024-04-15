@@ -1,0 +1,42 @@
+[target]
+# Target binary to fuzz
+path = "/path/to/instrumented/target"
+
+# Instrumented with *SAN binary to use
+san_path = "/path/to/sanitizer/target"
+
+# Instrumented with CMPLOG binary to use
+cmpl_path = "/path/to/cmplog/target"
+
+# Instrumented with Laf-intel/CMPCOV binary to use
+cmpc_path = "/path/to/cmpcov/target"
+
+# Target binary arguments, including @@ if needed
+args = ["-foo", "--bar", "baz", "@@"]
+
+[afl_cfg]
+# Amount of processes to spin up
+runners = 1
+
+# Custom path to 'afl-fuzz' binary
+afl_binary = "/path/to/afl-fuzz"
+
+# Seed corpus directory
+seed_dir = "/path/to/input_dir"
+
+# Solution/Crash output directory
+solution_dir = "/path/to/output_dir"
+
+# Token dictionary to use
+dictionary = "/path/to/dictionary"
+
+# Custom AFL flags
+afl_flags = "-T 'MyFuzzer' -s 1234 -t 1000+"
+
+
+[tmux]
+# Spin up a custom tmux session with the fuzzers
+dry_run = false
+
+# Custom tmux session name
+session_name = "my_session"
