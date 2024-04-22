@@ -1,61 +1,68 @@
-## AFLRunner
+# AFL Runner
 
-`AFL_Runner` is a simple CLI tool to make running efficient multi-core [AFLPlusPlus](https://github.com/AFLplusplus/AFLplusplus)
-campaigns easier. The default configuration is based on the section [_Using multiple cores_](https://aflplus.plus/docs/fuzzing_in_depth/#c-using-multiple-cores)
-of the official documentation.
+[![Crates.io](https://img.shields.io/crates/v/afl_runner.svg)](https://crates.io/crates/afl_runner)
+[![License](https://img.shields.io/badge/license%20-%20Apache%202.0%20-%20blue)](LICENSE)
 
-The current implementation only accepts a small subset of `AFLPlusPlus` flags for some custom configuration.
+`AFL_Runner` is a modern CLI tool designed to streamline running efficient multi-core [AFLPlusPlus](https://github.com/AFLplusplus/AFLplusplus) campaigns. The default configuration is based on the section [_Using multiple cores_](https://aflplus.plus/docs/fuzzing_in_depth/#c-using-multiple-cores) of the official documentation.
 
-## Usage
+## Getting Started 🚀
 
-You can compile it yourself via:
+### Prerequisites
+
+- [Rust toolchain](https://www.rust-lang.org/tools/install) 🦀
+- [AFLPlusPlus](https://github.com/AFLplusplus/AFLplusplus)
+
+### Installation
+
+You can compile `AFL_Runner` yourself:
 
 ```bash
 git clone https://github.com/0xricksanchez/AFL_Runner.git alfrunner
-cd aflrunner
+cd alfrunner
 cargo build --release
 ./target/release/afl_runner --help
 ```
 
-Alternatively you can install via [crates.io](https://crates.io/crates/afl_runner):
+Or install via [crates.io](https://crates.io/crates/afl_runner):
 
 ```bash
 cargo install afl_runner
-afl-runner --help
+afl_runner --help
 ```
 
-## Features
+## Features ✨
 
-The tools allows for setting the most necessary AFLPlusPlus flags and mimics to some degree the same syntax as AFLplusplus for these things:
+`AFL_Runner` allows you to set the most necessary AFLPlusplus flags and mimics the AFLplusplus syntax for these options:
 
 - Supported AFLplusplus flags:
 
-  - [x] corpus directory
-  - [x] output directory
-  - [x] dictionary file
+  - [x] Corpus directory
+  - [x] Output directory
+  - [x] Dictionary file
   - [x] Custom `afl-fuzz` binary path for all instances
   - [x] Supply arguments to target binary (including @@)
   - [x] Amount of runner commands to generate
   - [x] Support for \*SAN, CMPLOG, CMPCOV binaries
 
 - Other features:
-
   - [x] Add Tmux option to automatically create an appropriate layout for all runners
+  - [x] TUI
   - [x] Provide a configuration file via `--config` to make sharing/storing per project configurations easier
     - [x] Automatically read out a configuration named `aflr_cfg.toml` in the `CWD` when no `--config` was supplied
 
-- _Note_: Arguments supplied over the command-line take precedence over any configuration file options
+_Note_: Arguments supplied over the command-line take precedence over any configuration file options.
 
-## TODO
+## Roadmap 🗺️
 
-- [ ] Add remote option.
+- [ ] Add remote option 🌐
+- [ ] Integrate [statsd](https://registry.hub.docker.com/r/prom/statsd-exporter)
 - [ ] Add more sensible defaults for other options
 - [ ] Add more configuration options
 - [ ] Allow AFLPlusPlus forks to be used on some amount of runners
 
-## Showcase
+## Usage Example 💡
 
-If you generate your AFL++ commands it may look similar to the following below.
+Here's an example of generating AFL++ commands with `AFL_Runner`:
 
 ```bash
 afl_runner -t /tmp/test_bins/target -s /tmp/test_bins/target_asan -c /tmp/test_bins/target_cmplog -l /tmp/test_bins/target_cmpcov -n 16 -i /tmp/seed_corpus -o /tmp/afl_out -x /tmp/fuzzing.dict -m "custom_fuzz_session"
@@ -95,4 +102,18 @@ _out -S slave_12_target -x /tmp/fuzzing.dict -- /tmp/test_bins/target arg1 arg2 
 /seed_corpus -o /tmp/afl_out -S slave_14_target -x /tmp/fuzzing.dict -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
 ```
 
-_Note_: Supplying the sanitizer, CMPLOG, or CMPCOV binaries are optional and if omitted all invocations just contain the instrumented target instead.
+_Note_: Supplying the \*SAN, CMPLOG, or CMPCOV binaries are optional and if omitted all invocations just contain the instrumented target instead.
+
+## Showcase 🎥
+
+`AFL_Runner` also includes a terminal user interface (TUI) for monitoring the fuzzing campaign progress:
+
+![AFL_Runner TUI](img/tui.png)
+
+## Contributing 🤝
+
+Contributions are welcome! Please feel free to submit a pull request or open an issue for any bugs, feature requests, or improvements.
+
+## License 📜
+
+This project is licensed under the Apache License. See the [LICENSE](LICENSE) file for details.

@@ -40,3 +40,7 @@ dry_run = false
 
 # Custom tmux session name
 session_name = "my_session"
+
+[misc]
+# Enable TUI mode
+tui = false
