@@ -126,7 +126,17 @@ impl AFLCmdGenerator {
         assert!(!dir.is_file(), "{} is a file", dir.display());
         if check_empty {
             let is_empty = dir.read_dir().map_or(true, |mut i| i.next().is_none());
-            assert!(is_empty, "{} exists and is not empty", dir.display());
+            if !is_empty {
+                println!("Directory {} is not empty. Clean it [Y/n]? ", dir.display());
+                let mut input = String::new();
+                std::io::stdin()
+                    .read_line(&mut input)
+                    .expect("Failed to read input");
+                let input = input.trim().to_lowercase().chars().next().unwrap_or('y');
+                if input == 'y' || input == '\n' {
+                    fs::remove_dir_all(dir).expect("Failed to remove directory");
+                }
+            }
         }
         if !dir.exists() {
             fs::create_dir(dir).expect("Failed to create directory");
@@ -220,10 +230,10 @@ impl AFLCmdGenerator {
             .iter()
             .map(|config| {
                 format!(
-                    "{} {} {:?}",
+                    "{} {} {}",
                     config.generate_afl_env_cmd(),
                     self.afl_binary.display(),
-                    self.raw_afl_flags
+                    self.raw_afl_flags.clone().unwrap_or("".to_string())
                 )
             })
             .collect()
@@ -268,12 +278,13 @@ impl AFLCmdGenerator {
             .file_name()
             .unwrap()
             .to_str()
-            .unwrap();
+            .unwrap()
+            .replace(".", "_");
         // Set one main fuzzer
         strings[0].push_str(&format!(" -M main_{target_fname}"));
         // Set the rest to be slaves
         for (i, s) in strings[1..].iter_mut().enumerate() {
-            s.push_str(&format!(" -S slave_{i}_{target_fname}"));
+            s.push_str(&format!(" -S secondary_{i}_{target_fname}"));
         }
     }
 
