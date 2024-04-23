@@ -48,12 +48,8 @@ fn main() {
 }
 
 fn load_config(cli_args: &CliArgs) -> Config {
-    match cli_args.config.as_deref() {
-        Some(config_path) => {
-            let config_content = fs::read_to_string(config_path).unwrap();
-            toml::from_str(&config_content).unwrap()
-        }
-        None => {
+    cli_args.config.as_deref().map_or_else(
+        || {
             let cwd = env::current_dir().unwrap();
             let default_config_path = cwd.join("aflr_cfg.toml");
             if default_config_path.exists() {
@@ -62,8 +58,12 @@ fn load_config(cli_args: &CliArgs) -> Config {
             } else {
                 Config::default()
             }
-        }
-    }
+        },
+        |config_path| {
+            let config_content = fs::read_to_string(config_path).unwrap();
+            toml::from_str(&config_content).unwrap()
+        },
+    )
 }
 
 fn create_harness(args: &CliArgs) -> Harness {
@@ -135,7 +135,7 @@ fn run_tmux_session(tmux_name: &str, cmds: &[String]) {
     let tmux = Session::new(tmux_name, cmds);
     if let Err(e) = tmux.run() {
         let _ = tmux.kill_session();
-        eprintln!("Error running tmux session: {}", e);
+        eprintln!("Error running tmux session: {e}");
     } else {
         tmux.attach().unwrap();
     }
@@ -143,7 +143,7 @@ fn run_tmux_session(tmux_name: &str, cmds: &[String]) {
 
 fn run_tmux_session_with_tui(tmux_name: &str, cmds: &[String], args: &CliArgs) {
     if let Err(e) = run_tmux_session_detached(tmux_name, cmds) {
-        eprintln!("Error running TUI: {}", e);
+        eprintln!("Error running TUI: {e}");
         return;
     }
     let (session_data_tx, session_data_rx) = mpsc::channel();
@@ -152,14 +152,14 @@ fn run_tmux_session_with_tui(tmux_name: &str, cmds: &[String], args: &CliArgs) {
     thread::spawn(move || loop {
         let session_data = data_collection::collect_session_data(&output_dir);
         if let Err(e) = session_data_tx.send(session_data) {
-            eprintln!("Error sending session data: {}", e);
+            eprintln!("Error sending session data: {e}");
             break;
         }
         thread::sleep(std::time::Duration::from_secs(1));
     });
 
-    if let Err(e) = tui::run_tui(session_data_rx) {
-        eprintln!("Error running TUI: {}", e);
+    if let Err(e) = tui::run(&session_data_rx) {
+        eprintln!("Error running TUI: {e}");
     }
 }
 
@@ -168,8 +168,7 @@ fn run_tmux_session_detached(tmux_name: &str, cmds: &[String]) -> Result<()> {
     if let Err(e) = tmux.run() {
         let _ = tmux.kill_session();
         return Err(e);
-    } else {
-        println!("Session {tmux_name} started in detached mode");
     }
+    println!("Session {tmux_name} started in detached mode");
     Ok(())
 }

@@ -59,22 +59,14 @@ impl SessionData {
     }
 }
 
+#[derive(Default)]
 pub struct Levels {
     pub avg: usize,
     pub min: usize,
     pub max: usize,
 }
 
-impl Default for Levels {
-    fn default() -> Self {
-        Self {
-            avg: 0,
-            min: 0,
-            max: 0,
-        }
-    }
-}
-
+#[derive(Default)]
 pub struct CrashInfo {
     pub saved_cum: usize,
     pub saved_avg: usize,
@@ -82,33 +74,14 @@ pub struct CrashInfo {
     pub saved_max: usize,
 }
 
-impl Default for CrashInfo {
-    fn default() -> Self {
-        Self {
-            saved_cum: 0,
-            saved_avg: 0,
-            saved_min: 0,
-            saved_max: 0,
-        }
-    }
-}
-
+#[derive(Default)]
 pub struct StabilityInfo {
     pub avg: f64,
     pub min: f64,
     pub max: f64,
 }
 
-impl Default for StabilityInfo {
-    fn default() -> Self {
-        Self {
-            avg: 0.0,
-            min: 0.0,
-            max: 0.0,
-        }
-    }
-}
-
+#[derive(Default)]
 pub struct Cycles {
     pub done_avg: usize,
     pub done_min: usize,
@@ -118,19 +91,7 @@ pub struct Cycles {
     pub wo_finds_max: usize,
 }
 
-impl Default for Cycles {
-    fn default() -> Self {
-        Self {
-            done_avg: 0,
-            done_min: 0,
-            done_max: 0,
-            wo_finds_avg: 0,
-            wo_finds_min: 0,
-            wo_finds_max: 0,
-        }
-    }
-}
-
+#[derive(Default)]
 pub struct ExecutionsInfo {
     pub avg: usize,
     pub min: usize,
@@ -142,37 +103,14 @@ pub struct ExecutionsInfo {
     pub ps_cum: f64,
 }
 
-impl Default for ExecutionsInfo {
-    fn default() -> Self {
-        Self {
-            avg: 0,
-            min: 0,
-            max: 0,
-            cum: 0,
-            ps_avg: 0.0,
-            ps_min: 0.0,
-            ps_max: 0.0,
-            ps_cum: 0.0,
-        }
-    }
-}
-
+#[derive(Default)]
 pub struct CoverageInfo {
     pub bitmap_avg: f64,
     pub bitmap_min: f64,
     pub bitmap_max: f64,
 }
 
-impl Default for CoverageInfo {
-    fn default() -> Self {
-        Self {
-            bitmap_avg: 0.0,
-            bitmap_min: 0.0,
-            bitmap_max: 0.0,
-        }
-    }
-}
-
+#[derive(Default)]
 pub struct PendingInfo {
     pub favorites_avg: usize,
     pub favorites_cum: usize,
@@ -184,21 +122,7 @@ pub struct PendingInfo {
     pub total_max: usize,
 }
 
-impl Default for PendingInfo {
-    fn default() -> Self {
-        Self {
-            favorites_avg: 0,
-            favorites_cum: 0,
-            favorites_max: 0,
-            favorites_min: 0,
-            total_avg: 0,
-            total_cum: 0,
-            total_min: 0,
-            total_max: 0,
-        }
-    }
-}
-
+#[derive(Default)]
 pub struct CorpusInfo {
     pub count_avg: usize,
     pub count_cum: usize,
@@ -206,27 +130,8 @@ pub struct CorpusInfo {
     pub count_max: usize,
 }
 
-impl Default for CorpusInfo {
-    fn default() -> Self {
-        Self {
-            count_avg: 0,
-            count_cum: 0,
-            count_min: 0,
-            count_max: 0,
-        }
-    }
-}
-
+#[derive(Default)]
 pub struct Misc {
     pub afl_version: String,
     pub afl_banner: String,
-}
-
-impl Default for Misc {
-    fn default() -> Self {
-        Self {
-            afl_version: String::new(),
-            afl_banner: String::new(),
-        }
-    }
 }

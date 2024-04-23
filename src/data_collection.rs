@@ -20,7 +20,7 @@ pub fn collect_session_data(output_dir: &PathBuf) -> SessionData {
                 let lines: Vec<&str> = content.lines().collect();
 
                 for line in lines {
-                    let parts: Vec<&str> = line.split(":").map(|s| s.trim()).collect();
+                    let parts: Vec<&str> = line.split(':').map(str::trim).collect();
 
                     if parts.len() == 2 {
                         let key = parts[0];
@@ -276,28 +276,26 @@ fn collect_session_crashes_hangs(
 }
 
 fn process_files(dir: &PathBuf, fuzzer_name: &str, file_infos: &mut Vec<CrashInfoDetails>) {
-    for file_entry in fs::read_dir(dir).unwrap() {
-        if let Ok(file_entry) = file_entry {
-            let file = file_entry.path();
-            if file.is_file() {
-                let filename = file.file_name().unwrap().to_str().unwrap();
-                if let Some(file_info) = parse_filename(filename) {
-                    let file_info = CrashInfoDetails {
-                        fuzzer_name: fuzzer_name.to_string(),
-                        file_path: file,
-                        id: file_info.0,
-                        sig: file_info.1,
-                        src: file_info.2,
-                        time: file_info.3,
-                        execs: file_info.4,
-                        op: file_info.5,
-                        rep: file_info.6,
-                    };
-                    file_infos.push(file_info);
-                }
+    fs::read_dir(dir).unwrap().flatten().for_each(|file_entry| {
+        let file = file_entry.path();
+        if file.is_file() {
+            let filename = file.file_name().unwrap().to_str().unwrap();
+            if let Some(file_info) = parse_filename(filename) {
+                let file_info = CrashInfoDetails {
+                    fuzzer_name: fuzzer_name.to_string(),
+                    file_path: file,
+                    id: file_info.0,
+                    sig: file_info.1,
+                    src: file_info.2,
+                    time: file_info.3,
+                    execs: file_info.4,
+                    op: file_info.5,
+                    rep: file_info.6,
+                };
+                file_infos.push(file_info);
             }
         }
-    }
+    });
 }
 
 fn parse_filename(

@@ -11,6 +11,7 @@
 
 - [Rust toolchain](https://www.rust-lang.org/tools/install) 🦀
 - [AFLPlusPlus](https://github.com/AFLplusplus/AFLplusplus)
+- [TMUX](https://github.com/tmux/tmux)
 
 ### Installation
 
@@ -65,41 +66,28 @@ _Note_: Arguments supplied over the command-line take precedence over any config
 Here's an example of generating AFL++ commands with `AFL_Runner`:
 
 ```bash
-afl_runner -t /tmp/test_bins/target -s /tmp/test_bins/target_asan -c /tmp/test_bins/target_cmplog -l /tmp/test_bins/target_cmpcov -n 16 -i /tmp/seed_corpus -o /tmp/afl_out -x /tmp/fuzzing.dict -m "custom_fuzz_session"
- --dry-run -- 'arg1 arg2 --arg3 --arg4 @@'
+# Exported AFL_* environment variables that are *not set* by AFL_Runner are kept!
+export AFL_PRELOAD=/tmp/mySharedLib.so
+# Exported AFL_* environment variables that we set explicitly are ignored!
+export AFL_IGNORE_SEED_PROBLEMS=1
+afl_runner -t /tmp/test_bins/target -s /tmp/test_bins/target_asan -c /tmp/test_bins/target_cmplog -l /tmp/test_bins/target_cmpcov -n 16 -i /tmp/seed_corpus -o /tmp/afl_out -x /tmp/fuzzing.dict -m "custom_fuzz_session" --dry-run -- 'arg1 arg2 --arg3 --arg4 @@'
 Generated commands:
-    0. AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=0 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=1 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz -P explore -a text -p fast -i /tmp/seed
-_corpus -o /tmp/afl_out -M main_target -x /tmp/fuzzing.dict -- /tmp/test_bins/target_asan arg1 arg2 --arg3 --arg4 @@
-    1. AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz -P exploit -p explore -i /tmp/seed_corp
-us -o /tmp/afl_out -S slave_0_target -x /tmp/fuzzing.dict -c /tmp/test_bins/target_cmplog -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
-    2. AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz -p coe -i /tmp/seed_corpus -o /tmp/afl_
-out -S slave_1_target -x /tmp/fuzzing.dict -c /tmp/test_bins/target_cmplog -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
-    3. AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=0 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz -P explore -a text -p lin -i /tmp/seed_
-corpus -o /tmp/afl_out -S slave_2_target -x /tmp/fuzzing.dict -l 2  -c /tmp/test_bins/target_cmplog -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
-    4. AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz -P exploit -p quad -i /tmp/seed_corpus
--o /tmp/afl_out -S slave_3_target -x /tmp/fuzzing.dict -l 2  -c /tmp/test_bins/target_cmplog -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
-    5. AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz -a text -Z -p exploit -i /tmp/seed_corp
-us -o /tmp/afl_out -S slave_4_target -x /tmp/fuzzing.dict -- /tmp/test_bins/target_cmpcov arg1 arg2 --arg3 --arg4 @@
-    6. AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=0 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=1 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz -a binary -Z -p rare -i /tmp/seed_corpu
-s -o /tmp/afl_out -S slave_5_target -x /tmp/fuzzing.dict -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
-    7. AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=0 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=1 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz -P explore -L 0 -p fast -i /tmp/seed_co
-rpus -o /tmp/afl_out -S slave_6_target -x /tmp/fuzzing.dict -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
-    8. AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz -a binary -p explore -i /tmp/seed_corpu
-s -o /tmp/afl_out -S slave_7_target -x /tmp/fuzzing.dict -- /tmp/test_bins/target_cmpcov arg1 arg2 --arg3 --arg4 @@
-    9. AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=0 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=1 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz -a binary -p coe -i /tmp/seed_corpus -o
- /tmp/afl_out -S slave_8_target -x /tmp/fuzzing.dict -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
-   10. AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=1 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz -P explore -Z -p lin -i /tmp/seed_corpu
-s -o /tmp/afl_out -S slave_9_target -x /tmp/fuzzing.dict -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
-   11. AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=1 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz -P explore -a text -p quad -i /tmp/seed
-_corpus -o /tmp/afl_out -S slave_10_target -x /tmp/fuzzing.dict -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
-   12. AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=0 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz -p exploit -i /tmp/seed_corpus -o /tmp/
-afl_out -S slave_11_target -x /tmp/fuzzing.dict -- /tmp/test_bins/target_cmpcov arg1 arg2 --arg3 --arg4 @@
-   13. AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz -p rare -i /tmp/seed_corpus -o /tmp/afl
-_out -S slave_12_target -x /tmp/fuzzing.dict -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
-   14. AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz -P explore -p fast -i /tmp/seed_corpus
--o /tmp/afl_out -S slave_13_target -x /tmp/fuzzing.dict -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
-   15. AFL_AUTORESUME=1 AFL_FINAL_SYNC=1 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz -P exploit -a binary -p explore -i /tmp
-/seed_corpus -o /tmp/afl_out -S slave_14_target -x /tmp/fuzzing.dict -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
+    0. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=1 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -Z -p fast -i /tmp/seed_corpus -o /tmp/afl_out -M main_target -- /tmp/test_bins/target_asan arg1 arg2 --arg3 --arg4 @@
+    1. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -p explore -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_0_target -l 2  -c /tmp/test_bins/target_cmplog -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
+    2. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=0 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -p coe -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_1_target -c /tmp/test_bins/target_cmplog -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
+    3. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=0 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -a text -p lin -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_2_target -l 2  -c /tmp/test_bins/target_cmplog -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
+    4. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -Z -p quad -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_3_target -c /tmp/test_bins/target_cmplog -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
+    5. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -P explore -a text -Z -p exploit -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_4_target -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
+    6. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=1 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -P exploit -a text -p rare -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_5_target -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
+    7. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=0 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -L 0 -p fast -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_6_target -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
+    8. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=0 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=1 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -P explore -a binary -p explore -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_7_target -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
+    9. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=0 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -P exploit -a binary -p coe -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_8_target -- /tmp/test_bins/target_cmpcov arg1 arg2 --arg3 --arg4 @@
+   10. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=1 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -P explore -a binary -p lin -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_9_target -- /tmp/test_bins/target_cmpcov arg1 arg2 --arg3 --arg4 @@
+   11. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=0 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=1 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -a text -p quad -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_10_target -- /tmp/test_bins/target_cmpcov arg1 arg2 --arg3 --arg4 @@
+   12. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -P explore -p exploit -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_11_target -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
+   13. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=1 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -P exploit -a binary -p rare -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_12_target -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
+   14. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -P explore -p fast -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_13_target -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
+   15. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=1 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -P explore -p explore -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_14_target -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
 ```
 
 _Note_: Supplying the \*SAN, CMPLOG, or CMPCOV binaries are optional and if omitted all invocations just contain the instrumented target instead.
