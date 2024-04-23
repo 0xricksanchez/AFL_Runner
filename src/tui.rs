@@ -15,7 +15,7 @@ use ratatui::{
     Terminal,
 };
 
-pub fn run_tui(session_data_rx: mpsc::Receiver<SessionData>) -> io::Result<()> {
+pub fn run(session_data_rx: &mpsc::Receiver<SessionData>) -> io::Result<()> {
     let stdout = io::stdout();
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -266,11 +266,11 @@ Cycles without finds: {} ({}/{})",
 }
 
 fn format_last_event(events: &[CrashInfoDetails], total_run_time: &Duration) -> String {
-    if !events.is_empty() {
+    if events.is_empty() {
+        "N/A".to_string()
+    } else {
         let event_time = *total_run_time - Duration::from_millis(events[0].time);
         format_duration(event_time)
-    } else {
-        "N/A".to_string()
     }
 }
 
@@ -300,5 +300,5 @@ fn format_duration(duration: Duration) -> String {
     let mins = (secs % 3600) / 60;
     let secs = secs % 60;
 
-    format!("{} days, {:02}:{:02}:{:02}", days, hours, mins, secs)
+    format!("{days} days, {hours:02}:{mins:02}:{secs:02}")
 }

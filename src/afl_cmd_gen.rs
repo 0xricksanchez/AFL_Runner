@@ -143,6 +143,13 @@ impl AFLCmdGenerator {
         }
     }
 
+    fn get_afl_env_vars() -> Vec<String> {
+        std::env::vars()
+            .filter(|(k, _)| k.starts_with("AFL_"))
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect::<Vec<String>>()
+    }
+
     fn get_afl_fuzz<P: Into<PathBuf> + AsRef<OsStr>>(afl_fuzz: Option<P>) -> Option<PathBuf> {
         afl_fuzz
             .map(Into::into)
@@ -201,6 +208,19 @@ impl AFLCmdGenerator {
         self.apply_target_args(&mut strings);
         self.apply_cmpcov(&mut strings, &mut rng);
 
+        // Inherit global AFL environment variables that are not already set
+        let afl_env_vars: Vec<String> = Self::get_afl_env_vars();
+        let to_apply = afl_env_vars
+            .iter()
+            .filter(|env| !strings[0].contains(env.split('=').next().unwrap()))
+            .map(std::string::ToString::to_string)
+            .collect::<Vec<String>>()
+            .join(" ");
+
+        for s in &mut strings {
+            s.insert_str(0, &format!("{to_apply} "));
+        }
+
         strings
     }
 
@@ -233,7 +253,7 @@ impl AFLCmdGenerator {
                     "{} {} {}",
                     config.generate_afl_env_cmd(),
                     self.afl_binary.display(),
-                    self.raw_afl_flags.clone().unwrap_or("".to_string())
+                    self.raw_afl_flags.clone().unwrap_or_default()
                 )
             })
             .collect()
@@ -279,7 +299,7 @@ impl AFLCmdGenerator {
             .unwrap()
             .to_str()
             .unwrap()
-            .replace(".", "_");
+            .replace('.', "_");
         // Set one main fuzzer
         strings[0].push_str(&format!(" -M main_{target_fname}"));
         // Set the rest to be slaves
