@@ -98,10 +98,6 @@ impl AFLCmdGenerator {
         raw_afl_flags: Option<String>,
     ) -> Self {
         let afl_binary = Self::get_afl_fuzz(afl_binary).expect("Could not find afl-fuzz binary");
-        Self::mkdir_helper(&input_dir, false);
-        fs::write(input_dir.join("1"), "fuzz").expect("Failed to write to file");
-
-        Self::mkdir_helper(&output_dir, true);
 
         let dict = dictionary.and_then(|d| {
             if d.exists() && d.is_file() {
@@ -119,27 +115,6 @@ impl AFLCmdGenerator {
             runners,
             dictionary: dict,
             raw_afl_flags,
-        }
-    }
-
-    fn mkdir_helper(dir: &Path, check_empty: bool) {
-        assert!(!dir.is_file(), "{} is a file", dir.display());
-        if check_empty {
-            let is_empty = dir.read_dir().map_or(true, |mut i| i.next().is_none());
-            if !is_empty {
-                println!("Directory {} is not empty. Clean it [Y/n]? ", dir.display());
-                let mut input = String::new();
-                std::io::stdin()
-                    .read_line(&mut input)
-                    .expect("Failed to read input");
-                let input = input.trim().to_lowercase().chars().next().unwrap_or('y');
-                if input == 'y' || input == '\n' {
-                    fs::remove_dir_all(dir).expect("Failed to remove directory");
-                }
-            }
-        }
-        if !dir.exists() {
-            fs::create_dir(dir).expect("Failed to create directory");
         }
     }
 

@@ -1,5 +1,7 @@
 use anyhow::{bail, Result};
+use std::fs;
 use std::io::{Read, Write};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::{env, path::PathBuf};
 
@@ -88,10 +90,56 @@ impl Session {
         Ok(())
     }
 
+    fn mkdir_helper(dir: &Path, check_empty: bool) {
+        assert!(!dir.is_file(), "{} is a file", dir.display());
+        if check_empty {
+            let is_empty = dir.read_dir().map_or(true, |mut i| i.next().is_none());
+            if !is_empty {
+                println!("Directory {} is not empty. Clean it [Y/n]? ", dir.display());
+                let mut input = String::new();
+                std::io::stdin()
+                    .read_line(&mut input)
+                    .expect("Failed to read input");
+                let input = input.trim().to_lowercase().chars().next().unwrap_or('y');
+                if input == 'y' || input == '\n' {
+                    fs::remove_dir_all(dir).expect("Failed to remove directory");
+                }
+            }
+        }
+        if !dir.exists() {
+            fs::create_dir(dir).expect("Failed to create directory");
+        }
+    }
+
     pub fn run(&self) -> Result<()> {
         if Self::in_tmux() {
             bail!("Already in tmux session. Nested tmux sessions are not supported.");
         }
+
+        // Find the input directory followed after -i in self.commands[0]
+        let indir = PathBuf::from(
+            self.commands[0]
+                .split_whitespace()
+                .skip_while(|&x| x != "-i")
+                .skip(1)
+                .next()
+                .unwrap(),
+        );
+        let outdir = PathBuf::from(
+            self.commands[0]
+                .split_whitespace()
+                .skip_while(|&x| x != "-o")
+                .skip(1)
+                .next()
+                .unwrap(),
+        );
+
+        Self::mkdir_helper(&indir, false);
+        if !indir.read_dir().unwrap().next().is_none() {
+            fs::write(indir.join("1"), "fuzz").expect("Failed to write to file");
+        }
+        Self::mkdir_helper(&outdir, true);
+
         println!(
             "Starting tmux session '{}' for {} generated commands...",
             self.name,

@@ -84,6 +84,7 @@ fn load_config(config_path: Option<&PathBuf>) -> Config {
             }
         },
         |config_path| {
+            // TODO: Add error handling for when config_path does not exist
             let config_content = fs::read_to_string(config_path).unwrap();
             toml::from_str(&config_content).unwrap()
         },
