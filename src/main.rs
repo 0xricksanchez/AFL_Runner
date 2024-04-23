@@ -1,6 +1,7 @@
+use anyhow::bail;
 use anyhow::Result;
 use clap::Parser;
-use cli::{merge_args, CliArgs, Config};
+use cli::{Cli, Commands, Config, GenArgs, RunArgs, TuiArgs};
 use std::env;
 use std::fs;
 use std::hash::{DefaultHasher, Hasher};
@@ -23,32 +24,55 @@ mod tui;
 use crate::cli::AFL_CORPUS;
 
 fn main() {
-    let cli_args = CliArgs::parse();
-    let config_args: Config = load_config(&cli_args);
-
-    let raw_afl_flags = config_args.afl_cfg.afl_flags.clone();
-    let args = merge_args(cli_args, config_args);
-
-    let target_args = args.target_args.clone().unwrap_or_default().join(" ");
-    let harness = create_harness(&args);
-    let afl_runner = create_afl_runner(&args, harness, raw_afl_flags);
-    let cmds = afl_runner.generate_afl_commands();
-
-    if args.dry_run {
-        print_generated_commands(&cmds);
-        return;
-    }
-
-    let tmux_name = generate_tmux_name(&args, &target_args);
-    if args.tui {
-        run_tmux_session_with_tui(&tmux_name, &cmds, &args);
-    } else {
-        run_tmux_session(&tmux_name, &cmds);
+    let cli_args = Cli::parse();
+    match cli_args.cmd {
+        Commands::Gen(gen_args) => {
+            let config_args: Config = load_config(gen_args.config.as_ref());
+            let raw_afl_flags = config_args.afl_cfg.afl_flags.clone();
+            let merged_args = gen_args.merge(&config_args);
+            let harness = create_harness(&merged_args)
+                .map_err(|e| {
+                    eprintln!("Error creating harness: {e}");
+                    std::process::exit(1);
+                })
+                .unwrap();
+            let afl_runner = create_afl_runner(&merged_args, harness, raw_afl_flags);
+            let cmds = afl_runner.generate_afl_commands();
+            print_generated_commands(&cmds);
+        }
+        Commands::Run(run_args) => {
+            let config_args: Config = load_config(run_args.gen_args.config.as_ref());
+            let raw_afl_flags = config_args.afl_cfg.afl_flags.clone();
+            let merged_args = run_args.merge(&config_args);
+            let harness = create_harness(&merged_args.gen_args)
+                .map_err(|e| {
+                    eprintln!("Error creating harness: {e}");
+                    std::process::exit(1);
+                })
+                .unwrap();
+            let afl_runner = create_afl_runner(&merged_args.gen_args, harness, raw_afl_flags);
+            let cmds = afl_runner.generate_afl_commands();
+            let target_args = merged_args
+                .gen_args
+                .target_args
+                .clone()
+                .unwrap_or_default()
+                .join(" ");
+            let tmux_name = generate_tmux_name(&merged_args, &target_args);
+            if merged_args.tui {
+                run_tmux_session_with_tui(&tmux_name, &cmds, &merged_args);
+            } else {
+                run_tmux_session(&tmux_name, &cmds);
+            }
+        }
+        Commands::Tui(tui_args) => {
+            todo!("TBD")
+        }
     }
 }
 
-fn load_config(cli_args: &CliArgs) -> Config {
-    cli_args.config.as_deref().map_or_else(
+fn load_config(config_path: Option<&PathBuf>) -> Config {
+    config_path.map_or_else(
         || {
             let cwd = env::current_dir().unwrap();
             let default_config_path = cwd.join("aflr_cfg.toml");
@@ -66,18 +90,21 @@ fn load_config(cli_args: &CliArgs) -> Config {
     )
 }
 
-fn create_harness(args: &CliArgs) -> Harness {
-    Harness::new(
+fn create_harness(args: &GenArgs) -> Result<Harness> {
+    if args.target.is_none() {
+        bail!("Target binary is required");
+    }
+    Ok(Harness::new(
         args.target.clone().unwrap(),
         args.san_target.clone(),
         args.cmpl_target.clone(),
         args.cmpc_target.clone(),
         args.target_args.clone().map(|args| args.join(" ")),
-    )
+    ))
 }
 
 fn create_afl_runner(
-    args: &CliArgs,
+    args: &GenArgs,
     harness: Harness,
     raw_afl_flags: Option<String>,
 ) -> AFLCmdGenerator {
@@ -103,10 +130,11 @@ fn print_generated_commands(cmds: &[String]) {
     }
 }
 
-fn generate_tmux_name(args: &CliArgs, target_args: &str) -> String {
+fn generate_tmux_name(args: &RunArgs, target_args: &str) -> String {
     args.tmux_session_name.as_ref().map_or_else(
         || {
             let target = args
+                .gen_args
                 .target
                 .as_ref()
                 .expect("Target binary is required")
@@ -116,7 +144,7 @@ fn generate_tmux_name(args: &CliArgs, target_args: &str) -> String {
             let to_hash = format!(
                 "{}_{}_{}",
                 target,
-                args.input_dir.as_ref().map_or_else(
+                args.gen_args.input_dir.as_ref().map_or_else(
                     || AFL_CORPUS.into(),
                     |dir| dir.file_name().unwrap_or_default().to_string_lossy()
                 ),
@@ -141,13 +169,13 @@ fn run_tmux_session(tmux_name: &str, cmds: &[String]) {
     }
 }
 
-fn run_tmux_session_with_tui(tmux_name: &str, cmds: &[String], args: &CliArgs) {
+fn run_tmux_session_with_tui(tmux_name: &str, cmds: &[String], args: &RunArgs) {
     if let Err(e) = run_tmux_session_detached(tmux_name, cmds) {
         eprintln!("Error running TUI: {e}");
         return;
     }
     let (session_data_tx, session_data_rx) = mpsc::channel();
-    let output_dir = args.output_dir.clone().unwrap();
+    let output_dir = args.gen_args.output_dir.clone().unwrap();
 
     thread::spawn(move || loop {
         let session_data = data_collection::collect_session_data(&output_dir);
