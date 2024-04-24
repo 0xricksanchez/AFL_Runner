@@ -1,5 +1,7 @@
 use anyhow::{bail, Result};
 use std::path::Path;
+use tmux::Session;
+use tui::Tui;
 
 use clap::Parser;
 use cli::{Cli, Commands};
@@ -52,9 +54,9 @@ fn handle_run_command(run_args: &cli::RunArgs) -> Result<()> {
         .join(" ");
     let tmux_name = generate_tmux_name(&merged_args, &target_args);
     if merged_args.tui {
-        tmux::run_tmux_session_with_tui(&tmux_name, &cmds, &merged_args.gen_args);
+        Session::new(&tmux_name, &cmds).run_tmux_session_with_tui(&merged_args.gen_args);
     } else {
-        tmux::run_tmux_session(&tmux_name, &cmds);
+        Session::new(&tmux_name, &cmds).run_tmux_session();
     }
     Ok(())
 }
@@ -64,7 +66,7 @@ fn handle_tui_command(tui_args: &cli::TuiArgs) -> Result<()> {
         bail!("Output directory is required for TUI mode");
     }
     validate_tui_output_dir(&tui_args.afl_output)?;
-    tui::run_tui_standalone(&tui_args.afl_output);
+    Tui::run(&tui_args.afl_output);
     Ok(())
 }
 

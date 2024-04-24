@@ -8,15 +8,18 @@ pub const AFL_CORPUS: &str = "/tmp/afl_input";
 /// Default output directory
 const AFL_OUTPUT: &str = "/tmp/afl_output";
 
+/// Command-line interface for the Parallelized `AFLPlusPlus` Campaign Runner
 #[derive(Parser, Debug, Clone)]
 #[command(name = "Parallelized AFLPlusPlus Campaign Runner")]
 #[command(author = "C.K. <admin@0x434b.dev>")]
-#[command(version = "0.3.0")]
+#[command(version = "0.3.1")]
 pub struct Cli {
+    /// Subcommand to execute
     #[command(subcommand)]
     pub cmd: Commands,
 }
 
+/// Available subcommands
 #[derive(Subcommand, Clone, Debug)]
 pub enum Commands {
     /// Only generate the commands, don't run them
@@ -27,6 +30,7 @@ pub enum Commands {
     Tui(TuiArgs),
 }
 
+/// Arguments for the `tui` subcommand
 #[derive(Args, Clone, Debug, Default)]
 pub struct TuiArgs {
     /// Path to a `AFLPlusPlus` campaign directory, e.g. `afl_output`
@@ -37,6 +41,7 @@ pub struct TuiArgs {
     pub afl_output: PathBuf,
 }
 
+/// Arguments for the `gen` subcommand
 #[derive(Args, Clone, Debug)]
 pub struct GenArgs {
     /// Target binary to fuzz
@@ -129,6 +134,7 @@ pub struct GenArgs {
 }
 
 impl GenArgs {
+    /// Merge the command-line arguments with the configuration
     pub fn merge(&self, config: &Config) -> Self {
         Self {
             target: self.target.clone().or_else(|| {
@@ -215,8 +221,10 @@ impl GenArgs {
     }
 }
 
+/// Arguments for the `run` subcommand
 #[derive(Args, Clone, Debug)]
 pub struct RunArgs {
+    /// Arguments for generating the commands
     #[command(flatten)]
     pub gen_args: GenArgs,
     /// Only show the generated commands, don't run them
@@ -235,6 +243,7 @@ pub struct RunArgs {
 }
 
 impl RunArgs {
+    /// Merge the command-line arguments with the configuration
     pub fn merge(&self, config: &Config) -> Self {
         let gen_args = self.gen_args.merge(config);
         Self {
@@ -253,40 +262,63 @@ impl RunArgs {
     }
 }
 
+/// Configuration for the Parallelized `AFLPlusPlus` Campaign Runner
 #[derive(Deserialize, Default, Debug, Clone)]
 pub struct Config {
+    /// Target configuration
     pub target: TargetConfig,
+    /// AFL configuration
     pub afl_cfg: AflConfig,
+    /// Tmux configuration
     pub tmux: TmuxConfig,
+    /// Miscellaneous configuration
     pub misc: MiscConfig,
 }
 
+/// Configuration for the target binary
 #[derive(Deserialize, Default, Debug, Clone)]
 pub struct TargetConfig {
+    /// Path to the target binary
     pub path: Option<String>,
+    /// Path to the sanitizer binary
     pub san_path: Option<String>,
+    /// Path to the CMPLOG binary
     pub cmpl_path: Option<String>,
+    /// Path to the CMPCOV binary
     pub cmpc_path: Option<String>,
+    /// Arguments for the target binary
     pub args: Option<Vec<String>>,
 }
 
+/// Configuration for AFL
 #[derive(Deserialize, Default, Debug, Clone)]
 pub struct AflConfig {
+    /// Number of AFL runners
     pub runners: Option<u32>,
+    /// Path to the AFL binary
     pub afl_binary: Option<String>,
+    /// Path to the seed directory
     pub seed_dir: Option<String>,
+    /// Path to the solution directory
     pub solution_dir: Option<String>,
+    /// Path to the dictionary
     pub dictionary: Option<String>,
+    /// Additional AFL flags
     pub afl_flags: Option<String>,
 }
 
+/// Configuration for tmux
 #[derive(Deserialize, Default, Debug, Clone)]
 pub struct TmuxConfig {
+    /// Dry run mode
     pub dry_run: Option<bool>,
+    /// Tmux session name
     pub session_name: Option<String>,
 }
 
+/// Miscellaneous configuration options
 #[derive(Deserialize, Default, Debug, Clone)]
 pub struct MiscConfig {
+    /// Enable TUI mode
     pub tui: Option<bool>,
 }

@@ -9,17 +9,26 @@ use rand::seq::SliceRandom;
 use rand::Rng;
 use sysinfo::System;
 
+/// Represents an AFL command
 pub struct AflCmd {
+    /// Path to the AFL binary
     pub afl_binary: PathBuf,
+    /// Environment variables for the AFL command
     pub env: Vec<String>,
+    /// Input directory for AFL
     pub input_dir: PathBuf,
+    /// Output directory for AFL
     pub output_dir: PathBuf,
+    /// Miscellaneous AFL flags
     pub misc_afl_flags: Vec<String>,
+    /// Path to the target binary
     pub target_binary: PathBuf,
+    /// Arguments for the target binary
     pub target_args: Option<String>,
 }
 
 impl AflCmd {
+    /// Creates a new `AflCmd` instance
     pub fn new(afl_binary: PathBuf, target_binary: PathBuf) -> Self {
         Self {
             afl_binary,
@@ -32,26 +41,32 @@ impl AflCmd {
         }
     }
 
+    /// Sets the environment variables for the AFL command
     pub fn set_env(&mut self, env: Vec<String>) {
         self.env = env;
     }
 
+    /// Sets the input directory for AFL
     pub fn set_input_dir(&mut self, input_dir: PathBuf) {
         self.input_dir = input_dir;
     }
 
+    /// Sets the output directory for AFL
     pub fn set_output_dir(&mut self, output_dir: PathBuf) {
         self.output_dir = output_dir;
     }
 
+    /// Sets the miscellaneous AFL flags
     pub fn set_misc_afl_flags(&mut self, misc_afl_flags: Vec<String>) {
         self.misc_afl_flags = misc_afl_flags;
     }
 
+    /// Sets the arguments for the target binary
     pub fn set_target_args(&mut self, target_args: Option<String>) {
         self.target_args = target_args;
     }
 
+    /// Assembles the AFL command into a string
     pub fn assemble(&self) -> String {
         let mut cmd_parts = Vec::new();
 
@@ -66,15 +81,17 @@ impl AflCmd {
             cmd_parts.push(target_args.clone());
         }
 
-        cmd_parts.join(" ").trim().replace("  ", " ").to_string()
+        cmd_parts.join(" ").trim().replace("  ", " ")
     }
 }
 
+/// Retrieves the amount of free memory in the system
 fn get_free_mem() -> u64 {
     let s = System::new_all();
     s.free_memory()
 }
 
+/// Applies a flag to a percentage of AFL configurations
 fn apply_flags<F>(configs: &mut [AFLEnv], flag_accessor: F, percentage: f64, rng: &mut impl Rng)
 where
     F: Fn(&mut AFLEnv) -> &mut bool,
@@ -90,6 +107,7 @@ where
     }
 }
 
+/// Applies constrained arguments to a percentage of AFL commands
 fn apply_constrained_args(cmds: &mut [AflCmd], args: &[(&str, f64)], rng: &mut impl Rng) {
     let n = cmds.len();
     for &(arg, percentage) in args {
@@ -105,6 +123,7 @@ fn apply_constrained_args(cmds: &mut [AflCmd], args: &[(&str, f64)], rng: &mut i
     }
 }
 
+/// Applies an argument to a percentage of AFL commands
 fn apply_args(cmds: &mut [AflCmd], arg: &str, percentage: f64, rng: &mut impl Rng) {
     let count = (cmds.len() as f64 * percentage) as usize;
     let mut indices = HashSet::new();
@@ -117,17 +136,26 @@ fn apply_args(cmds: &mut [AflCmd], arg: &str, percentage: f64, rng: &mut impl Rn
     }
 }
 
+/// Generates AFL commands based on the provided configuration
 pub struct AFLCmdGenerator {
+    /// The harness configuration
     pub harness: Harness,
+    /// Input directory for AFL
     pub input_dir: PathBuf,
+    /// Output directory for AFL
     pub output_dir: PathBuf,
+    /// Number of AFL runners
     pub runners: u32,
+    /// Path to the dictionary file
     pub dictionary: Option<String>,
+    /// Raw AFL flags
     pub raw_afl_flags: Option<String>,
+    /// Path to the AFL binary
     pub afl_binary: Option<String>,
 }
 
 impl AFLCmdGenerator {
+    /// Creates a new `AFLCmdGenerator` instance
     pub fn new(
         harness: Harness,
         runners: u32,
@@ -156,6 +184,7 @@ impl AFLCmdGenerator {
         }
     }
 
+    /// Retrieves AFL environment variables
     fn get_afl_env_vars() -> Vec<String> {
         std::env::vars()
             .filter(|(k, _)| k.starts_with("AFL_"))
@@ -163,6 +192,7 @@ impl AFLCmdGenerator {
             .collect::<Vec<String>>()
     }
 
+    /// Retrieves the path to the AFL binary
     fn get_afl_fuzz(&self) -> Result<PathBuf> {
         self.afl_binary
             .as_ref()
@@ -195,6 +225,7 @@ impl AFLCmdGenerator {
             .context("Could not find afl-fuzz binary")
     }
 
+    /// Generates AFL commands based on the configuration
     pub fn generate_afl_commands(&self) -> Result<Vec<String>> {
         let mut rng = rand::thread_rng();
         let configs = self.initialize_configs(&mut rng);
@@ -207,7 +238,7 @@ impl AFLCmdGenerator {
         self.apply_fuzzer_roles(&mut cmds);
         self.apply_dictionary(&mut cmds)?;
         self.apply_sanitizer_or_target_binary(&mut cmds);
-        self.apply_cmplog(&mut cmds, &mut rng)?;
+        self.apply_cmplog(&mut cmds, &mut rng);
         self.apply_target_args(&mut cmds);
         self.apply_cmpcov(&mut cmds, &mut rng);
 
@@ -226,6 +257,7 @@ impl AFLCmdGenerator {
         Ok(cmd_strings)
     }
 
+    /// Initializes AFL configurations
     fn initialize_configs(&self, rng: &mut impl Rng) -> Vec<AFLEnv> {
         let mut configs = vec![AFLEnv::new(); self.runners as usize];
         configs.last_mut().unwrap().final_sync = true;
@@ -247,6 +279,7 @@ impl AFLCmdGenerator {
         configs
     }
 
+    /// Creates initial AFL commands
     fn create_initial_cmds(&self, configs: &[AFLEnv]) -> Result<Vec<AflCmd>> {
         let afl_binary = self.get_afl_fuzz()?;
         let target_binary = self.harness.target_binary.clone();
@@ -271,6 +304,7 @@ impl AFLCmdGenerator {
         Ok(cmds)
     }
 
+    /// Applies mutation strategies to AFL commands
     fn apply_mutation_strategies(cmds: &mut [AflCmd], rng: &mut impl Rng) {
         let mode_args = [("-P explore", 0.4), ("-P exploit", 0.2)];
         apply_constrained_args(cmds, &mode_args, rng);
@@ -279,10 +313,12 @@ impl AFLCmdGenerator {
         apply_args(cmds, "-L 0", 0.1, rng);
     }
 
+    /// Applies queue selection to AFL commands
     fn apply_queue_selection(cmds: &mut [AflCmd], rng: &mut impl Rng) {
         apply_args(cmds, "-Z", 0.2, rng);
     }
 
+    /// Applies power schedules to AFL commands
     fn apply_power_schedules(cmds: &mut [AflCmd]) {
         let pscheds = ["fast", "explore", "coe", "lin", "quad", "exploit", "rare"];
         cmds.iter_mut().enumerate().for_each(|(i, cmd)| {
@@ -291,6 +327,7 @@ impl AFLCmdGenerator {
         });
     }
 
+    /// Applies input and output directories to AFL commands
     fn apply_directory(&self, cmds: &mut [AflCmd]) {
         for cmd in cmds {
             cmd.set_input_dir(self.input_dir.clone());
@@ -298,6 +335,7 @@ impl AFLCmdGenerator {
         }
     }
 
+    /// Applies fuzzer roles to AFL commands
     fn apply_fuzzer_roles(&self, cmds: &mut [AflCmd]) {
         let target_fname = self
             .harness
@@ -312,10 +350,11 @@ impl AFLCmdGenerator {
             .push(format!("-M main_{target_fname}"));
         for (i, cmd) in cmds[1..].iter_mut().enumerate() {
             cmd.misc_afl_flags
-                .push(format!("-S secondary_{i}_{target_fname}"));
+                .push(format!("-S sub_{i}_{target_fname}"));
         }
     }
 
+    /// Applies dictionary to AFL commands
     fn apply_dictionary(&self, cmds: &mut [AflCmd]) -> Result<()> {
         if let Some(dict) = self.dictionary.as_ref() {
             let dict_path = fs::canonicalize(dict).context("Failed to resolve dictionary path")?;
@@ -327,16 +366,18 @@ impl AFLCmdGenerator {
         Ok(())
     }
 
+    /// Applies sanitizer or target binary to AFL commands
     fn apply_sanitizer_or_target_binary(&self, cmds: &mut [AflCmd]) {
         let binary = self
             .harness
             .sanitizer_binary
             .as_ref()
             .unwrap_or(&self.harness.target_binary);
-        cmds[0].target_binary = binary.clone();
+        cmds[0].target_binary.clone_from(binary);
     }
 
-    fn apply_cmplog(&self, cmds: &mut [AflCmd], rng: &mut impl Rng) -> Result<()> {
+    /// Applies CMPLOG instrumentation to AFL commands
+    fn apply_cmplog(&self, cmds: &mut [AflCmd], rng: &mut impl Rng) {
         if let Some(cmplog_binary) = self.harness.cmplog_binary.as_ref() {
             let num_cmplog_cfgs = (f64::from(self.runners) * 0.3) as usize;
             match num_cmplog_cfgs {
@@ -365,16 +406,18 @@ impl AFLCmdGenerator {
                         .misc_afl_flags
                         .push(format!("-l 3 -c {}", cmplog_binary.display()));
                 }
-                _ => {
-                    self.apply_cmplog_instrumentation(cmds, num_cmplog_cfgs, cmplog_binary, rng);
-                }
+                _ => Self::apply_cmplog_instrumentation_many(
+                    cmds,
+                    num_cmplog_cfgs,
+                    cmplog_binary,
+                    rng,
+                ),
             }
         }
-        Ok(())
     }
 
-    fn apply_cmplog_instrumentation(
-        &self,
+    /// Applies CMPLOG instrumentation to >4 AFL commands
+    fn apply_cmplog_instrumentation_many(
         cmds: &mut [AflCmd],
         num_cmplog_cfgs: usize,
         cmplog_binary: &Path,
@@ -388,6 +431,7 @@ impl AFLCmdGenerator {
         }
     }
 
+    /// Applies target arguments to AFL commands
     fn apply_target_args(&self, cmds: &mut [AflCmd]) {
         if let Some(target_args) = self.harness.target_args.as_ref() {
             for cmd in cmds {
@@ -396,6 +440,7 @@ impl AFLCmdGenerator {
         }
     }
 
+    /// Applies CMPCOV instrumentation to AFL commands
     fn apply_cmpcov(&self, cmds: &mut [AflCmd], rng: &mut impl Rng) {
         if let Some(cmpcov_binary) = self.harness.cmpcov_binary.as_ref() {
             let max_cmpcov_instances = if self.runners >= 16 {
@@ -414,7 +459,7 @@ impl AFLCmdGenerator {
             cmpcov_indices.shuffle(rng);
 
             for i in cmpcov_indices.into_iter().take(max_cmpcov_instances) {
-                cmds[i].target_binary = cmpcov_binary.clone();
+                cmds[i].target_binary.clone_from(cmpcov_binary);
             }
         }
     }

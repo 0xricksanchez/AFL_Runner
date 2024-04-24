@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+#[allow(dead_code)]
 #[derive(Default, Debug)]
 pub struct CrashInfoDetails {
     pub fuzzer_name: String,
@@ -15,7 +16,7 @@ pub struct CrashInfoDetails {
 }
 
 #[derive(Debug)]
-pub struct SessionData {
+pub struct CampaignData {
     pub fuzzers_alive: usize,
     pub total_run_time: Duration,
     pub executions: ExecutionsInfo,
@@ -33,7 +34,7 @@ pub struct SessionData {
     pub misc: Misc,
 }
 
-impl Default for SessionData {
+impl Default for CampaignData {
     fn default() -> Self {
         Self {
             fuzzers_alive: 0,
@@ -55,7 +56,7 @@ impl Default for SessionData {
     }
 }
 
-impl SessionData {
+impl CampaignData {
     pub fn new() -> Self {
         Self::default()
     }
