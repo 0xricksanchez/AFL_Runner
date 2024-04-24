@@ -31,15 +31,10 @@ pub enum Commands {
 pub struct TuiArgs {
     /// Path to a AFLPlusPlus campaign directory, e.g. `afl_output`
     #[arg(
-        short = 'o',
-        long,
         help = "Path to a AFLPlusPlus campaign directory, e.g. `afl_output`",
         required = true
     )]
     pub afl_output: PathBuf,
-    /// Start the TUI in TMUX
-    #[arg(short = 't', long, help = "Start the TUI in TMUX", required = false)]
-    pub tmux: bool,
 }
 
 #[derive(Args, Clone, Debug)]

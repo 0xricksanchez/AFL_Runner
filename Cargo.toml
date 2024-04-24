@@ -6,7 +6,7 @@ description = "AFL Runner is a tool to run an efficient multi-core AFLPlusPlus c
 version = "0.2.0"
 edition = "2021"
 keywords = ["afl", "fuzzing", "fuzzer", "fuzz"]
-license = "MIT"
+license = "Apache-2.0"
 
 [dependencies]
 anyhow = "1.0.82"

@@ -1,7 +1,7 @@
 use anyhow::bail;
 use anyhow::Result;
 use clap::Parser;
-use cli::{Cli, Commands, Config, GenArgs, RunArgs, TuiArgs};
+use cli::{Cli, Commands, Config, GenArgs, RunArgs};
 use std::env;
 use std::fs;
 use std::hash::{DefaultHasher, Hasher};
@@ -66,7 +66,36 @@ fn main() {
             }
         }
         Commands::Tui(tui_args) => {
-            todo!("TBD")
+            // To implement:
+            // 1. Check if tui_args.output_dir exists
+            // 2. If it does, check if it contains typical output files
+            // 3. If it does then depening on the --tmux flag either run the TUI in a tmux session or in the current terminal
+            if !tui_args.afl_output.exists() {
+                eprintln!("Output directory is required for TUI mode");
+                std::process::exit(1);
+            }
+            // CHeck if tui_args.afl_output contains subfolders
+            // If yes each subfolder should contain a fuzzer_stats file
+            tui_args
+                .afl_output
+                .clone()
+                .read_dir()
+                .unwrap()
+                .for_each(|entry| {
+                    let entry = entry.unwrap();
+                    let path = entry.path();
+                    if path.is_dir() {
+                        let fuzzer_stats = path.join("fuzzer_stats");
+                        if !fuzzer_stats.exists() {
+                            eprintln!(
+                                "Invalid output directory: {} is missing 'fuzzer_stats' file",
+                                path.display()
+                            );
+                            std::process::exit(1);
+                        }
+                    }
+                });
+            run_tui_standalone(&tui_args.afl_output);
         }
     }
 }
@@ -158,6 +187,23 @@ fn generate_tmux_name(args: &RunArgs, target_args: &str) -> String {
         },
         std::clone::Clone::clone,
     )
+}
+
+fn run_tui_standalone(output_dir: &PathBuf) {
+    let output_dir = output_dir.clone();
+    let (session_data_tx, session_data_rx) = mpsc::channel();
+    thread::spawn(move || loop {
+        let session_data = data_collection::collect_session_data(&output_dir);
+        if let Err(e) = session_data_tx.send(session_data) {
+            eprintln!("Error sending session data: {e}");
+            break;
+        }
+        thread::sleep(std::time::Duration::from_secs(1));
+    });
+
+    if let Err(e) = tui::run(&session_data_rx) {
+        eprintln!("Error running TUI: {e}");
+    }
 }
 
 fn run_tmux_session(tmux_name: &str, cmds: &[String]) {
