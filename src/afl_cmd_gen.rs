@@ -1,19 +1,97 @@
 use std::collections::HashSet;
-use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::{fs, process::Command};
 
 use crate::afl_env::AFLEnv;
 use crate::harness::Harness;
+use anyhow::{Context, Result};
 use rand::seq::SliceRandom;
 use rand::Rng;
 use sysinfo::System;
 
+/// Represents an AFL command
+pub struct AflCmd {
+    /// Path to the AFL binary
+    pub afl_binary: PathBuf,
+    /// Environment variables for the AFL command
+    pub env: Vec<String>,
+    /// Input directory for AFL
+    pub input_dir: PathBuf,
+    /// Output directory for AFL
+    pub output_dir: PathBuf,
+    /// Miscellaneous AFL flags
+    pub misc_afl_flags: Vec<String>,
+    /// Path to the target binary
+    pub target_binary: PathBuf,
+    /// Arguments for the target binary
+    pub target_args: Option<String>,
+}
+
+impl AflCmd {
+    /// Creates a new `AflCmd` instance
+    pub fn new(afl_binary: PathBuf, target_binary: PathBuf) -> Self {
+        Self {
+            afl_binary,
+            env: Vec::new(),
+            input_dir: PathBuf::new(),
+            output_dir: PathBuf::new(),
+            misc_afl_flags: Vec::new(),
+            target_binary,
+            target_args: None,
+        }
+    }
+
+    /// Sets the environment variables for the AFL command
+    pub fn set_env(&mut self, env: Vec<String>) {
+        self.env = env;
+    }
+
+    /// Sets the input directory for AFL
+    pub fn set_input_dir(&mut self, input_dir: PathBuf) {
+        self.input_dir = input_dir;
+    }
+
+    /// Sets the output directory for AFL
+    pub fn set_output_dir(&mut self, output_dir: PathBuf) {
+        self.output_dir = output_dir;
+    }
+
+    /// Sets the miscellaneous AFL flags
+    pub fn set_misc_afl_flags(&mut self, misc_afl_flags: Vec<String>) {
+        self.misc_afl_flags = misc_afl_flags;
+    }
+
+    /// Sets the arguments for the target binary
+    pub fn set_target_args(&mut self, target_args: Option<String>) {
+        self.target_args = target_args;
+    }
+
+    /// Assembles the AFL command into a string
+    pub fn assemble(&self) -> String {
+        let mut cmd_parts = Vec::new();
+
+        cmd_parts.extend(self.env.iter().cloned());
+        cmd_parts.push(self.afl_binary.display().to_string());
+        cmd_parts.push(format!("-i {}", self.input_dir.display()));
+        cmd_parts.push(format!("-o {}", self.output_dir.display()));
+        cmd_parts.extend(self.misc_afl_flags.iter().cloned());
+        cmd_parts.push(format!("-- {}", self.target_binary.display()));
+
+        if let Some(target_args) = &self.target_args {
+            cmd_parts.push(target_args.clone());
+        }
+
+        cmd_parts.join(" ").trim().replace("  ", " ")
+    }
+}
+
+/// Retrieves the amount of free memory in the system
 fn get_free_mem() -> u64 {
     let s = System::new_all();
     s.free_memory()
 }
 
+/// Applies a flag to a percentage of AFL configurations
 fn apply_flags<F>(configs: &mut [AFLEnv], flag_accessor: F, percentage: f64, rng: &mut impl Rng)
 where
     F: Fn(&mut AFLEnv) -> &mut bool,
@@ -29,76 +107,64 @@ where
     }
 }
 
-fn apply_constrained_args(strings: &mut [String], args: &[(&str, f64)], rng: &mut impl Rng) {
-    let n = strings.len();
+/// Applies constrained arguments to a percentage of AFL commands
+fn apply_constrained_args(cmds: &mut [AflCmd], args: &[(&str, f64)], rng: &mut impl Rng) {
+    let n = cmds.len();
     for &(arg, percentage) in args {
         let count = (n as f64 * percentage) as usize;
         let mut available_indices: Vec<usize> = (0..n)
-            .filter(|i| !strings[*i].contains(arg.split_whitespace().next().unwrap()))
+            .filter(|i| !cmds[*i].misc_afl_flags.iter().any(|f| f.contains(arg)))
             .collect();
         available_indices.shuffle(rng);
 
         for &index in available_indices.iter().take(count) {
-            strings[index].push_str(&format!(" {arg}"));
+            cmds[index].misc_afl_flags.push(arg.to_string());
         }
     }
 }
 
-fn apply_args(strings: &mut [String], arg: &str, percentage: f64, rng: &mut impl Rng) {
-    let count = (strings.len() as f64 * percentage) as usize;
+/// Applies an argument to a percentage of AFL commands
+fn apply_args(cmds: &mut [AflCmd], arg: &str, percentage: f64, rng: &mut impl Rng) {
+    let count = (cmds.len() as f64 * percentage) as usize;
     let mut indices = HashSet::new();
     while indices.len() < count {
-        indices.insert(rng.gen_range(0..strings.len()));
+        indices.insert(rng.gen_range(0..cmds.len()));
     }
 
     for index in indices {
-        strings[index].push_str(&format!(" {arg}"));
+        cmds[index].misc_afl_flags.push(arg.to_string());
     }
 }
 
+/// Generates AFL commands based on the provided configuration
 pub struct AFLCmdGenerator {
-    /// Path to afl-fuzz
-    pub afl_binary: PathBuf,
-    /// Harness holding the binaries and arguments
+    /// The harness configuration
     pub harness: Harness,
-    /// Corpus directory
+    /// Input directory for AFL
     pub input_dir: PathBuf,
-    /// Output directory
+    /// Output directory for AFL
     pub output_dir: PathBuf,
-    /// Amount of runners
+    /// Number of AFL runners
     pub runners: u32,
-    /// Dictionary
+    /// Path to the dictionary file
     pub dictionary: Option<String>,
-    /// Other raw AFL++ flags
+    /// Raw AFL flags
     pub raw_afl_flags: Option<String>,
-}
-
-impl Default for AFLCmdGenerator {
-    fn default() -> Self {
-        Self {
-            afl_binary: PathBuf::new(),
-            harness: Harness::new(PathBuf::new(), None, None, None, None),
-            input_dir: PathBuf::new(),
-            output_dir: PathBuf::new(),
-            runners: 1,
-            dictionary: None,
-            raw_afl_flags: None,
-        }
-    }
+    /// Path to the AFL binary
+    pub afl_binary: Option<String>,
 }
 
 impl AFLCmdGenerator {
+    /// Creates a new `AFLCmdGenerator` instance
     pub fn new(
         harness: Harness,
         runners: u32,
-        afl_binary: Option<String>,
         input_dir: PathBuf,
         output_dir: PathBuf,
         dictionary: Option<PathBuf>,
         raw_afl_flags: Option<String>,
+        afl_binary: Option<String>,
     ) -> Self {
-        let afl_binary = Self::get_afl_fuzz(afl_binary).expect("Could not find afl-fuzz binary");
-
         let dict = dictionary.and_then(|d| {
             if d.exists() && d.is_file() {
                 d.to_str().map(String::from)
@@ -108,16 +174,17 @@ impl AFLCmdGenerator {
         });
 
         Self {
-            afl_binary,
             harness,
             input_dir,
             output_dir,
             runners,
             dictionary: dict,
             raw_afl_flags,
+            afl_binary,
         }
     }
 
+    /// Retrieves AFL environment variables
     fn get_afl_env_vars() -> Vec<String> {
         std::env::vars()
             .filter(|(k, _)| k.starts_with("AFL_"))
@@ -125,11 +192,29 @@ impl AFLCmdGenerator {
             .collect::<Vec<String>>()
     }
 
-    fn get_afl_fuzz<P: Into<PathBuf> + AsRef<OsStr>>(afl_fuzz: Option<P>) -> Option<PathBuf> {
-        afl_fuzz
-            .map(Into::into)
-            .or_else(Self::get_afl_fuzz_from_path)
-            .or_else(Self::get_afl_fuzz_from_env)
+    /// Retrieves the path to the AFL binary
+    fn get_afl_fuzz(&self) -> Result<PathBuf> {
+        self.afl_binary
+            .as_ref()
+            .map(PathBuf::from)
+            .or_else(|| std::env::var("AFL_PATH").map(PathBuf::from).ok())
+            .or_else(|| {
+                let output = Command::new("which")
+                    .arg("afl-fuzz")
+                    .output()
+                    .context("Failed to execute 'which'")
+                    .ok()?;
+                if output.status.success() {
+                    let afl_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !afl_path.is_empty() {
+                        Some(PathBuf::from(afl_path))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
             .and_then(|path| {
                 if path.exists() && path.is_file() && path.ends_with("afl-fuzz") {
                     Some(path)
@@ -137,68 +222,42 @@ impl AFLCmdGenerator {
                     None
                 }
             })
+            .context("Could not find afl-fuzz binary")
     }
 
-    fn get_afl_fuzz_from_env() -> Option<PathBuf> {
-        std::env::var("AFL_PATH").ok().and_then(|path| {
-            let afl_path = PathBuf::from(path);
-            if afl_path.exists() && afl_path.is_file() && afl_path.ends_with("afl-fuzz") {
-                Some(afl_path)
-            } else {
-                None
-            }
-        })
-    }
-
-    fn get_afl_fuzz_from_path() -> Option<PathBuf> {
-        let output = Command::new("which")
-            .arg("afl-fuzz")
-            .output()
-            .expect("Failed to execute 'which'");
-        if output.status.success() {
-            let afl_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if afl_path.is_empty() {
-                None
-            } else {
-                Some(PathBuf::from(afl_path))
-            }
-        } else {
-            None
-        }
-    }
-
-    pub fn generate_afl_commands(&self) -> Vec<String> {
+    /// Generates AFL commands based on the configuration
+    pub fn generate_afl_commands(&self) -> Result<Vec<String>> {
         let mut rng = rand::thread_rng();
         let configs = self.initialize_configs(&mut rng);
-        let mut strings = self.create_initial_strings(&configs);
+        let mut cmds = self.create_initial_cmds(&configs)?;
 
-        Self::apply_mutation_strategies(&mut strings, &mut rng);
-        Self::apply_queue_selection(&mut strings, &mut rng);
-        Self::apply_power_schedules(&mut strings);
-        self.apply_directory(&mut strings);
-        self.apply_fuzzer_roles(&mut strings);
-        self.apply_dictionary(&mut strings);
-        self.apply_sanitizer_or_target_binary(&mut strings);
-        self.apply_cmplog(&mut strings, &mut rng);
-        self.apply_target_args(&mut strings);
-        self.apply_cmpcov(&mut strings, &mut rng);
+        Self::apply_mutation_strategies(&mut cmds, &mut rng);
+        Self::apply_queue_selection(&mut cmds, &mut rng);
+        Self::apply_power_schedules(&mut cmds);
+        self.apply_directory(&mut cmds);
+        self.apply_fuzzer_roles(&mut cmds);
+        self.apply_dictionary(&mut cmds)?;
+        self.apply_sanitizer_or_target_binary(&mut cmds);
+        self.apply_cmplog(&mut cmds, &mut rng);
+        self.apply_target_args(&mut cmds);
+        self.apply_cmpcov(&mut cmds, &mut rng);
 
         // Inherit global AFL environment variables that are not already set
         let afl_env_vars: Vec<String> = Self::get_afl_env_vars();
-        let to_apply = afl_env_vars
-            .iter()
-            .filter(|env| !strings[0].contains(env.split('=').next().unwrap()))
-            .map(std::string::ToString::to_string)
-            .collect::<Vec<String>>()
-            .join(" ");
-
-        for s in &mut strings {
-            s.insert_str(0, &format!("{to_apply} "));
+        for cmd in &mut cmds {
+            let to_apply = afl_env_vars
+                .iter()
+                .filter(|env| !cmd.env.iter().any(|e| e.starts_with(*env)))
+                .cloned()
+                .collect::<Vec<String>>();
+            cmd.set_env(to_apply);
         }
 
-        strings
+        let cmd_strings = cmds.into_iter().map(|cmd| cmd.assemble()).collect();
+        Ok(cmd_strings)
     }
 
+    /// Initializes AFL configurations
     fn initialize_configs(&self, rng: &mut impl Rng) -> Vec<AFLEnv> {
         let mut configs = vec![AFLEnv::new(); self.runners as usize];
         configs.last_mut().unwrap().final_sync = true;
@@ -220,53 +279,64 @@ impl AFLCmdGenerator {
         configs
     }
 
-    fn create_initial_strings(&self, configs: &[AFLEnv]) -> Vec<String> {
-        configs
+    /// Creates initial AFL commands
+    fn create_initial_cmds(&self, configs: &[AFLEnv]) -> Result<Vec<AflCmd>> {
+        let afl_binary = self.get_afl_fuzz()?;
+        let target_binary = self.harness.target_binary.clone();
+
+        let cmds = configs
             .iter()
             .map(|config| {
-                format!(
-                    "{} {} {}",
-                    config.generate_afl_env_cmd(),
-                    self.afl_binary.display(),
-                    self.raw_afl_flags.clone().unwrap_or_default()
-                )
+                let mut cmd = AflCmd::new(afl_binary.clone(), target_binary.clone());
+                cmd.set_env(config.generate_afl_env_cmd());
+                if let Some(raw_afl_flags) = &self.raw_afl_flags {
+                    cmd.set_misc_afl_flags(
+                        raw_afl_flags
+                            .split_whitespace()
+                            .map(str::to_string)
+                            .collect(),
+                    );
+                }
+                cmd
             })
-            .collect()
+            .collect();
+
+        Ok(cmds)
     }
 
-    fn apply_mutation_strategies(strings: &mut [String], rng: &mut impl Rng) {
-        // Apply different mutation strategies to a percentage of the configs
+    /// Applies mutation strategies to AFL commands
+    fn apply_mutation_strategies(cmds: &mut [AflCmd], rng: &mut impl Rng) {
         let mode_args = [("-P explore", 0.4), ("-P exploit", 0.2)];
-        apply_constrained_args(strings, &mode_args, rng);
+        apply_constrained_args(cmds, &mode_args, rng);
         let format_args = [("-a binary", 0.3), ("-a text", 0.3)];
-        apply_constrained_args(strings, &format_args, rng);
-        apply_args(strings, "-L 0", 0.1, rng);
+        apply_constrained_args(cmds, &format_args, rng);
+        apply_args(cmds, "-L 0", 0.1, rng);
     }
 
-    fn apply_queue_selection(strings: &mut [String], rng: &mut impl Rng) {
-        // Apply sequential queue selection to 20% of the configs
-        apply_args(strings, "-Z", 0.2, rng);
+    /// Applies queue selection to AFL commands
+    fn apply_queue_selection(cmds: &mut [AflCmd], rng: &mut impl Rng) {
+        apply_args(cmds, "-Z", 0.2, rng);
     }
 
-    fn apply_power_schedules(strings: &mut [String]) {
-        // Cycle through the different power schedules for the available runners
+    /// Applies power schedules to AFL commands
+    fn apply_power_schedules(cmds: &mut [AflCmd]) {
         let pscheds = ["fast", "explore", "coe", "lin", "quad", "exploit", "rare"];
-        strings.iter_mut().enumerate().for_each(|(i, s)| {
-            s.push_str(&format!(" -p {}", pscheds[i % pscheds.len()]));
+        cmds.iter_mut().enumerate().for_each(|(i, cmd)| {
+            cmd.misc_afl_flags
+                .push(format!("-p {}", pscheds[i % pscheds.len()]));
         });
     }
 
-    fn apply_directory(&self, strings: &mut Vec<String>) {
-        for s in strings {
-            s.push_str(&format!(
-                " -i {} -o {}",
-                self.input_dir.display(),
-                self.output_dir.display()
-            ));
+    /// Applies input and output directories to AFL commands
+    fn apply_directory(&self, cmds: &mut [AflCmd]) {
+        for cmd in cmds {
+            cmd.set_input_dir(self.input_dir.clone());
+            cmd.set_output_dir(self.output_dir.clone());
         }
     }
 
-    fn apply_fuzzer_roles(&self, strings: &mut [String]) {
+    /// Applies fuzzer roles to AFL commands
+    fn apply_fuzzer_roles(&self, cmds: &mut [AflCmd]) {
         let target_fname = self
             .harness
             .target_binary
@@ -275,159 +345,104 @@ impl AFLCmdGenerator {
             .to_str()
             .unwrap()
             .replace('.', "_");
-        // Set one main fuzzer
-        strings[0].push_str(&format!(" -M main_{target_fname}"));
-        // Set the rest to be slaves
-        for (i, s) in strings[1..].iter_mut().enumerate() {
-            s.push_str(&format!(" -S secondary_{i}_{target_fname}"));
+        cmds[0]
+            .misc_afl_flags
+            .push(format!("-M main_{target_fname}"));
+        for (i, cmd) in cmds[1..].iter_mut().enumerate() {
+            cmd.misc_afl_flags
+                .push(format!("-S sub_{i}_{target_fname}"));
         }
     }
 
-    fn apply_dictionary(&self, strings: &mut Vec<String>) {
-        // If a dictionary is provided, set it for all configs
+    /// Applies dictionary to AFL commands
+    fn apply_dictionary(&self, cmds: &mut [AflCmd]) -> Result<()> {
         if let Some(dict) = self.dictionary.as_ref() {
-            let dict_path = fs::canonicalize(dict).expect("Failed to resolve dictionary path");
-            for s in strings {
-                s.push_str(&format!(" -x {}", dict_path.display()));
+            let dict_path = fs::canonicalize(dict).context("Failed to resolve dictionary path")?;
+            for cmd in cmds {
+                cmd.misc_afl_flags
+                    .push(format!("-x {}", dict_path.display()));
             }
         }
+        Ok(())
     }
 
-    fn apply_sanitizer_or_target_binary(&self, strings: &mut [String]) {
-        // Set the first one to be a sanitizer_binary if available, otherwise the target_binary
+    /// Applies sanitizer or target binary to AFL commands
+    fn apply_sanitizer_or_target_binary(&self, cmds: &mut [AflCmd]) {
         let binary = self
             .harness
             .sanitizer_binary
             .as_ref()
             .unwrap_or(&self.harness.target_binary);
-        strings[0].push_str(&format!(" -- {}", binary.display()));
+        cmds[0].target_binary.clone_from(binary);
     }
 
-    fn apply_cmplog(&self, strings: &mut [String], rng: &mut impl Rng) {
+    /// Applies CMPLOG instrumentation to AFL commands
+    fn apply_cmplog(&self, cmds: &mut [AflCmd], rng: &mut impl Rng) {
         if let Some(cmplog_binary) = self.harness.cmplog_binary.as_ref() {
             let num_cmplog_cfgs = (f64::from(self.runners) * 0.3) as usize;
             match num_cmplog_cfgs {
-                0 => {
-                    // We have a cmplog binary but not enough config slots to use it
-                }
+                0 => {}
                 1 => {
-                    // We have exactly one runner available for cmplog so we use `-l 2`
-                    strings[1].push_str(
-                        format!(
-                            " -l 2 -c {} -- {}",
-                            cmplog_binary.display(),
-                            self.harness.target_binary.display()
-                        )
-                        .as_str(),
-                    );
+                    cmds[1]
+                        .misc_afl_flags
+                        .push(format!("-l 2 -c {}", cmplog_binary.display()));
                 }
                 2 => {
-                    // We have exactly two runners available for cmplog so we use `-l 2` and `-l 2AT`
-                    strings[1].push_str(
-                        format!(
-                            " -l 2 -c {} -- {}",
-                            cmplog_binary.display(),
-                            self.harness.target_binary.display()
-                        )
-                        .as_str(),
-                    );
-                    strings[2].push_str(
-                        format!(
-                            " -l 2AT -c {} -- {}",
-                            cmplog_binary.display(),
-                            self.harness.target_binary.display()
-                        )
-                        .as_str(),
-                    );
+                    cmds[1]
+                        .misc_afl_flags
+                        .push(format!("-l 2 -c {}", cmplog_binary.display()));
+                    cmds[2]
+                        .misc_afl_flags
+                        .push(format!("-l 2AT -c {}", cmplog_binary.display()));
                 }
                 3 => {
-                    // We can now use all three modes
-                    strings[1].push_str(
-                        format!(
-                            " -l 2 -c {} -- {}",
-                            cmplog_binary.display(),
-                            self.harness.target_binary.display()
-                        )
-                        .as_str(),
-                    );
-                    strings[2].push_str(
-                        format!(
-                            " -l 2AT -c {} -- {}",
-                            cmplog_binary.display(),
-                            self.harness.target_binary.display()
-                        )
-                        .as_str(),
-                    );
-                    strings[3].push_str(
-                        format!(
-                            " -l 3 -c {} -- {}",
-                            cmplog_binary.display(),
-                            self.harness.target_binary.display()
-                        )
-                        .as_str(),
-                    );
+                    cmds[1]
+                        .misc_afl_flags
+                        .push(format!("-l 2 -c {}", cmplog_binary.display()));
+                    cmds[2]
+                        .misc_afl_flags
+                        .push(format!("-l 2AT -c {}", cmplog_binary.display()));
+                    cmds[3]
+                        .misc_afl_flags
+                        .push(format!("-l 3 -c {}", cmplog_binary.display()));
                 }
-                _ => {
-                    // We have more than 3 runners available for cmplog so we use all three modes with
-                    // the following distribution:
-                    // - 70% for -l 2
-                    // - 10% for -l 3
-                    // - 20% for -l 2AT.
-                    self.apply_cmplog_instrumentation(strings, num_cmplog_cfgs, cmplog_binary, rng);
-                }
+                _ => Self::apply_cmplog_instrumentation_many(
+                    cmds,
+                    num_cmplog_cfgs,
+                    cmplog_binary,
+                    rng,
+                ),
             }
-            self.apply_normal_instrumentation(strings, num_cmplog_cfgs);
-        } else {
-            self.apply_normal_instrumentation(strings, 0);
         }
     }
 
-    fn apply_cmplog_instrumentation(
-        &self,
-        strings: &mut [String],
+    /// Applies CMPLOG instrumentation to >4 AFL commands
+    fn apply_cmplog_instrumentation_many(
+        cmds: &mut [AflCmd],
         num_cmplog_cfgs: usize,
         cmplog_binary: &Path,
         rng: &mut impl Rng,
     ) {
-        let cmplog_args = [("-l 2 ", 0.7), ("-l 3", 0.1), ("-l 2AT", 0.2)];
-        apply_constrained_args(&mut strings[1..=num_cmplog_cfgs], &cmplog_args, rng);
-        for s in &mut strings[1..=num_cmplog_cfgs] {
-            s.push_str(
-                format!(
-                    " -c {} -- {}",
-                    cmplog_binary.display(),
-                    self.harness.target_binary.display()
-                )
-                .as_str(),
-            );
+        let cmplog_args = [("-l 2", 0.7), ("-l 3", 0.1), ("-l 2AT", 0.2)];
+        apply_constrained_args(&mut cmds[1..=num_cmplog_cfgs], &cmplog_args, rng);
+        for cmd in &mut cmds[1..=num_cmplog_cfgs] {
+            cmd.misc_afl_flags
+                .push(format!("-c {}", cmplog_binary.display()));
         }
     }
 
-    fn apply_normal_instrumentation(&self, strings: &mut [String], start_index: usize) {
-        for s in &mut strings[start_index + 1..] {
-            s.push_str(format!(" -- {}", self.harness.target_binary.display()).as_str());
-        }
-    }
-
-    fn apply_target_args(&self, strings: &mut [String]) {
-        // Appends target arguments to the command string
+    /// Applies target arguments to AFL commands
+    fn apply_target_args(&self, cmds: &mut [AflCmd]) {
         if let Some(target_args) = self.harness.target_args.as_ref() {
-            for s in strings {
-                s.push_str(format!(" {target_args}").as_str());
+            for cmd in cmds {
+                cmd.set_target_args(Some(target_args.clone()));
             }
         }
     }
 
-    fn apply_cmpcov(&self, strings: &mut [String], rng: &mut impl Rng) {
-        // Use 1-3 CMPCOV instances if available.
-        // We want the following distribution:
-        // - 1 instance when >= 3 && < 8 runners
-        // - 2 instances when >= 8 && < 16 runners
-        // - 3 instances when >= 16 runners
-        // Unlike CMPLOG we need to replace the target binary with the cmpcov binary
-        // We never want to replace instace[0] as that one houses a SAN binary
-        // It is unclear if we want to pair CMPLOG with CMPCOV but let's attempt to avoid it
-        if self.harness.cmpcov_binary.as_ref().is_some() {
+    /// Applies CMPCOV instrumentation to AFL commands
+    fn apply_cmpcov(&self, cmds: &mut [AflCmd], rng: &mut impl Rng) {
+        if let Some(cmpcov_binary) = self.harness.cmpcov_binary.as_ref() {
             let max_cmpcov_instances = if self.runners >= 16 {
                 3
             } else if self.runners >= 8 {
@@ -437,27 +452,14 @@ impl AFLCmdGenerator {
             } else {
                 0
             };
-            // Find instances that don't have CMPLOG (-c) and replace the target binary with CMPLOG)
-            // Also skip instance[0] as that one houses a SAN binary
-            let mut cmpcov_indices = (1..strings.len())
-                .filter(|i| !strings[*i].contains("-c"))
+
+            let mut cmpcov_indices = (1..cmds.len())
+                .filter(|i| !cmds[*i].misc_afl_flags.iter().any(|f| f.contains("-c")))
                 .collect::<Vec<_>>();
-            // Shuffle the indices so we don't always replace the same instances
-            // Stylepoints only
             cmpcov_indices.shuffle(rng);
-            // Find and replace the target binary string after the -- with the cmpcov binary
-            for i in cmpcov_indices.iter().take(max_cmpcov_instances) {
-                let target_binary = self.harness.target_binary.display().to_string();
-                let cmpcov_binary = self
-                    .harness
-                    .cmpcov_binary
-                    .as_ref()
-                    .unwrap()
-                    .display()
-                    .to_string();
-                if let Some(pos) = strings[*i].find(&target_binary) {
-                    strings[*i].replace_range(pos..pos + target_binary.len(), &cmpcov_binary);
-                }
+
+            for i in cmpcov_indices.into_iter().take(max_cmpcov_instances) {
+                cmds[i].target_binary.clone_from(cmpcov_binary);
             }
         }
     }

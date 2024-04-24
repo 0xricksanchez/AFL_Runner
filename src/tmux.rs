@@ -6,15 +6,26 @@ use std::process::{Command, Stdio};
 use std::{env, thread, time::Duration};
 
 use crate::cli::GenArgs;
+use crate::tui::Tui;
 
+/// Represents a tmux session
 #[derive(Debug, Clone)]
 pub struct Session {
+    /// The name of the tmux session
     pub name: String,
+    /// The commands to be executed in the tmux session
     pub commands: Vec<String>,
+    /// The path to the log file for the tmux session
     pub log_file: PathBuf,
 }
 
 impl Session {
+    /// Creates a new `Session` instance
+    ///
+    /// # Arguments
+    ///
+    /// * `session_name` - The name of the tmux session
+    /// * `cmds` - The commands to be executed in the tmux session
     pub fn new(session_name: &str, cmds: &[String]) -> Self {
         let commands = cmds
             .iter()
@@ -31,10 +42,12 @@ impl Session {
         }
     }
 
+    /// Checks if the current process is running inside a tmux session
     fn in_tmux() -> bool {
         env::var("TMUX").is_ok()
     }
 
+    /// Creates a bash script for running the tmux session
     fn create_bash_script(&self) -> Result<String> {
         let mut engine = upon::Engine::new();
         engine.add_template("afl_fuzz", include_str!("templates/tmux.txt"))?;
@@ -49,6 +62,7 @@ impl Session {
             .map_err(|e| anyhow::anyhow!("Error creating bash script: {}", e))
     }
 
+    /// Kills the tmux session
     pub fn kill_session(&self) -> Result<()> {
         let mut cmd = Command::new("tmux");
         cmd.arg("kill-session")
@@ -61,6 +75,7 @@ impl Session {
         Ok(())
     }
 
+    /// Finds the ID of the first window in the tmux session
     fn find_first_window_id(&self) -> Result<String> {
         let output = Command::new("tmux")
             .args(["list-windows", "-t", &self.name])
@@ -80,6 +95,7 @@ impl Session {
         }
     }
 
+    /// Attaches to the tmux session
     pub fn attach(&self) -> Result<()> {
         let get_first_window_id = self.find_first_window_id()?;
         let target = format!("{}:{}", &self.name, get_first_window_id);
@@ -92,6 +108,7 @@ impl Session {
         Ok(())
     }
 
+    /// Helper function for creating directories
     fn mkdir_helper(dir: &Path, check_empty: bool) -> Result<()> {
         if dir.is_file() {
             bail!("{} is a file", dir.display());
@@ -114,6 +131,7 @@ impl Session {
         Ok(())
     }
 
+    /// Runs the tmux session
     pub fn run(&self) -> Result<()> {
         if Self::in_tmux() {
             bail!("Already in tmux session. Nested tmux sessions are not supported.");
@@ -164,8 +182,42 @@ impl Session {
         }
         Ok(())
     }
+
+    /// Runs the tmux session and attaches to it
+    pub fn run_tmux_session(&self) {
+        if let Err(e) = self.run() {
+            let _ = self.kill_session();
+            eprintln!("Error running tmux session: {e}");
+        } else {
+            self.attach().unwrap();
+        }
+    }
+
+    /// Runs the tmux session with a TUI
+    pub fn run_tmux_session_with_tui(&self, args: &GenArgs) {
+        if let Err(e) = self.run_tmux_session_detached() {
+            eprintln!("Error running TUI: {e}");
+            return;
+        }
+        let output_dir = args.output_dir.clone().unwrap();
+
+        thread::sleep(Duration::from_secs(1)); // Wait for tmux session to start
+
+        Tui::run(&output_dir);
+    }
+
+    /// Runs the tmux session in detached mode
+    pub fn run_tmux_session_detached(&self) -> Result<()> {
+        if let Err(e) = self.run() {
+            let _ = self.kill_session();
+            return Err(e);
+        }
+        println!("Session {} started in detached mode", self.name);
+        Ok(())
+    }
 }
 
+/// Gets user input from stdin
 fn get_user_input() -> String {
     std::io::stdin()
         .bytes()
@@ -181,36 +233,4 @@ fn get_user_input() -> String {
                 b.to_string()
             }
         })
-}
-
-pub fn run_tmux_session(tmux_name: &str, cmds: &[String]) {
-    let tmux = Session::new(tmux_name, cmds);
-    if let Err(e) = tmux.run() {
-        let _ = tmux.kill_session();
-        eprintln!("Error running tmux session: {e}");
-    } else {
-        tmux.attach().unwrap();
-    }
-}
-
-pub fn run_tmux_session_with_tui(tmux_name: &str, cmds: &[String], args: &GenArgs) {
-    if let Err(e) = run_tmux_session_detached(tmux_name, cmds) {
-        eprintln!("Error running TUI: {e}");
-        return;
-    }
-    let output_dir = args.output_dir.clone().unwrap();
-
-    thread::sleep(Duration::from_secs(1)); // Wait for tmux session to start
-
-    crate::tui::run_tui_standalone(&output_dir);
-}
-
-pub fn run_tmux_session_detached(tmux_name: &str, cmds: &[String]) -> Result<()> {
-    let tmux = Session::new(tmux_name, cmds);
-    if let Err(e) = tmux.run() {
-        let _ = tmux.kill_session();
-        return Err(e);
-    }
-    println!("Session {tmux_name} started in detached mode");
-    Ok(())
 }

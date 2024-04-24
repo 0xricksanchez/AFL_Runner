@@ -4,6 +4,7 @@ use std::hash::{DefaultHasher, Hasher};
 use std::path::PathBuf;
 
 use anyhow::bail;
+use anyhow::Context;
 use anyhow::Result;
 
 use crate::afl_cmd_gen::AFLCmdGenerator;
@@ -13,6 +14,11 @@ use crate::cli::RunArgs;
 use crate::cli::AFL_CORPUS;
 use crate::harness::Harness;
 
+/// Creates a new `Harness` instance based on the provided `GenArgs`.
+///
+/// # Errors
+///
+/// Returns an error if the target binary is not specified.
 pub fn create_harness(args: &GenArgs) -> Result<Harness> {
     if args.target.is_none() {
         bail!("Target binary is required");
@@ -26,6 +32,10 @@ pub fn create_harness(args: &GenArgs) -> Result<Harness> {
     ))
 }
 
+/// Creates a new `AFLCmdGenerator` instance based on the provided `GenArgs` and `Harness`.
+///
+/// If the input directory is not specified, it defaults to `AFL_CORPUS`.
+/// If the output directory is not specified, it defaults to `/tmp/afl_output`.
 pub fn create_afl_runner(
     args: &GenArgs,
     harness: Harness,
@@ -34,7 +44,6 @@ pub fn create_afl_runner(
     AFLCmdGenerator::new(
         harness,
         args.runners.unwrap_or(1),
-        args.afl_binary.clone(),
         args.input_dir
             .clone()
             .unwrap_or_else(|| PathBuf::from(AFL_CORPUS)),
@@ -43,9 +52,14 @@ pub fn create_afl_runner(
             .unwrap_or_else(|| PathBuf::from("/tmp/afl_output")),
         args.dictionary.clone(),
         raw_afl_flags,
+        args.afl_binary.clone(),
     )
 }
 
+/// Generates a unique tmux session name based on the provided `RunArgs` and `target_args`.
+///
+/// If the `tmux_session_name` is not specified in `RunArgs`, the function generates a unique name
+/// by combining the target binary name, input directory name, and a hash of the `target_args`.
 pub fn generate_tmux_name(args: &RunArgs, target_args: &str) -> String {
     args.tmux_session_name.as_ref().map_or_else(
         || {
@@ -75,26 +89,44 @@ pub fn generate_tmux_name(args: &RunArgs, target_args: &str) -> String {
     )
 }
 
-pub fn load_config(config_path: Option<&PathBuf>) -> Config {
-    config_path.map_or_else(
-        || {
-            let cwd = env::current_dir().unwrap();
-            let default_config_path = cwd.join("aflr_cfg.toml");
-            if default_config_path.exists() {
-                let config_content = fs::read_to_string(&default_config_path).unwrap();
-                toml::from_str(&config_content).unwrap()
-            } else {
-                Config::default()
-            }
-        },
-        |config_path| {
-            // TODO: Add error handling for when config_path does not exist
-            let config_content = fs::read_to_string(config_path).unwrap();
-            toml::from_str(&config_content).unwrap()
-        },
-    )
+/// Loads the configuration from the specified `config_path` or the default configuration file.
+///
+/// If `config_path` is `None`, the function looks for a default configuration file named `aflr_cfg.toml`
+/// in the current working directory. If the default configuration file is not found, an empty `Config`
+/// instance is returned.
+///
+/// # Errors
+///
+/// Returns an error if the configuration file cannot be read or parsed.
+pub fn load_config(config_path: Option<&PathBuf>) -> Result<Config> {
+    if let Some(path) = config_path {
+        let config_content = fs::read_to_string(path)
+            .with_context(|| format!("Failed to read config file: {}", path.display()))?;
+        toml::from_str(&config_content)
+            .with_context(|| format!("Failed to parse config file: {}", path.display()))
+    } else {
+        let cwd = env::current_dir().context("Failed to get current directory")?;
+        let default_config_path = cwd.join("aflr_cfg.toml");
+        if default_config_path.exists() {
+            let config_content = fs::read_to_string(&default_config_path).with_context(|| {
+                format!(
+                    "Failed to read default config file: {}",
+                    default_config_path.display()
+                )
+            })?;
+            toml::from_str(&config_content).with_context(|| {
+                format!(
+                    "Failed to parse default config file: {}",
+                    default_config_path.display()
+                )
+            })
+        } else {
+            Ok(Config::default())
+        }
+    }
 }
 
+/// Prints the generated commands to the console.
 pub fn print_generated_commands(cmds: &[String]) {
     println!("Generated commands:");
     for (i, cmd) in cmds.iter().enumerate() {
