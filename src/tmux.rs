@@ -1,9 +1,11 @@
 use anyhow::{bail, Result};
 use std::fs;
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::{env, path::PathBuf};
+use std::{env, thread, time::Duration};
+
+use crate::cli::GenArgs;
 
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -35,7 +37,7 @@ impl Session {
 
     fn create_bash_script(&self) -> Result<String> {
         let mut engine = upon::Engine::new();
-        engine.add_template("afl_fuzz", include_str!("util/tmux_template.txt"))?;
+        engine.add_template("afl_fuzz", include_str!("templates/tmux.txt"))?;
         engine
             .template("afl_fuzz")
             .render(upon::value! {
@@ -52,8 +54,8 @@ impl Session {
         cmd.arg("kill-session")
             .arg("-t")
             .arg(&self.name)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null());
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
         let mut child = cmd.spawn()?;
         let _ = child.wait()?;
         Ok(())
@@ -83,32 +85,33 @@ impl Session {
         let target = format!("{}:{}", &self.name, get_first_window_id);
         let mut cmd = Command::new("tmux");
         cmd.args(["attach-session", "-t", &target])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null());
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
         let mut child = cmd.spawn()?;
         let _ = child.wait()?;
         Ok(())
     }
 
-    fn mkdir_helper(dir: &Path, check_empty: bool) {
-        assert!(!dir.is_file(), "{} is a file", dir.display());
+    fn mkdir_helper(dir: &Path, check_empty: bool) -> Result<()> {
+        if dir.is_file() {
+            bail!("{} is a file", dir.display());
+        }
         if check_empty {
             let is_empty = dir.read_dir().map_or(true, |mut i| i.next().is_none());
             if !is_empty {
                 println!("Directory {} is not empty. Clean it [Y/n]? ", dir.display());
                 let mut input = String::new();
-                std::io::stdin()
-                    .read_line(&mut input)
-                    .expect("Failed to read input");
+                std::io::stdin().read_line(&mut input)?;
                 let input = input.trim().to_lowercase().chars().next().unwrap_or('y');
                 if input == 'y' || input == '\n' {
-                    fs::remove_dir_all(dir).expect("Failed to remove directory");
+                    fs::remove_dir_all(dir)?;
                 }
             }
         }
         if !dir.exists() {
-            fs::create_dir(dir).expect("Failed to create directory");
+            fs::create_dir(dir)?;
         }
+        Ok(())
     }
 
     pub fn run(&self) -> Result<()> {
@@ -116,29 +119,26 @@ impl Session {
             bail!("Already in tmux session. Nested tmux sessions are not supported.");
         }
 
-        // Find the input directory followed after -i in self.commands[0]
         let indir = PathBuf::from(
             self.commands[0]
                 .split_whitespace()
                 .skip_while(|&x| x != "-i")
-                .skip(1)
-                .next()
+                .nth(1)
                 .unwrap(),
         );
         let outdir = PathBuf::from(
             self.commands[0]
                 .split_whitespace()
                 .skip_while(|&x| x != "-o")
-                .skip(1)
-                .next()
+                .nth(1)
                 .unwrap(),
         );
 
-        Self::mkdir_helper(&indir, false);
-        if !indir.read_dir().unwrap().next().is_none() {
-            fs::write(indir.join("1"), "fuzz").expect("Failed to write to file");
+        Self::mkdir_helper(&indir, false)?;
+        if indir.read_dir()?.next().is_none() {
+            fs::write(indir.join("1"), "fuzz")?;
         }
-        Self::mkdir_helper(&outdir, true);
+        Self::mkdir_helper(&outdir, true)?;
 
         println!(
             "Starting tmux session '{}' for {} generated commands...",
@@ -148,20 +148,7 @@ impl Session {
 
         print!("Continue [Y/n]? ");
         std::io::stdout().flush()?;
-        let user_input = std::io::stdin()
-            .bytes()
-            .next()
-            .and_then(std::result::Result::ok)
-            .map_or("y".to_string(), |byte| {
-                let b = byte as char;
-                if b.is_ascii_alphabetic() {
-                    b.to_lowercase().to_string()
-                } else if b == '\n' {
-                    'y'.to_string()
-                } else {
-                    b.to_string()
-                }
-            });
+        let user_input = get_user_input();
         if user_input != "y" {
             bail!("Aborting");
         }
@@ -177,4 +164,53 @@ impl Session {
         }
         Ok(())
     }
+}
+
+fn get_user_input() -> String {
+    std::io::stdin()
+        .bytes()
+        .next()
+        .and_then(std::result::Result::ok)
+        .map_or("y".to_string(), |byte| {
+            let b = byte as char;
+            if b.is_ascii_alphabetic() {
+                b.to_lowercase().to_string()
+            } else if b == '\n' {
+                'y'.to_string()
+            } else {
+                b.to_string()
+            }
+        })
+}
+
+pub fn run_tmux_session(tmux_name: &str, cmds: &[String]) {
+    let tmux = Session::new(tmux_name, cmds);
+    if let Err(e) = tmux.run() {
+        let _ = tmux.kill_session();
+        eprintln!("Error running tmux session: {e}");
+    } else {
+        tmux.attach().unwrap();
+    }
+}
+
+pub fn run_tmux_session_with_tui(tmux_name: &str, cmds: &[String], args: &GenArgs) {
+    if let Err(e) = run_tmux_session_detached(tmux_name, cmds) {
+        eprintln!("Error running TUI: {e}");
+        return;
+    }
+    let output_dir = args.output_dir.clone().unwrap();
+
+    thread::sleep(Duration::from_secs(1)); // Wait for tmux session to start
+
+    crate::tui::run_tui_standalone(&output_dir);
+}
+
+pub fn run_tmux_session_detached(tmux_name: &str, cmds: &[String]) -> Result<()> {
+    let tmux = Session::new(tmux_name, cmds);
+    if let Err(e) = tmux.run() {
+        let _ = tmux.kill_session();
+        return Err(e);
+    }
+    println!("Session {tmux_name} started in detached mode");
+    Ok(())
 }

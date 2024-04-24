@@ -1,7 +1,10 @@
 use std::io;
+use std::path::Path;
 use std::sync::mpsc;
+use std::thread;
 use std::time::Duration;
 
+use crate::data_collection;
 use crate::session::{CrashInfoDetails, SessionData};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
@@ -15,6 +18,23 @@ use ratatui::{
     Terminal,
 };
 
+pub fn run_tui_standalone(output_dir: &Path) {
+    let output_dir = output_dir.to_path_buf();
+    let (session_data_tx, session_data_rx) = mpsc::channel();
+    thread::spawn(move || loop {
+        let session_data = data_collection::collect_session_data(&output_dir);
+        if let Err(e) = session_data_tx.send(session_data) {
+            eprintln!("Error sending session data: {e}");
+            break;
+        }
+        thread::sleep(Duration::from_secs(1));
+    });
+
+    if let Err(e) = run(&session_data_rx) {
+        eprintln!("Error running TUI: {e}");
+    }
+}
+
 pub fn run(session_data_rx: &mpsc::Receiver<SessionData>) -> io::Result<()> {
     let stdout = io::stdout();
     let backend = CrosstermBackend::new(stdout);
@@ -27,15 +47,12 @@ pub fn run(session_data_rx: &mpsc::Receiver<SessionData>) -> io::Result<()> {
     loop {
         if let Ok(session_data) = session_data_rx.recv_timeout(Duration::from_millis(500)) {
             terminal.draw(|f| {
-                let title = create_title(&session_data);
-                let main_chunks = create_main_layout(f.size());
-                f.render_widget(title, main_chunks[0]);
-
-                let inner_chunks = create_inner_layout(main_chunks[1]);
-                render_process_timings_and_overall_results(f, &session_data, inner_chunks[0]);
-                render_stage_progress_and_nerd_stats(f, &session_data, inner_chunks[1]);
-                render_crash_solutions(f, &session_data, inner_chunks[2]);
-                render_hang_solutions(f, &session_data, inner_chunks[3]);
+                let chunks = create_layout(f.size());
+                render_title(f, &session_data, chunks[0]);
+                render_process_timings_and_overall_results(f, &session_data, chunks[1]);
+                render_stage_progress_and_nerd_stats(f, &session_data, chunks[2]);
+                render_crash_solutions(f, &session_data, chunks[3]);
+                render_hang_solutions(f, &session_data, chunks[4]);
             })?;
         }
 
@@ -54,30 +71,14 @@ pub fn run(session_data_rx: &mpsc::Receiver<SessionData>) -> io::Result<()> {
     Ok(())
 }
 
-fn create_title(session_data: &SessionData) -> Paragraph {
-    Paragraph::new(format!(
-        "AFL {} - {} - Fuzzing campaign runner by @0xricksanchez",
-        session_data.misc.afl_version, session_data.misc.afl_banner
-    ))
-    .alignment(Alignment::Center)
-    .style(
-        Style::default()
-            .fg(Color::Yellow)
-            .add_modifier(Modifier::BOLD),
-    )
-}
-
-fn create_main_layout(size: Rect) -> Vec<Rect> {
-    Layout::default()
+fn create_layout(size: Rect) -> Vec<Rect> {
+    let main_layout = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([Constraint::Length(1), Constraint::Min(0)].as_ref())
-        .split(size)
-        .to_vec()
-}
+        .split(size);
 
-fn create_inner_layout(area: Rect) -> Vec<Rect> {
-    Layout::default()
+    let inner_layout = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
         .constraints(
@@ -89,8 +90,31 @@ fn create_inner_layout(area: Rect) -> Vec<Rect> {
             ]
             .as_ref(),
         )
-        .split(area)
-        .to_vec()
+        .split(main_layout[1]);
+
+    [
+        main_layout[0],
+        inner_layout[0],
+        inner_layout[1],
+        inner_layout[2],
+        inner_layout[3],
+    ]
+    .to_vec()
+}
+
+fn render_title(f: &mut Frame, session_data: &SessionData, area: Rect) {
+    let title = Paragraph::new(format!(
+        "AFL {} - {} - Fuzzing campaign runner by @0xricksanchez",
+        session_data.misc.afl_version, session_data.misc.afl_banner
+    ))
+    .alignment(Alignment::Center)
+    .style(
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
+    );
+
+    f.render_widget(title, area);
 }
 
 fn render_process_timings_and_overall_results(

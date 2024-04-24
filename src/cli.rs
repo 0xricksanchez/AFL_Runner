@@ -29,7 +29,7 @@ pub enum Commands {
 
 #[derive(Args, Clone, Debug, Default)]
 pub struct TuiArgs {
-    /// Path to a AFLPlusPlus campaign directory, e.g. `afl_output`
+    /// Path to a `AFLPlusPlus` campaign directory, e.g. `afl_output`
     #[arg(
         help = "Path to a AFLPlusPlus campaign directory, e.g. `afl_output`",
         required = true
@@ -167,7 +167,7 @@ impl GenArgs {
                 .target_args
                 .clone()
                 .or_else(|| config.target.args.clone().filter(|args| !args.is_empty())),
-            runners: Some(self.runners.clone().or(config.afl_cfg.runners).unwrap_or(1)),
+            runners: Some(self.runners.or(config.afl_cfg.runners).unwrap_or(1)),
             input_dir: self
                 .input_dir
                 .clone()
@@ -239,15 +239,15 @@ impl RunArgs {
         let gen_args = self.gen_args.merge(config);
         Self {
             gen_args,
-            dry_run: self.dry_run.clone() || config.tmux.dry_run.unwrap_or(false),
+            dry_run: self.dry_run || config.tmux.dry_run.unwrap_or(false),
             tmux_session_name: self
                 .tmux_session_name
                 .clone()
                 .or_else(|| config.tmux.session_name.clone().filter(|s| !s.is_empty())),
-            tui: if self.dry_run.clone() {
+            tui: if self.dry_run {
                 false
             } else {
-                self.tui.clone() || config.misc.tui.unwrap_or(false)
+                self.tui || config.misc.tui.unwrap_or(false)
             },
         }
     }
