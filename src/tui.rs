@@ -178,8 +178,10 @@ fn create_process_timings_paragraph(session_data: &SessionData) -> Paragraph {
         format_last_event(&session_data.last_crashes, &session_data.total_run_time);
     let last_seen_hang = format_last_event(&session_data.last_hangs, &session_data.total_run_time);
 
+    // TODO: Check if fuzzers are actually alive and report back when >1 was lost (warning)
+    // TODO: If all fuzzers are dead display an error and stop `total_run_time`
     let content = format!(
-        "Fuzzers alive: {}
+        "Fuzzers alive: {} 
 Total run time: {}
 Time without finds: {}
 Last saved crash: {}
