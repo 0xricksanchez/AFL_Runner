@@ -67,10 +67,10 @@ Here's an example of generating AFL++ commands with `AFL_Runner`:
 
 ```bash
 # Exported AFL_* environment variables that are *not set* by AFL_Runner are kept!
-export AFL_PRELOAD=/tmp/mySharedLib.so
+$ export AFL_PRELOAD=/tmp/mySharedLib.so
 # Exported AFL_* environment variables that we set explicitly are ignored!
-export AFL_IGNORE_SEED_PROBLEMS=1
-afl_runner -t /tmp/test_bins/target -s /tmp/test_bins/target_asan -c /tmp/test_bins/target_cmplog -l /tmp/test_bins/target_cmpcov -n 16 -i /tmp/seed_corpus -o /tmp/afl_out -x /tmp/fuzzing.dict -m "custom_fuzz_session" --dry-run -- 'arg1 arg2 --arg3 --arg4 @@'
+$ export AFL_IGNORE_SEED_PROBLEMS=1
+$ afl_runner gen -t /tmp/test_bins/target -s /tmp/test_bins/target_asan -c /tmp/test_bins/target_cmplog -l /tmp/test_bins/target_cmpcov -n 16 -i /tmp/seed_corpus -o /tmp/afl_out -x /tmp/fuzzing.dict -- 'arg1 arg2 --arg3 --arg4 @@'
 Generated commands:
     0. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=1 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -Z -p fast -i /tmp/seed_corpus -o /tmp/afl_out -M main_target -- /tmp/test_bins/target_asan arg1 arg2 --arg3 --arg4 @@
     1. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250  /usr/local/bin/afl-fuzz  -p explore -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_0_target -l 2  -c /tmp/test_bins/target_cmplog -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
@@ -97,6 +97,8 @@ _Note_: Supplying the \*SAN, CMPLOG, or CMPCOV binaries are optional and if omit
 `AFL_Runner` also includes a terminal user interface (TUI) for monitoring the fuzzing campaign progress:
 
 ![AFL_Runner TUI](img/tui.png)
+
+_Note_: The TUI can be used as a **full** replacement for `afl-whatsup` by using `afl_runner tui <afl_output_dir>`!
 
 ## Contributing 🤝
 

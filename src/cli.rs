@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use clap::Parser;
+use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 
 /// Default corpus directory
@@ -8,11 +8,37 @@ pub const AFL_CORPUS: &str = "/tmp/afl_input";
 /// Default output directory
 const AFL_OUTPUT: &str = "/tmp/afl_output";
 
-#[derive(Parser, Debug, Default, Clone)]
+#[derive(Parser, Debug, Clone)]
 #[command(name = "Parallelized AFLPlusPlus Campaign Runner")]
 #[command(author = "C.K. <admin@0x434b.dev>")]
-#[command(version = "0.2.0")]
-pub struct CliArgs {
+#[command(version = "0.3.0")]
+pub struct Cli {
+    #[command(subcommand)]
+    pub cmd: Commands,
+}
+
+#[derive(Subcommand, Clone, Debug)]
+pub enum Commands {
+    /// Only generate the commands, don't run them
+    Gen(GenArgs),
+    /// Generate commands and run them
+    Run(RunArgs),
+    /// Show stats TUI for a running campaign
+    Tui(TuiArgs),
+}
+
+#[derive(Args, Clone, Debug, Default)]
+pub struct TuiArgs {
+    /// Path to a `AFLPlusPlus` campaign directory, e.g. `afl_output`
+    #[arg(
+        help = "Path to a AFLPlusPlus campaign directory, e.g. `afl_output`",
+        required = true
+    )]
+    pub afl_output: PathBuf,
+}
+
+#[derive(Args, Clone, Debug)]
+pub struct GenArgs {
     /// Target binary to fuzz
     #[arg(short, long, help = "Instrumented target binary to fuzz")]
     pub target: Option<PathBuf>,
@@ -93,26 +119,138 @@ pub struct CliArgs {
         required = false
     )]
     pub afl_binary: Option<String>,
+    /// Path to a TOML config file
     #[arg(
         long,
         help = "Spin up a custom tmux session with the fuzzers",
         required = false
     )]
+    pub config: Option<PathBuf>,
+}
+
+impl GenArgs {
+    pub fn merge(&self, config: &Config) -> Self {
+        Self {
+            target: self.target.clone().or_else(|| {
+                config
+                    .target
+                    .path
+                    .clone()
+                    .filter(|p| !p.is_empty())
+                    .map(PathBuf::from)
+            }),
+            san_target: self.san_target.clone().or_else(|| {
+                config
+                    .target
+                    .san_path
+                    .clone()
+                    .filter(|p| !p.is_empty())
+                    .map(PathBuf::from)
+            }),
+            cmpl_target: self.cmpl_target.clone().or_else(|| {
+                config
+                    .target
+                    .cmpl_path
+                    .clone()
+                    .filter(|p| !p.is_empty())
+                    .map(PathBuf::from)
+            }),
+            cmpc_target: self.cmpc_target.clone().or_else(|| {
+                config
+                    .target
+                    .cmpc_path
+                    .clone()
+                    .filter(|p| !p.is_empty())
+                    .map(PathBuf::from)
+            }),
+            target_args: self
+                .target_args
+                .clone()
+                .or_else(|| config.target.args.clone().filter(|args| !args.is_empty())),
+            runners: Some(self.runners.or(config.afl_cfg.runners).unwrap_or(1)),
+            input_dir: self
+                .input_dir
+                .clone()
+                .or_else(|| {
+                    config
+                        .afl_cfg
+                        .seed_dir
+                        .clone()
+                        .filter(|d| !d.is_empty())
+                        .map(PathBuf::from)
+                })
+                .or_else(|| {
+                    // Provide a default path here
+                    Some(PathBuf::from(AFL_CORPUS))
+                }),
+            output_dir: self
+                .output_dir
+                .clone()
+                .or_else(|| {
+                    config
+                        .afl_cfg
+                        .solution_dir
+                        .clone()
+                        .filter(|d| !d.is_empty())
+                        .map(PathBuf::from)
+                })
+                .or_else(|| {
+                    // Provide a default path here
+                    Some(PathBuf::from(AFL_OUTPUT))
+                }),
+            dictionary: self.dictionary.clone().or_else(|| {
+                config
+                    .afl_cfg
+                    .dictionary
+                    .clone()
+                    .filter(|d| !d.is_empty())
+                    .map(PathBuf::from)
+            }),
+            afl_binary: self
+                .afl_binary
+                .clone()
+                .or_else(|| config.afl_cfg.afl_binary.clone().filter(|b| !b.is_empty())),
+            config: self.config.clone(),
+        }
+    }
+}
+
+#[derive(Args, Clone, Debug)]
+pub struct RunArgs {
+    #[command(flatten)]
+    pub gen_args: GenArgs,
     /// Only show the generated commands, don't run them
-    pub dry_run: bool,
-    #[arg(short = 'm', long, help = "Custom tmux session name", required = false)]
-    /// Custom tmux session name
-    pub tmux_session_name: Option<String>,
     #[arg(
         long,
-        help = "Provide a TOML config for the configation",
+        help = "Output the generated commands w/o executing them",
         required = false
     )]
-    /// Path to a TOML config file
-    pub config: Option<PathBuf>,
+    pub dry_run: bool,
+    /// Custom tmux session name
+    #[arg(short = 'm', long, help = "Custom tmux session name", required = false)]
+    pub tmux_session_name: Option<String>,
     /// Enable tui mode
     #[arg(long, help = "Enable TUI mode", required = false)]
     pub tui: bool,
+}
+
+impl RunArgs {
+    pub fn merge(&self, config: &Config) -> Self {
+        let gen_args = self.gen_args.merge(config);
+        Self {
+            gen_args,
+            dry_run: self.dry_run || config.tmux.dry_run.unwrap_or(false),
+            tmux_session_name: self
+                .tmux_session_name
+                .clone()
+                .or_else(|| config.tmux.session_name.clone().filter(|s| !s.is_empty())),
+            tui: if self.dry_run {
+                false
+            } else {
+                self.tui || config.misc.tui.unwrap_or(false)
+            },
+        }
+    }
 }
 
 #[derive(Deserialize, Default, Debug, Clone)]
@@ -151,94 +289,4 @@ pub struct TmuxConfig {
 #[derive(Deserialize, Default, Debug, Clone)]
 pub struct MiscConfig {
     pub tui: Option<bool>,
-}
-
-pub fn merge_args(cli_args: CliArgs, config_args: Config) -> CliArgs {
-    let dry_run = cli_args.dry_run || config_args.tmux.dry_run.unwrap_or(false);
-    let tui = if dry_run {
-        false
-    } else {
-        cli_args.tui || config_args.misc.tui.unwrap_or(false)
-    };
-    CliArgs {
-        target: cli_args.target.or_else(|| {
-            config_args
-                .target
-                .path
-                .filter(|p| !p.is_empty())
-                .map(PathBuf::from)
-        }),
-        san_target: cli_args.san_target.or_else(|| {
-            config_args
-                .target
-                .san_path
-                .filter(|p| !p.is_empty())
-                .map(PathBuf::from)
-        }),
-        cmpl_target: cli_args.cmpl_target.or_else(|| {
-            config_args
-                .target
-                .cmpl_path
-                .filter(|p| !p.is_empty())
-                .map(PathBuf::from)
-        }),
-        cmpc_target: cli_args.cmpc_target.or_else(|| {
-            config_args
-                .target
-                .cmpc_path
-                .filter(|p| !p.is_empty())
-                .map(PathBuf::from)
-        }),
-        target_args: cli_args
-            .target_args
-            .or_else(|| config_args.target.args.filter(|args| !args.is_empty())),
-        runners: Some(
-            cli_args
-                .runners
-                .or(config_args.afl_cfg.runners)
-                .unwrap_or(1),
-        ),
-        input_dir: cli_args
-            .input_dir
-            .or_else(|| {
-                config_args
-                    .afl_cfg
-                    .seed_dir
-                    .filter(|d| !d.is_empty())
-                    .map(PathBuf::from)
-            })
-            .or_else(|| {
-                // Provide a default path here
-                Some(PathBuf::from(AFL_CORPUS))
-            }),
-        output_dir: cli_args
-            .output_dir
-            .or_else(|| {
-                config_args
-                    .afl_cfg
-                    .solution_dir
-                    .filter(|d| !d.is_empty())
-                    .map(PathBuf::from)
-            })
-            .or_else(|| {
-                // Provide a default path here
-                Some(PathBuf::from(AFL_OUTPUT))
-            }),
-        dictionary: cli_args.dictionary.or_else(|| {
-            config_args
-                .afl_cfg
-                .dictionary
-                .filter(|d| !d.is_empty())
-                .map(PathBuf::from)
-        }),
-        afl_binary: cli_args
-            .afl_binary
-            .or_else(|| config_args.afl_cfg.afl_binary.filter(|b| !b.is_empty())),
-        dry_run,
-        tmux_session_name: cli_args
-            .tmux_session_name
-            .or_else(|| config_args.tmux.session_name.filter(|s| !s.is_empty())),
-        config: cli_args.config,
-        tui,
-    }
 }
