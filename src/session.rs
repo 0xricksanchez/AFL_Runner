@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+#[derive(Default, Debug)]
 pub struct CrashInfoDetails {
     pub fuzzer_name: String,
     pub file_path: PathBuf,
@@ -13,6 +14,7 @@ pub struct CrashInfoDetails {
     pub rep: u64,
 }
 
+#[derive(Debug)]
 pub struct SessionData {
     pub fuzzers_alive: usize,
     pub total_run_time: Duration,
@@ -59,14 +61,14 @@ impl SessionData {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Levels {
     pub avg: usize,
     pub min: usize,
     pub max: usize,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct CrashInfo {
     pub saved_cum: usize,
     pub saved_avg: usize,
@@ -74,14 +76,14 @@ pub struct CrashInfo {
     pub saved_max: usize,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct StabilityInfo {
     pub avg: f64,
     pub min: f64,
     pub max: f64,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Cycles {
     pub done_avg: usize,
     pub done_min: usize,
@@ -91,7 +93,7 @@ pub struct Cycles {
     pub wo_finds_max: usize,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct ExecutionsInfo {
     pub avg: usize,
     pub min: usize,
@@ -103,14 +105,14 @@ pub struct ExecutionsInfo {
     pub ps_cum: f64,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct CoverageInfo {
     pub bitmap_avg: f64,
     pub bitmap_min: f64,
     pub bitmap_max: f64,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct PendingInfo {
     pub favorites_avg: usize,
     pub favorites_cum: usize,
@@ -122,7 +124,7 @@ pub struct PendingInfo {
     pub total_max: usize,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct CorpusInfo {
     pub count_avg: usize,
     pub count_cum: usize,
@@ -130,7 +132,7 @@ pub struct CorpusInfo {
     pub count_max: usize,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Misc {
     pub afl_version: String,
     pub afl_banner: String,

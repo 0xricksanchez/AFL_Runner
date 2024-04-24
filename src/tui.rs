@@ -27,7 +27,7 @@ pub fn run_tui_standalone(output_dir: &Path) {
             eprintln!("Error sending session data: {e}");
             break;
         }
-        thread::sleep(Duration::from_secs(1));
+        thread::sleep(Duration::from_millis(500));
     });
 
     if let Err(e) = run(&session_data_rx) {

@@ -4,6 +4,7 @@ use std::hash::{DefaultHasher, Hasher};
 use std::path::PathBuf;
 
 use anyhow::bail;
+use anyhow::Context;
 use anyhow::Result;
 
 use crate::afl_cmd_gen::AFLCmdGenerator;
@@ -34,7 +35,6 @@ pub fn create_afl_runner(
     AFLCmdGenerator::new(
         harness,
         args.runners.unwrap_or(1),
-        args.afl_binary.clone(),
         args.input_dir
             .clone()
             .unwrap_or_else(|| PathBuf::from(AFL_CORPUS)),
@@ -43,6 +43,7 @@ pub fn create_afl_runner(
             .unwrap_or_else(|| PathBuf::from("/tmp/afl_output")),
         args.dictionary.clone(),
         raw_afl_flags,
+        args.afl_binary.clone(),
     )
 }
 
@@ -75,24 +76,36 @@ pub fn generate_tmux_name(args: &RunArgs, target_args: &str) -> String {
     )
 }
 
-pub fn load_config(config_path: Option<&PathBuf>) -> Config {
-    config_path.map_or_else(
-        || {
-            let cwd = env::current_dir().unwrap();
+pub fn load_config(config_path: Option<&PathBuf>) -> Result<Config> {
+    match config_path {
+        Some(path) => {
+            let config_content = fs::read_to_string(path)
+                .with_context(|| format!("Failed to read config file: {}", path.display()))?;
+            toml::from_str(&config_content)
+                .with_context(|| format!("Failed to parse config file: {}", path.display()))
+        }
+        None => {
+            let cwd = env::current_dir().context("Failed to get current directory")?;
             let default_config_path = cwd.join("aflr_cfg.toml");
             if default_config_path.exists() {
-                let config_content = fs::read_to_string(&default_config_path).unwrap();
-                toml::from_str(&config_content).unwrap()
+                let config_content =
+                    fs::read_to_string(&default_config_path).with_context(|| {
+                        format!(
+                            "Failed to read default config file: {}",
+                            default_config_path.display()
+                        )
+                    })?;
+                toml::from_str(&config_content).with_context(|| {
+                    format!(
+                        "Failed to parse default config file: {}",
+                        default_config_path.display()
+                    )
+                })
             } else {
-                Config::default()
+                Ok(Config::default())
             }
-        },
-        |config_path| {
-            // TODO: Add error handling for when config_path does not exist
-            let config_content = fs::read_to_string(config_path).unwrap();
-            toml::from_str(&config_content).unwrap()
-        },
-    )
+        }
+    }
 }
 
 pub fn print_generated_commands(cmds: &[String]) {

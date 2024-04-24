@@ -54,32 +54,26 @@ impl AFLEnv {
     }
 
     // Generates a AFLPlusPlus environment variable string for the current settings
-    pub fn generate_afl_env_cmd(&self) -> String {
-        let mut command = String::new();
+    pub fn generate_afl_env_cmd(&self) -> Vec<String> {
+        let mut command = Vec::new();
 
-        command.push_str(&format!("AFL_AUTORESUME={} ", u8::from(self.autoresume)));
-        command.push_str(&format!("AFL_FINAL_SYNC={} ", u8::from(self.final_sync)));
-        command.push_str(&format!(
-            "AFL_DISABLE_TRIM={} ",
-            u8::from(self.disable_trim)
-        ));
-        command.push_str(&format!(
+        command.push(format!("AFL_AUTORESUME={} ", u8::from(self.autoresume)));
+        command.push(format!("AFL_FINAL_SYNC={} ", u8::from(self.final_sync)));
+        command.push(format!("AFL_DISABLE_TRIM={} ", u8::from(self.disable_trim)));
+        command.push(format!(
             "AFL_KEEP_TIMEOUTS={} ",
             u8::from(self.keep_timeouts)
         ));
-        command.push_str(&format!(
+        command.push(format!(
             "AFL_EXPAND_HAVOC_NOW={} ",
             u8::from(self.expand_havoc_now)
         ));
-        command.push_str(&format!(
+        command.push(format!(
             "AFL_IGNORE_SEED_PROBLEMS={} ",
             u8::from(self.ignore_seed_problems)
         ));
-        command.push_str(&format!(
-            "AFL_IMPORT_FIRST={} ",
-            u8::from(self.import_first)
-        ));
-        command.push_str(&format!("AFL_TESTCACHE_SIZE={} ", self.testcache_size));
+        command.push(format!("AFL_IMPORT_FIRST={} ", u8::from(self.import_first)));
+        command.push(format!("AFL_TESTCACHE_SIZE={} ", self.testcache_size));
 
         command
     }
