@@ -12,7 +12,7 @@ const AFL_OUTPUT: &str = "/tmp/afl_output";
 #[derive(Parser, Debug, Clone)]
 #[command(name = "Parallelized AFLPlusPlus Campaign Runner")]
 #[command(author = "C.K. <admin@0x434b.dev>")]
-#[command(version = "0.3.2")]
+#[command(version = "0.3.3")]
 pub struct Cli {
     /// Subcommand to execute
     #[command(subcommand)]
@@ -260,7 +260,7 @@ impl RunArgs {
     /// Merge the command-line arguments with the configuration
     pub fn merge(&self, config: &Config) -> Self {
         let gen_args = self.gen_args.merge(config);
-        let session_runner = config
+        let sess3on_runner = config
             .session
             .runner
             .as_ref()
