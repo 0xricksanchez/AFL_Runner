@@ -58,7 +58,7 @@ fn handle_run_command(run_args: &cli::RunArgs) -> Result<()> {
     let sname = generate_session_name(&merged_args, &target_args);
     let srunner: Box<dyn Runner> = match &merged_args.session_runner {
         SessionRunner::Screen => Box::new(Screen::new(&sname, &afl_cmds)),
-        _ => Box::new(Tmux::new(&sname, &afl_cmds)),
+        SessionRunner::Tmux => Box::new(Tmux::new(&sname, &afl_cmds)),
     };
 
     if merged_args.tui {

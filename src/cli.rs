@@ -269,7 +269,7 @@ impl RunArgs {
                 "screen" => Some(SessionRunner::Screen),
                 _ => None,
             })
-            .unwrap_or(self.session_runner.clone());
+            .unwrap_or_else(|| self.session_runner.clone());
         Self {
             gen_args,
             dry_run: self.dry_run || config.session.dry_run.unwrap_or(false),

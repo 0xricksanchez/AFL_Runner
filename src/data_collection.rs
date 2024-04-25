@@ -145,21 +145,20 @@ impl DataFetcher {
 
     fn process_corpus_count(value: &str, session_data: &mut CampaignData) {
         let corpus_count = value.parse::<usize>().unwrap_or(0);
-        if corpus_count > session_data.corpus.count_max {
-            session_data.corpus.count_max = corpus_count;
-        } else if corpus_count < session_data.corpus.count_min || session_data.corpus.count_min == 0
-        {
-            session_data.corpus.count_min = corpus_count;
+        if corpus_count > session_data.corpus.max {
+            session_data.corpus.max = corpus_count;
+        } else if corpus_count < session_data.corpus.min || session_data.corpus.min == 0 {
+            session_data.corpus.min = corpus_count;
         }
-        session_data.corpus.count_cum += corpus_count;
+        session_data.corpus.cum += corpus_count;
     }
 
     fn process_bitmap_cvg(value: &str, session_data: &mut CampaignData) {
         let cvg = value.trim_end_matches('%').parse::<f64>().unwrap_or(0.0);
-        if cvg < session_data.coverage.bitmap_min || session_data.coverage.bitmap_min == 0.0 {
-            session_data.coverage.bitmap_min = cvg;
-        } else if cvg > session_data.coverage.bitmap_max {
-            session_data.coverage.bitmap_max = cvg;
+        if cvg < session_data.coverage.min || session_data.coverage.min == 0.0 {
+            session_data.coverage.min = cvg;
+        } else if cvg > session_data.coverage.max {
+            session_data.coverage.max = cvg;
         }
     }
 
@@ -174,24 +173,22 @@ impl DataFetcher {
 
     fn process_saved_crashes(value: &str, session_data: &mut CampaignData) {
         let saved_crashes = value.parse::<usize>().unwrap_or(0);
-        if saved_crashes > session_data.crashes.saved_max {
-            session_data.crashes.saved_max = saved_crashes;
-        } else if saved_crashes < session_data.crashes.saved_min
-            || session_data.crashes.saved_min == 0
-        {
-            session_data.crashes.saved_min = saved_crashes;
+        if saved_crashes > session_data.crashes.max {
+            session_data.crashes.max = saved_crashes;
+        } else if saved_crashes < session_data.crashes.min || session_data.crashes.min == 0 {
+            session_data.crashes.min = saved_crashes;
         }
-        session_data.crashes.saved_cum += saved_crashes;
+        session_data.crashes.cum += saved_crashes;
     }
 
     fn process_saved_hangs(value: &str, session_data: &mut CampaignData) {
         let saved_hangs = value.parse::<usize>().unwrap_or(0);
-        if saved_hangs > session_data.hangs.saved_max {
-            session_data.hangs.saved_max = saved_hangs;
-        } else if saved_hangs < session_data.hangs.saved_min || session_data.hangs.saved_min == 0 {
-            session_data.hangs.saved_min = saved_hangs;
+        if saved_hangs > session_data.hangs.max {
+            session_data.hangs.max = saved_hangs;
+        } else if saved_hangs < session_data.hangs.min || session_data.hangs.min == 0 {
+            session_data.hangs.min = saved_hangs;
         }
-        session_data.hangs.saved_cum += saved_hangs;
+        session_data.hangs.cum += saved_hangs;
     }
 
     fn process_last_find(value: &str, session_data: &mut CampaignData) {
@@ -245,23 +242,22 @@ impl DataFetcher {
         } else {
             0
         };
-        session_data.corpus.count_avg = if fuzzers_alive > 0 {
-            session_data.corpus.count_cum / fuzzers_alive
+        session_data.corpus.avg = if fuzzers_alive > 0 {
+            session_data.corpus.cum / fuzzers_alive
         } else {
             0
         };
-        session_data.crashes.saved_avg = if fuzzers_alive > 0 {
-            session_data.crashes.saved_cum / fuzzers_alive
+        session_data.crashes.avg = if fuzzers_alive > 0 {
+            session_data.crashes.cum / fuzzers_alive
         } else {
             0
         };
-        session_data.hangs.saved_avg = if fuzzers_alive > 0 {
-            session_data.hangs.saved_cum / fuzzers_alive
+        session_data.hangs.avg = if fuzzers_alive > 0 {
+            session_data.hangs.cum / fuzzers_alive
         } else {
             0
         };
-        session_data.coverage.bitmap_avg =
-            (session_data.coverage.bitmap_min + session_data.coverage.bitmap_max) / 2.0;
+        session_data.coverage.avg = (session_data.coverage.min + session_data.coverage.max) / 2.0;
         session_data.stability.avg =
             (session_data.stability.min + session_data.stability.max) / 2.0;
         session_data.cycles.done_avg =
