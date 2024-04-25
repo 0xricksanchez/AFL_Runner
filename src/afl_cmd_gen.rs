@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::{fs, process::Command};
 
-use crate::afl_env::AFLEnv;
+use crate::afl_env::{AFLEnv, AFLFlag};
 use crate::harness::Harness;
 use anyhow::{Context, Result};
 use rand::seq::SliceRandom;
@@ -85,17 +85,17 @@ impl AflCmd {
     }
 }
 
-/// Retrieves the amount of free memory in the system
-fn get_free_mem() -> u64 {
+/// Retrieves the amount of free memory in the system in MB
+/// This function is used to determine the `AFL_TESTCACHE_SIZE` value
+///
+/// NOTE: This function will likely break on Windows
+fn get_free_mem_in_mb() -> u64 {
     let s = System::new_all();
-    s.free_memory()
+    s.free_memory() / 1024 / 1024
 }
 
 /// Applies a flag to a percentage of AFL configurations
-fn apply_flags<F>(configs: &mut [AFLEnv], flag_accessor: F, percentage: f64, rng: &mut impl Rng)
-where
-    F: Fn(&mut AFLEnv) -> &mut bool,
-{
+fn apply_flags(configs: &mut [AFLEnv], flag: AFLFlag, percentage: f64, rng: &mut impl Rng) {
     let count = (configs.len() as f64 * percentage) as usize;
     let mut indices = HashSet::new();
     while indices.len() < count {
@@ -103,7 +103,7 @@ where
     }
 
     for index in indices {
-        *flag_accessor(&mut configs[index]) = true;
+        configs[index].enable_flag(flag.clone());
     }
 }
 
@@ -260,17 +260,19 @@ impl AFLCmdGenerator {
     /// Initializes AFL configurations
     fn initialize_configs(&self, rng: &mut impl Rng) -> Vec<AFLEnv> {
         let mut configs = vec![AFLEnv::new(); self.runners as usize];
-        configs.last_mut().unwrap().final_sync = true;
 
-        apply_flags(&mut configs, |c| &mut c.disable_trim, 0.65, rng);
-        apply_flags(&mut configs, |c| &mut c.keep_timeouts, 0.5, rng);
-        apply_flags(&mut configs, |c| &mut c.expand_havoc_now, 0.4, rng);
+        // Enable FinalSync for the last configuration
+        configs.last_mut().unwrap().enable_flag(AFLFlag::FinalSync);
 
-        let free_mem = get_free_mem();
+        apply_flags(&mut configs, AFLFlag::DisableTrim, 0.65, rng);
+        apply_flags(&mut configs, AFLFlag::KeepTimeouts, 0.5, rng);
+        apply_flags(&mut configs, AFLFlag::ExpandHavocNow, 0.4, rng);
+
+        let free_mb = get_free_mem_in_mb();
         for c in &mut configs {
-            match self.runners * 500 + 4096 {
-                x if u64::from(x) < free_mem => c.testcache_size = 500,
-                x if u64::from(x) < free_mem => c.testcache_size = 250,
+            match free_mb {
+                x if x > (self.runners * 500 + 4096).into() => c.testcache_size = 500,
+                x if x > (self.runners * 250 + 4096).into() => c.testcache_size = 250,
                 _ => {}
             }
         }
