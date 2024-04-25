@@ -37,19 +37,19 @@ afl_runner --help
 
 - Supported AFLplusplus flags:
 
-- [x] Corpus directory
-- [x] Output directory
-- [x] Dictionary file
-- [x] Custom `afl-fuzz` binary path for all instances
-- [x] Supply arguments to target binary (including @@)
-- [x] Amount of runner commands to generate
-- [x] Support for \*SAN, CMPLOG, CMPCOV binaries
+  - [x] Corpus directory
+  - [x] Output directory
+  - [x] Dictionary file
+  - [x] Custom `afl-fuzz` binary path for all instances
+  - [x] Supply arguments to target binary (including @@)
+  - [x] Amount of runner commands to generate
+  - [x] Support for \*SAN, CMPLOG, CMPCOV binaries
 
 - Other features:
-- [x] Add Tmux option to automatically create an appropriate layout for all runners
-- [x] TUI
-- [x] Provide a configuration file via `--config` to make sharing/storing per project configurations easier
-  - [x] Automatically read out a configuration named `aflr_cfg.toml` in the `CWD` when no `--config` was supplied
+  - [x] Add Tmux option to automatically create an appropriate layout for all runners
+  - [x] TUI
+  - [x] Provide a configuration file via `--config` to make sharing/storing per project configurations easier
+    - [x] Automatically read out a configuration named `aflr_cfg.toml` in the `CWD` when no `--config` was supplied
 
 _Note_: Arguments supplied over the command-line take precedence over any configuration file options.
 
