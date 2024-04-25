@@ -11,7 +11,7 @@ use crate::runners::tmux::TMUX_TEMPLATE;
 use crate::tui::Tui;
 use crate::utils::{get_user_input, mkdir_helper};
 
-#[allow(dead_code)]
+#[allow(unused)]
 pub trait Runner {
     fn new(session_name: &str, commands: &[String]) -> Self
     where
@@ -99,9 +99,23 @@ impl Session {
 
         print!("Continue [Y/n]? ");
         std::io::stdout().flush()?;
-        let user_input = get_user_input();
-        if user_input != "y" {
+        if get_user_input() != "y" {
             anyhow::bail!("Aborting");
+        }
+
+        let version_flag = match self.runner_name {
+            "tmux" => "-V",
+            "screen" => "-v",
+            _ => unreachable!(),
+        };
+
+        let ret = Command::new(self.runner_name)
+            .arg(version_flag)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()?;
+        if !ret.success() {
+            anyhow::bail!("Error: {} not found or not executable", self.runner_name);
         }
 
         let template = match self.runner_name {
@@ -109,17 +123,13 @@ impl Session {
             "screen" => SCREEN_TEMPLATE,
             _ => unreachable!(),
         };
-
-        if let Ok(templ) = self.create_bash_script(template) {
-            let mut cmd = Command::new("bash");
-            cmd.arg("-c")
-                .arg(templ)
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit());
-            Self::run_command(cmd)?;
-        } else {
-            return Err(anyhow::anyhow!("Error creating bash script"));
-        }
+        let templ = self.create_bash_script(template)?;
+        let mut cmd = Command::new("bash");
+        cmd.arg("-c")
+            .arg(templ)
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit());
+        Self::run_command(cmd)?;
         Ok(())
     }
 
@@ -130,9 +140,7 @@ impl Session {
         }
 
         thread::sleep(Duration::from_secs(1));
-
         Tui::run(out_dir);
-
         Ok(())
     }
 

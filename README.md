@@ -46,7 +46,7 @@ afl_runner --help
   - [x] Support for \*SAN, CMPLOG, CMPCOV binaries
 
 - Other features:
-  - [x] Add Tmux option to automatically create an appropriate layout for all runners
+  - [x] `Tmux` or `screen` option to automatically create an appropriate layout for all runners
   - [x] TUI
   - [x] Provide a configuration file via `--config` to make sharing/storing per project configurations easier
     - [x] Automatically read out a configuration named `aflr_cfg.toml` in the `CWD` when no `--config` was supplied
