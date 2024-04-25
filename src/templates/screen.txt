@@ -19,11 +19,8 @@ screen -dmS $SESSION_NAME
 
 # Apply startup message and caption settings
 screen -S $SESSION_NAME -X startup_message off
-screen -S $SESSION_NAME -X caption always "%{= kw} %-w%{= gW} %n %t %{-}%+w %-="
-
-# Set window titles and status line
 screen -S $SESSION_NAME -X title "$SESSION_NAME"
-screen -S $SESSION_NAME -X hardstatus alwayslastline "%H%=%{.bW}%-w%{.rW}%n %t%{-}%+w %=%{..G} %H %LD %MM/%d %YY %c"
+screen -S $SESSION_NAME -X hardstatus alwayslastline "%{.kW}%-w%{.gK}%n %t%{-}%+w %= %{..B}%H %LD %MM/%d %YY %c"
 
 # Create and rename a window for each command
 for i in "${!COMMANDS[@]}"; do
