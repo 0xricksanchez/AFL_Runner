@@ -42,8 +42,8 @@ impl AflCmd {
     }
 
     /// Sets the environment variables for the AFL command
-    pub fn set_env(&mut self, env: Vec<String>) {
-        self.env = env;
+    pub fn extend_env(&mut self, env: Vec<String>) {
+        self.env.extend(env);
     }
 
     /// Sets the input directory for AFL
@@ -250,7 +250,7 @@ impl AFLCmdGenerator {
                 .filter(|env| !cmd.env.iter().any(|e| e.starts_with(*env)))
                 .cloned()
                 .collect::<Vec<String>>();
-            cmd.set_env(to_apply);
+            cmd.extend_env(to_apply);
         }
 
         let cmd_strings = cmds.into_iter().map(|cmd| cmd.assemble()).collect();
@@ -288,7 +288,7 @@ impl AFLCmdGenerator {
             .iter()
             .map(|config| {
                 let mut cmd = AflCmd::new(afl_binary.clone(), target_binary.clone());
-                cmd.set_env(config.generate_afl_env_cmd());
+                cmd.extend_env(config.generate_afl_env_cmd());
                 if let Some(raw_afl_flags) = &self.raw_afl_flags {
                     cmd.set_misc_afl_flags(
                         raw_afl_flags
