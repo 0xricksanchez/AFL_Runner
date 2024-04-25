@@ -1,4 +1,4 @@
-use crate::runners::runner::{Runner, RunnerImpl};
+use crate::runners::runner::{Runner, Session};
 use anyhow::Result;
 use std::{
     path::Path,
@@ -8,13 +8,13 @@ use std::{
 pub const SCREEN_TEMPLATE: &str = include_str!("../templates/screen.txt");
 
 pub struct Screen {
-    inner: RunnerImpl,
+    inner: Session,
 }
 
 impl Runner for Screen {
     fn new(session_name: &str, commands: &[String]) -> Self {
         Self {
-            inner: RunnerImpl::new(session_name, commands, "screen"),
+            inner: Session::new(session_name, commands, "screen"),
         }
     }
 
@@ -30,7 +30,7 @@ impl Runner for Screen {
             .arg("quit")
             .stdout(Stdio::null())
             .stderr(Stdio::null());
-        self.inner.run_command(cmd)
+        Session::run_command(cmd)
     }
 
     fn attach(&self) -> Result<()> {
@@ -39,7 +39,7 @@ impl Runner for Screen {
             .arg(&self.inner.name)
             .stdout(Stdio::null())
             .stderr(Stdio::null());
-        self.inner.run_command(cmd)
+        Session::run_command(cmd)
     }
 
     fn run(&self) -> Result<()> {

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::fs::{self};
+use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -23,20 +23,20 @@ pub trait Runner {
     fn run_with_tui(&self, out_dir: &Path) -> Result<()>;
 }
 
-pub struct RunnerImpl {
+pub struct Session {
     pub name: String,
     pub commands: Vec<String>,
     pub log_file: PathBuf,
     pub runner_name: &'static str,
 }
 
-impl RunnerImpl {
+impl Session {
     pub fn new(session_name: &str, commands: &[String], runner_name: &'static str) -> Self {
         let commands = commands
             .iter()
             .map(|c| c.replace('"', "\\\""))
             .collect::<Vec<String>>();
-        let log_file = PathBuf::from(format!("/tmp/{}_{session_name}.log", runner_name));
+        let log_file = PathBuf::from(format!("/tmp/{runner_name}_{session_name}.log"));
         if log_file.exists() {
             std::fs::remove_file(&log_file).unwrap();
         }
@@ -62,7 +62,7 @@ impl RunnerImpl {
             .map_err(|e| anyhow::anyhow!("Error creating bash script: {}", e))
     }
 
-    pub fn run_command(&self, mut cmd: Command) -> Result<()> {
+    pub fn run_command(mut cmd: Command) -> Result<()> {
         let mut child = cmd.spawn()?;
         let _ = child.wait()?;
         Ok(())
@@ -116,7 +116,7 @@ impl RunnerImpl {
                 .arg(templ)
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit());
-            self.run_command(cmd)?;
+            Self::run_command(cmd)?;
         } else {
             return Err(anyhow::anyhow!("Error creating bash script"));
         }
@@ -137,9 +137,7 @@ impl RunnerImpl {
     }
 
     pub fn run_detached(&self) -> Result<()> {
-        if let Err(e) = self.run() {
-            return Err(e);
-        }
+        self.run()?;
         println!("Session {} started in detached mode", self.name);
         Ok(())
     }

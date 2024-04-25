@@ -25,8 +25,8 @@ pub struct CampaignData {
     pub coverage: CoverageInfo,
     pub cycles: Cycles,
     pub stability: StabilityInfo,
-    pub crashes: CrashInfo,
-    pub hangs: CrashInfo,
+    pub crashes: Solutions,
+    pub hangs: Solutions,
     pub levels: Levels,
     pub time_without_finds: Duration,
     pub last_crashes: Vec<CrashInfoDetails>,
@@ -45,8 +45,8 @@ impl Default for CampaignData {
             coverage: CoverageInfo::default(),
             cycles: Cycles::default(),
             stability: StabilityInfo::default(),
-            crashes: CrashInfo::default(),
-            hangs: CrashInfo::default(),
+            crashes: Solutions::default(),
+            hangs: Solutions::default(),
             levels: Levels::default(),
             time_without_finds: Duration::from_secs(0),
             last_crashes: Vec::with_capacity(10),
@@ -70,11 +70,11 @@ pub struct Levels {
 }
 
 #[derive(Default, Debug)]
-pub struct CrashInfo {
-    pub saved_cum: usize,
-    pub saved_avg: usize,
-    pub saved_min: usize,
-    pub saved_max: usize,
+pub struct Solutions {
+    pub cum: usize,
+    pub avg: usize,
+    pub min: usize,
+    pub max: usize,
 }
 
 #[derive(Default, Debug)]
@@ -108,9 +108,9 @@ pub struct ExecutionsInfo {
 
 #[derive(Default, Debug)]
 pub struct CoverageInfo {
-    pub bitmap_avg: f64,
-    pub bitmap_min: f64,
-    pub bitmap_max: f64,
+    pub avg: f64,
+    pub min: f64,
+    pub max: f64,
 }
 
 #[derive(Default, Debug)]
@@ -127,10 +127,10 @@ pub struct PendingInfo {
 
 #[derive(Default, Debug)]
 pub struct CorpusInfo {
-    pub count_avg: usize,
-    pub count_cum: usize,
-    pub count_min: usize,
-    pub count_max: usize,
+    pub avg: usize,
+    pub cum: usize,
+    pub min: usize,
+    pub max: usize,
 }
 
 #[derive(Default, Debug)]

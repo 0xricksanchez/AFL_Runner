@@ -1,7 +1,7 @@
 use std::env;
 use std::fs;
 use std::hash::{DefaultHasher, Hasher};
-use std::io::Read;
+use std::io::{stdin, Read};
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -164,15 +164,15 @@ pub fn mkdir_helper(dir: &Path, check_empty: bool) -> Result<()> {
         if !is_empty {
             println!("Directory {} is not empty. Clean it [Y/n]? ", dir.display());
             let mut input = String::new();
-            std::io::stdin().read_line(&mut input)?;
-            let input = input.trim().to_lowercase().chars().next().unwrap_or('y');
-            if input == 'y' || input == '\n' {
-                fs::remove_dir_all(dir)?;
+            stdin().read_line(&mut input)?;
+            match input.trim().to_lowercase().chars().next().unwrap_or('y') {
+                'y' | '\n' => fs::remove_dir_all(dir)?,
+                _ => (),
             }
         }
     }
     if !dir.exists() {
-        fs::create_dir(dir)?;
+        fs::create_dir_all(dir)?;
     }
     Ok(())
 }

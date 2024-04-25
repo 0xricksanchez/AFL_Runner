@@ -244,18 +244,18 @@ Corpus count: {} ({}->{}<-{})",
             session_data.cycles.done_avg,
             session_data.cycles.done_min,
             session_data.cycles.done_max,
-            session_data.crashes.saved_cum,
-            session_data.crashes.saved_min,
-            session_data.crashes.saved_avg,
-            session_data.crashes.saved_max,
-            session_data.hangs.saved_cum,
-            session_data.hangs.saved_min,
-            session_data.hangs.saved_avg,
-            session_data.hangs.saved_max,
-            session_data.corpus.count_cum,
-            session_data.corpus.count_min,
-            session_data.corpus.count_avg,
-            session_data.corpus.count_max
+            session_data.crashes.cum,
+            session_data.crashes.min,
+            session_data.crashes.avg,
+            session_data.crashes.max,
+            session_data.hangs.cum,
+            session_data.hangs.min,
+            session_data.hangs.avg,
+            session_data.hangs.max,
+            session_data.corpus.cum,
+            session_data.corpus.min,
+            session_data.corpus.avg,
+            session_data.corpus.max
         );
 
         Paragraph::new(content)
@@ -282,9 +282,9 @@ Coverage: {:.2}% ({:.2}%/{:.2}%)",
             session_data.executions.ps_min,
             session_data.executions.ps_avg,
             session_data.executions.ps_max,
-            session_data.coverage.bitmap_avg,
-            session_data.coverage.bitmap_min,
-            session_data.coverage.bitmap_max,
+            session_data.coverage.avg,
+            session_data.coverage.min,
+            session_data.coverage.max,
         );
 
         Paragraph::new(content)
@@ -357,11 +357,11 @@ Cycles without finds: {} ({}/{})",
 
     /// Formats a duration into a string
     fn format_duration(duration: Duration) -> String {
-        let secs = duration.as_secs();
+        let mut secs = duration.as_secs();
         let days = secs / 86400;
         let hours = (secs % 86400) / 3600;
         let mins = (secs % 3600) / 60;
-        let secs = secs % 60;
+        secs %= 60;
 
         format!("{days} days, {hours:02}:{mins:02}:{secs:02}")
     }
