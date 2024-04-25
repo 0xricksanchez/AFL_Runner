@@ -34,12 +34,15 @@ dictionary = "/path/to/dictionary"
 afl_flags = "-T 'MyFuzzer' -s 1234 -t 1000+"
 
 
-[tmux]
+[session]
 # Spin up a custom tmux session with the fuzzers
 dry_run = false
 
 # Custom tmux session name
-session_name = "my_session"
+name = "my_session"
+
+# Runner backend to use: [tmux, screen]
+runner = "tmux"
 
 [misc]
 # Enable TUI mode

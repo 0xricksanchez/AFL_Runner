@@ -1,22 +1,24 @@
 use anyhow::{bail, Result};
 use std::path::Path;
-use tmux::Session;
 use tui::Tui;
 
 use clap::Parser;
-use cli::{Cli, Commands};
+use cli::{Cli, Commands, SessionRunner};
 
 mod afl_cmd_gen;
 mod afl_env;
 mod cli;
 mod data_collection;
 mod harness;
+mod runners;
 mod session;
-mod tmux;
+use crate::runners::runner::Runner;
+use crate::runners::screen::Screen;
+use crate::runners::tmux::Tmux;
 mod tui;
 mod utils;
 
-use utils::{create_afl_runner, create_harness, generate_tmux_name, load_config};
+use utils::{create_afl_runner, create_harness, generate_session_name, load_config};
 
 fn main() -> Result<()> {
     let cli_args = Cli::parse();
@@ -45,19 +47,27 @@ fn handle_run_command(run_args: &cli::RunArgs) -> Result<()> {
     let merged_args = run_args.merge(&config_args);
     let harness = create_harness(&merged_args.gen_args)?;
     let afl_runner = create_afl_runner(&merged_args.gen_args, harness, raw_afl_flags);
-    let cmds = afl_runner.generate_afl_commands()?;
+    let afl_cmds = afl_runner.generate_afl_commands()?;
     let target_args = merged_args
         .gen_args
         .target_args
         .clone()
         .unwrap_or_default()
         .join(" ");
-    let tmux_name = generate_tmux_name(&merged_args, &target_args);
+
+    let sname = generate_session_name(&merged_args, &target_args);
+    let srunner: Box<dyn Runner> = match &merged_args.session_runner {
+        SessionRunner::Screen => Box::new(Screen::new(&sname, &afl_cmds)),
+        _ => Box::new(Tmux::new(&sname, &afl_cmds)),
+    };
+
     if merged_args.tui {
-        Session::new(&tmux_name, &cmds).run_tmux_session_with_tui(&merged_args.gen_args);
+        srunner.run_with_tui(&merged_args.gen_args.output_dir.unwrap())?;
     } else {
-        Session::new(&tmux_name, &cmds).run_tmux_session();
+        srunner.run()?;
+        srunner.attach()?;
     }
+
     Ok(())
 }
 

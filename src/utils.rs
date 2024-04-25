@@ -1,6 +1,8 @@
 use std::env;
 use std::fs;
 use std::hash::{DefaultHasher, Hasher};
+use std::io::Read;
+use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::bail;
@@ -58,10 +60,10 @@ pub fn create_afl_runner(
 
 /// Generates a unique tmux session name based on the provided `RunArgs` and `target_args`.
 ///
-/// If the `tmux_session_name` is not specified in `RunArgs`, the function generates a unique name
+/// If the `session_name` is not specified in `RunArgs`, the function generates a unique name
 /// by combining the target binary name, input directory name, and a hash of the `target_args`.
-pub fn generate_tmux_name(args: &RunArgs, target_args: &str) -> String {
-    args.tmux_session_name.as_ref().map_or_else(
+pub fn generate_session_name(args: &RunArgs, target_args: &str) -> String {
+    args.session_name.as_ref().map_or_else(
         || {
             let target = args
                 .gen_args
@@ -132,4 +134,45 @@ pub fn print_generated_commands(cmds: &[String]) {
     for (i, cmd) in cmds.iter().enumerate() {
         println!("  {i:3}. {cmd}");
     }
+}
+
+/// Gets user input from stdin
+pub fn get_user_input() -> String {
+    std::io::stdin()
+        .bytes()
+        .next()
+        .and_then(std::result::Result::ok)
+        .map_or("y".to_string(), |byte| {
+            let b = byte as char;
+            if b.is_ascii_alphabetic() {
+                b.to_lowercase().to_string()
+            } else if b == '\n' {
+                'y'.to_string()
+            } else {
+                b.to_string()
+            }
+        })
+}
+
+/// Helper function for creating directories
+pub fn mkdir_helper(dir: &Path, check_empty: bool) -> Result<()> {
+    if dir.is_file() {
+        bail!("{} is a file", dir.display());
+    }
+    if check_empty {
+        let is_empty = dir.read_dir().map_or(true, |mut i| i.next().is_none());
+        if !is_empty {
+            println!("Directory {} is not empty. Clean it [Y/n]? ", dir.display());
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+            let input = input.trim().to_lowercase().chars().next().unwrap_or('y');
+            if input == 'y' || input == '\n' {
+                fs::remove_dir_all(dir)?;
+            }
+        }
+    }
+    if !dir.exists() {
+        fs::create_dir(dir)?;
+    }
+    Ok(())
 }

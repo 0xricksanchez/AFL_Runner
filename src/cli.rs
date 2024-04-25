@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 /// Default corpus directory
@@ -12,7 +12,7 @@ const AFL_OUTPUT: &str = "/tmp/afl_output";
 #[derive(Parser, Debug, Clone)]
 #[command(name = "Parallelized AFLPlusPlus Campaign Runner")]
 #[command(author = "C.K. <admin@0x434b.dev>")]
-#[command(version = "0.3.1")]
+#[command(version = "0.3.2")]
 pub struct Cli {
     /// Subcommand to execute
     #[command(subcommand)]
@@ -221,6 +221,12 @@ impl GenArgs {
     }
 }
 
+#[derive(ValueEnum, Clone, Debug)]
+pub enum SessionRunner {
+    Tmux,
+    Screen,
+}
+
 /// Arguments for the `run` subcommand
 #[derive(Args, Clone, Debug)]
 pub struct RunArgs {
@@ -234,9 +240,17 @@ pub struct RunArgs {
         required = false
     )]
     pub dry_run: bool,
+    /// Runner backend to use
+    #[clap(value_enum)]
+    #[arg(long = "session-runner", help = "Session runner to use", required = false, default_value_t = SessionRunner::Tmux)]
+    pub session_runner: SessionRunner,
     /// Custom tmux session name
-    #[arg(short = 'm', long, help = "Custom tmux session name", required = false)]
-    pub tmux_session_name: Option<String>,
+    #[arg(
+        long = "session-name",
+        help = "Custom runner session name",
+        required = false
+    )]
+    pub session_name: Option<String>,
     /// Enable tui mode
     #[arg(long, help = "Enable TUI mode", required = false)]
     pub tui: bool,
@@ -246,13 +260,24 @@ impl RunArgs {
     /// Merge the command-line arguments with the configuration
     pub fn merge(&self, config: &Config) -> Self {
         let gen_args = self.gen_args.merge(config);
+        let session_runner = config
+            .session
+            .runner
+            .as_ref()
+            .and_then(|s| match s.as_str() {
+                "tmux" => Some(SessionRunner::Tmux),
+                "screen" => Some(SessionRunner::Screen),
+                _ => None,
+            })
+            .unwrap_or(self.session_runner.clone());
         Self {
             gen_args,
-            dry_run: self.dry_run || config.tmux.dry_run.unwrap_or(false),
-            tmux_session_name: self
-                .tmux_session_name
+            dry_run: self.dry_run || config.session.dry_run.unwrap_or(false),
+            session_runner,
+            session_name: self
+                .session_name
                 .clone()
-                .or_else(|| config.tmux.session_name.clone().filter(|s| !s.is_empty())),
+                .or_else(|| config.session.name.clone().filter(|s| !s.is_empty())),
             tui: if self.dry_run {
                 false
             } else {
@@ -269,8 +294,8 @@ pub struct Config {
     pub target: TargetConfig,
     /// AFL configuration
     pub afl_cfg: AflConfig,
-    /// Tmux configuration
-    pub tmux: TmuxConfig,
+    /// Session configuration
+    pub session: SessionConfig,
     /// Miscellaneous configuration
     pub misc: MiscConfig,
 }
@@ -309,11 +334,13 @@ pub struct AflConfig {
 
 /// Configuration for tmux
 #[derive(Deserialize, Default, Debug, Clone)]
-pub struct TmuxConfig {
+pub struct SessionConfig {
     /// Dry run mode
     pub dry_run: Option<bool>,
-    /// Tmux session name
-    pub session_name: Option<String>,
+    /// session name
+    pub name: Option<String>,
+    /// session runner
+    pub runner: Option<String>,
 }
 
 /// Miscellaneous configuration options
