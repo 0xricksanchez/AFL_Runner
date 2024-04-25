@@ -357,11 +357,11 @@ Cycles without finds: {} ({}/{})",
 
     /// Formats a duration into a string
     fn format_duration(duration: Duration) -> String {
-        let secs = duration.as_secs();
+        let mut secs = duration.as_secs();
         let days = secs / 86400;
         let hours = (secs % 86400) / 3600;
         let mins = (secs % 3600) / 60;
-        let secs = secs % 60;
+        secs %= 60;
 
         format!("{days} days, {hours:02}:{mins:02}:{secs:02}")
     }

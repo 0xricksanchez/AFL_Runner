@@ -222,41 +222,29 @@ impl DataFetcher {
     }
 
     fn calculate_averages(session_data: &mut CampaignData, fuzzers_alive: usize) {
-        session_data.executions.ps_avg = if fuzzers_alive > 0 {
+        let is_fuzzers_alive = fuzzers_alive > 0;
+
+        session_data.executions.ps_avg = if is_fuzzers_alive {
             session_data.executions.ps_cum / fuzzers_alive as f64
         } else {
             0.0
         };
-        session_data.executions.avg = if fuzzers_alive > 0 {
-            session_data.executions.cum / fuzzers_alive
-        } else {
-            0
+
+        let cumulative_avg = |cum: usize| {
+            if is_fuzzers_alive {
+                cum / fuzzers_alive
+            } else {
+                0
+            }
         };
-        session_data.pending.favorites_avg = if fuzzers_alive > 0 {
-            session_data.pending.favorites_cum / fuzzers_alive
-        } else {
-            0
-        };
-        session_data.pending.total_avg = if fuzzers_alive > 0 {
-            session_data.pending.total_cum / fuzzers_alive
-        } else {
-            0
-        };
-        session_data.corpus.avg = if fuzzers_alive > 0 {
-            session_data.corpus.cum / fuzzers_alive
-        } else {
-            0
-        };
-        session_data.crashes.avg = if fuzzers_alive > 0 {
-            session_data.crashes.cum / fuzzers_alive
-        } else {
-            0
-        };
-        session_data.hangs.avg = if fuzzers_alive > 0 {
-            session_data.hangs.cum / fuzzers_alive
-        } else {
-            0
-        };
+
+        session_data.executions.avg = cumulative_avg(session_data.executions.cum);
+        session_data.pending.favorites_avg = cumulative_avg(session_data.pending.favorites_cum);
+        session_data.pending.total_avg = cumulative_avg(session_data.pending.total_cum);
+        session_data.corpus.avg = cumulative_avg(session_data.corpus.cum);
+        session_data.crashes.avg = cumulative_avg(session_data.crashes.cum);
+        session_data.hangs.avg = cumulative_avg(session_data.hangs.cum);
+
         session_data.coverage.avg = (session_data.coverage.min + session_data.coverage.max) / 2.0;
         session_data.stability.avg =
             (session_data.stability.min + session_data.stability.max) / 2.0;

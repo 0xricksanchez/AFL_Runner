@@ -206,10 +206,10 @@ impl AFLCmdGenerator {
                     .ok()?;
                 if output.status.success() {
                     let afl_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                    if !afl_path.is_empty() {
-                        Some(PathBuf::from(afl_path))
-                    } else {
+                    if afl_path.is_empty() {
                         None
+                    } else {
+                        Some(PathBuf::from(afl_path))
                     }
                 } else {
                     None
@@ -268,11 +268,10 @@ impl AFLCmdGenerator {
 
         let free_mem = get_free_mem();
         for c in &mut configs {
-            if ((self.runners * 500 + 4096) as u64) < free_mem {
-                c.testcache_size = 500;
-            }
-            if ((self.runners * 250 + 4096) as u64) < free_mem {
-                c.testcache_size = 250;
+            match self.runners * 500 + 4096 {
+                x if u64::from(x) < free_mem => c.testcache_size = 500,
+                x if u64::from(x) < free_mem => c.testcache_size = 250,
+                _ => {}
             }
         }
 
@@ -443,14 +442,11 @@ impl AFLCmdGenerator {
     /// Applies CMPCOV instrumentation to AFL commands
     fn apply_cmpcov(&self, cmds: &mut [AflCmd], rng: &mut impl Rng) {
         if let Some(cmpcov_binary) = self.harness.cmpcov_binary.as_ref() {
-            let max_cmpcov_instances = if self.runners >= 16 {
-                3
-            } else if self.runners >= 8 {
-                2
-            } else if self.runners >= 3 {
-                1
-            } else {
-                0
+            let max_cmpcov_instances = match self.runners {
+                0..=2 => 0,
+                3..=7 => 1,
+                8..=15 => 2,
+                _ => 3,
             };
 
             let mut cmpcov_indices = (1..cmds.len())
