@@ -260,7 +260,7 @@ impl RunArgs {
     /// Merge the command-line arguments with the configuration
     pub fn merge(&self, config: &Config) -> Self {
         let gen_args = self.gen_args.merge(config);
-        let sess3on_runner = config
+        let session_runner = config
             .session
             .runner
             .as_ref()
