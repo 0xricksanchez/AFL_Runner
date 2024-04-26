@@ -2,9 +2,9 @@ use crate::{
     session::{CampaignData, CrashInfoDetails},
     utils::count_alive_fuzzers,
 };
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::{env, fs};
 
 /// Data fetcher that collects session data based on the `AFLPlusPlus` `fuzzer_stats` file
 #[derive(Debug, Clone)]
@@ -16,16 +16,20 @@ pub struct DataFetcher {
 
 impl DataFetcher {
     /// Create a new `DataFetcher` instance
-    pub fn new(output_dir: &Path) -> Self {
-        let env_var = env::var("AFLR_PID_LIST");
-        println!("foobar {:?}", env_var);
+    pub fn new(output_dir: &Path, pid_file: Option<&Path>) -> Self {
+        let fuzzer_pids = match pid_file {
+            Some(pid_file) => {
+                let content = fs::read_to_string(pid_file).unwrap_or_default();
+                let _ = fs::remove_file(pid_file);
+                content
+                    .split(':')
+                    .filter_map(|pid| pid.trim().parse::<u32>().ok())
+                    .filter(|&pid| pid != 0)
+                    .collect::<Vec<u32>>()
+            }
+            None => Vec::new(),
+        };
 
-        let fuzzer_pids = env::var("AFLR_PID_LIST")
-            .unwrap_or_default()
-            .split(':')
-            .filter_map(|pid| pid.parse::<u32>().ok())
-            .filter(|&pid| pid != 0)
-            .collect::<Vec<u32>>();
         let fuzzers_alive = count_alive_fuzzers(&fuzzer_pids);
 
         let campaign_data = CampaignData {
@@ -34,8 +38,6 @@ impl DataFetcher {
             fuzzer_pids,
             ..CampaignData::default()
         };
-        println!("{:?}", campaign_data);
-        std::process::exit(0);
         Self {
             output_dir: output_dir.to_path_buf(),
             campaign_data,

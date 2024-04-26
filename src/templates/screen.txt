@@ -18,7 +18,7 @@ COMMANDS=(
 screen -dmS $SESSION_NAME
 
 # Initialize the PID list
-PID_LIST=""
+AFLR_PID_LIST=""
 
 # Create and rename a window for each command
 for i in "${!COMMANDS[@]}"; do
@@ -38,14 +38,14 @@ for i in "${!COMMANDS[@]}"; do
 	# Check if the process is still running
 	if ps -p $PID > /dev/null; then
 		# If the process is running, add its PID to the list
-		if [ -z "$PID_LIST" ]; then
-			PID_LIST="$PID"
+		if [ -z "$AFLR_PID_LIST" ]; then
+			AFLR_PID_LIST="$PID"
 		else
-			PID_LIST="$PID_LIST:$PID"
+			AFLR_PID_LIST="$AFLR_PID_LIST:$PID"
 		fi
 	else
 		# If the process has died, insert a negative PID
-		PID_LIST="$PID_LIST:-1"
+		AFLR_PID_LIST="$AFLR_PID_LIST:-1"
 		break
 	fi
 done

@@ -37,9 +37,8 @@ impl Tui {
 
     /// Runs the TUI standalone with the specified output directory
     pub fn run(output_dir: &Path, pid_file: Option<&Path>) -> Result<()> {
-        // TODO: If pidfile is none estimate the fuzzers based on cmdline, otherwise take the pids
         let output_dir = output_dir.to_path_buf();
-        let mut dfetcher = DataFetcher::new(&output_dir);
+        let mut dfetcher = DataFetcher::new(&output_dir, pid_file);
         let (session_data_tx, session_data_rx) = mpsc::channel();
         thread::spawn(move || loop {
             let session_data = dfetcher.collect_session_data().clone();

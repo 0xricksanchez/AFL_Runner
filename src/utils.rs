@@ -184,12 +184,9 @@ pub fn count_alive_fuzzers(fuzzer_pids: &[u32]) -> usize {
     fuzzer_pids
         .iter()
         .filter(|&pid| *pid != 0)
-        .filter(|&pid| {
-            if let Some(process) = s.process(Pid::from(*pid as usize)) {
-                process.status() == sysinfo::ProcessStatus::Run
-            } else {
-                false
-            }
+        .filter(|&pid| match s.process(Pid::from(*pid as usize)).is_none() {
+            true => false,
+            false => true,
         })
         .count()
 }
