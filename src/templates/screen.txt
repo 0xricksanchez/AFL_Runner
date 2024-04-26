@@ -9,34 +9,48 @@ SESSION_NAME="{{ session_name }}"
 LOG_FILE="{{ log_file }}"
 # Array of commands to run in separate windows
 COMMANDS=(
-    {% for command in commands %}
-    "{{ command }}"
-    {% endfor %}
+	{% for command in commands %}
+	"{{ command }}"
+	{% endfor %}
 )
 
 # Start a new screen session (detached)
 screen -dmS $SESSION_NAME
 
-# Apply startup message and caption settings
-screen -S $SESSION_NAME -X startup_message off
-screen -S $SESSION_NAME -X title "$SESSION_NAME"
-screen -S $SESSION_NAME -X hardstatus alwayslastline "%{.kW}%-w%{.gK}%n %t%{-}%+w %= %{..B}%H %LD %MM/%d %YY %c"
+# Initialize the PID list
+PID_LIST=""
 
 # Create and rename a window for each command
 for i in "${!COMMANDS[@]}"; do
-    sleep 0.1
-    WINDOW_NAME="window-$i"
-    if [ $i -eq 0 ]; then
-        # For the first command, send it to the first window and rename it
-        screen -S $SESSION_NAME -p 0 -X stuff "${COMMANDS[$i]}"$'\n'
-        screen -S $SESSION_NAME -p 0 -X title $WINDOW_NAME
-    else
-        # For subsequent commands, create new tabs and run the commands
-        screen -S $SESSION_NAME -X screen -t $WINDOW_NAME
-        screen -S $SESSION_NAME -p $WINDOW_NAME -X stuff "${COMMANDS[$i]}"$'\n'
-    fi
+	sleep 0.1
+	WINDOW_NAME="window-$i"
+	if [ $i -eq 0 ]; then
+		# For the first command, send it to the first window and rename it
+		screen -S $SESSION_NAME -p 0 -X stuff $'{{ commands[0] }}\n'
+		screen -S $SESSION_NAME -p 0 -X title $WINDOW_NAME
+	else
+		# For subsequent commands, create new windows and rename them
+		screen -S $SESSION_NAME -X screen -t $WINDOW_NAME
+		screen -S $SESSION_NAME -p $WINDOW_NAME -X stuff $'{{ commands[i] }}\n'
+	fi
+	# Get the PID of the started process
+	PID=$(screen -S $SESSION_NAME -Q echo $'\t')
+	# Check if the process is still running
+	if ps -p $PID > /dev/null; then
+		# If the process is running, add its PID to the list
+		if [ -z "$PID_LIST" ]; then
+			PID_LIST="$PID"
+		else
+			PID_LIST="$PID_LIST:$PID"
+		fi
+	else
+		# If the process has died, insert a negative PID
+		PID_LIST="$PID_LIST:-1"
+		break
+	fi
 done
 
-# Redirect screen log to a specific file
+# Redirect screen session log to a specific file
 screen -S $SESSION_NAME -X logfile $LOG_FILE
-screen -S $SESSION_NAME -X log on
+
+echo $AFLR_PID_LIST > "{{ pid_file }}"

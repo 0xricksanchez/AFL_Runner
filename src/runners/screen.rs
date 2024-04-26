@@ -12,9 +12,9 @@ pub struct Screen {
 }
 
 impl Runner for Screen {
-    fn new(session_name: &str, commands: &[String]) -> Self {
+    fn new(session_name: &str, commands: &[String], pid_file: &Path) -> Self {
         Self {
-            inner: Session::new(session_name, commands, "screen"),
+            inner: Session::new(session_name, commands, "screen", pid_file),
         }
     }
 

@@ -56,9 +56,11 @@ fn handle_run_command(run_args: &cli::RunArgs) -> Result<()> {
         .join(" ");
 
     let sname = generate_session_name(&merged_args, &target_args);
+    let pid_fn = format!("/tmp/.{}_{}.pids", &sname, std::process::id());
+    let pid_fn_path = Path::new(&pid_fn);
     let srunner: Box<dyn Runner> = match &merged_args.session_runner {
-        SessionRunner::Screen => Box::new(Screen::new(&sname, &afl_cmds)),
-        SessionRunner::Tmux => Box::new(Tmux::new(&sname, &afl_cmds)),
+        SessionRunner::Screen => Box::new(Screen::new(&sname, &afl_cmds, pid_fn_path)),
+        SessionRunner::Tmux => Box::new(Tmux::new(&sname, &afl_cmds, pid_fn_path)),
     };
 
     if merged_args.tui {
@@ -76,7 +78,7 @@ fn handle_tui_command(tui_args: &cli::TuiArgs) -> Result<()> {
         bail!("Output directory is required for TUI mode");
     }
     validate_tui_output_dir(&tui_args.afl_output)?;
-    Tui::run(&tui_args.afl_output);
+    Tui::run(&tui_args.afl_output, None)?;
     Ok(())
 }
 

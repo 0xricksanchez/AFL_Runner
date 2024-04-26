@@ -1,27 +1,50 @@
-use crate::session::{CampaignData, CrashInfoDetails};
-use std::fs;
+use crate::{
+    session::{CampaignData, CrashInfoDetails},
+    utils::count_alive_fuzzers,
+};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{env, fs};
 
 /// Data fetcher that collects session data based on the `AFLPlusPlus` `fuzzer_stats` file
 #[derive(Debug, Clone)]
 pub struct DataFetcher {
     /// Output directory of the `AFLPlusPlus` fuzzing run
     pub output_dir: PathBuf,
+    pub campaign_data: CampaignData,
 }
 
 impl DataFetcher {
     /// Create a new `DataFetcher` instance
     pub fn new(output_dir: &Path) -> Self {
+        let env_var = env::var("AFLR_PID_LIST");
+        println!("foobar {:?}", env_var);
+
+        let fuzzer_pids = env::var("AFLR_PID_LIST")
+            .unwrap_or_default()
+            .split(':')
+            .filter_map(|pid| pid.parse::<u32>().ok())
+            .filter(|&pid| pid != 0)
+            .collect::<Vec<u32>>();
+        let fuzzers_alive = count_alive_fuzzers(&fuzzer_pids);
+
+        let campaign_data = CampaignData {
+            fuzzers_alive,
+            fuzzers_started: fuzzer_pids.len(),
+            fuzzer_pids,
+            ..CampaignData::default()
+        };
+        println!("{:?}", campaign_data);
+        std::process::exit(0);
         Self {
             output_dir: output_dir.to_path_buf(),
+            campaign_data,
         }
     }
 
     /// Collects session data from the specified output directory
-    pub fn collect_session_data(&self) -> CampaignData {
-        let mut session_data = CampaignData::new();
-        let mut fuzzers_alive = 0;
+    pub fn collect_session_data(&mut self) -> &CampaignData {
+        self.campaign_data.fuzzers_alive = count_alive_fuzzers(&self.campaign_data.fuzzer_pids);
 
         fs::read_dir(&self.output_dir)
             .unwrap()
@@ -32,24 +55,22 @@ impl DataFetcher {
                     let fuzzer_stats_path = path.join("fuzzer_stats");
                     if fuzzer_stats_path.exists() {
                         if let Ok(content) = fs::read_to_string(fuzzer_stats_path) {
-                            Self::process_fuzzer_stats(&content, &mut session_data);
-                            fuzzers_alive += 1;
+                            self.process_fuzzer_stats(&content);
                         }
                     }
                 }
             });
 
-        session_data.fuzzers_alive = fuzzers_alive;
-        Self::calculate_averages(&mut session_data, fuzzers_alive);
+        self.calculate_averages();
 
         let (last_crashes, last_hangs) = self.collect_session_crashes_hangs(10);
-        session_data.last_crashes = last_crashes;
-        session_data.last_hangs = last_hangs;
+        self.campaign_data.last_crashes = last_crashes;
+        self.campaign_data.last_hangs = last_hangs;
 
-        session_data
+        &self.campaign_data
     }
 
-    fn process_fuzzer_stats(content: &str, session_data: &mut CampaignData) {
+    fn process_fuzzer_stats(&mut self, content: &str) {
         let lines: Vec<&str> = content.lines().collect();
 
         for line in lines {
@@ -60,199 +81,212 @@ impl DataFetcher {
                 let value = parts[1];
 
                 match key {
-                    "start_time" => Self::process_start_time(value, session_data),
-                    "execs_per_sec" => Self::process_execs_per_sec(value, session_data),
-                    "execs_done" => Self::process_execs_done(value, session_data),
-                    "pending_favs" => Self::process_pending_favs(value, session_data),
-                    "pending_total" => Self::process_pending_total(value, session_data),
-                    "stability" => Self::process_stability(value, session_data),
-                    "corpus_count" => Self::process_corpus_count(value, session_data),
-                    "bitmap_cvg" => Self::process_bitmap_cvg(value, session_data),
-                    "max_depth" => Self::process_max_depth(value, session_data),
-                    "saved_crashes" => Self::process_saved_crashes(value, session_data),
-                    "saved_hangs" => Self::process_saved_hangs(value, session_data),
-                    "last_find" => Self::process_last_find(value, session_data),
-                    "afl_banner" => session_data.misc.afl_banner = value.to_string(),
-                    "afl_version" => session_data.misc.afl_version = value.to_string(),
-                    "cycles_done" => Self::process_cycles_done(value, session_data),
-                    "cycles_wo_finds" => Self::process_cycles_wo_finds(value, session_data),
+                    "start_time" => self.process_start_time(value),
+                    "execs_per_sec" => self.process_execs_per_sec(value),
+                    "execs_done" => self.process_execs_done(value),
+                    "pending_favs" => self.process_pending_favs(value),
+                    "pending_total" => self.process_pending_total(value),
+                    "stability" => self.process_stability(value),
+                    "corpus_count" => self.process_corpus_count(value),
+                    "bitmap_cvg" => self.process_bitmap_cvg(value),
+                    "max_depth" => self.process_max_depth(value),
+                    "saved_crashes" => self.process_saved_crashes(value),
+                    "saved_hangs" => self.process_saved_hangs(value),
+                    "last_find" => self.process_last_find(value),
+                    "afl_banner" => self.campaign_data.misc.afl_banner = value.to_string(),
+                    "afl_version" => self.campaign_data.misc.afl_version = value.to_string(),
+                    "cycles_done" => self.process_cycles_done(value),
+                    "cycles_wo_finds" => self.process_cycles_wo_finds(value),
                     _ => {}
                 }
             }
         }
     }
 
-    fn process_start_time(value: &str, session_data: &mut CampaignData) {
+    fn process_start_time(&mut self, value: &str) {
         let start_time = UNIX_EPOCH + Duration::from_secs(value.parse::<u64>().unwrap_or(0));
         let current_time = SystemTime::now();
         let duration = current_time.duration_since(start_time).unwrap();
-        session_data.total_run_time = duration;
+        self.campaign_data.total_run_time = duration;
     }
 
-    fn process_execs_per_sec(value: &str, session_data: &mut CampaignData) {
+    fn process_execs_per_sec(&mut self, value: &str) {
         let exec_ps = value.parse::<f64>().unwrap_or(0.0);
-        if exec_ps > session_data.executions.ps_max {
-            session_data.executions.ps_max = exec_ps;
-        } else if exec_ps < session_data.executions.ps_min || session_data.executions.ps_min == 0.0
+        if exec_ps > self.campaign_data.executions.ps_max {
+            self.campaign_data.executions.ps_max = exec_ps;
+        } else if exec_ps < self.campaign_data.executions.ps_min
+            || self.campaign_data.executions.ps_min == 0.0
         {
-            session_data.executions.ps_min = exec_ps;
+            self.campaign_data.executions.ps_min = exec_ps;
         }
-        session_data.executions.ps_cum += exec_ps;
+        self.campaign_data.executions.ps_cum += exec_ps;
     }
 
-    fn process_execs_done(value: &str, session_data: &mut CampaignData) {
+    fn process_execs_done(&mut self, value: &str) {
         let execs_done = value.parse::<usize>().unwrap_or(0);
-        if execs_done > session_data.executions.max {
-            session_data.executions.max = execs_done;
-        } else if execs_done < session_data.executions.min || session_data.executions.min == 0 {
-            session_data.executions.min = execs_done;
+        if execs_done > self.campaign_data.executions.max {
+            self.campaign_data.executions.max = execs_done;
+        } else if execs_done < self.campaign_data.executions.min
+            || self.campaign_data.executions.min == 0
+        {
+            self.campaign_data.executions.min = execs_done;
         }
-        session_data.executions.cum += execs_done;
+        self.campaign_data.executions.cum += execs_done;
     }
 
-    fn process_pending_favs(value: &str, session_data: &mut CampaignData) {
+    fn process_pending_favs(&mut self, value: &str) {
         let pending_favs = value.parse::<usize>().unwrap_or(0);
-        if pending_favs > session_data.pending.favorites_max {
-            session_data.pending.favorites_max = pending_favs;
-        } else if pending_favs < session_data.pending.favorites_min
-            || session_data.pending.favorites_min == 0
+        if pending_favs > self.campaign_data.pending.favorites_max {
+            self.campaign_data.pending.favorites_max = pending_favs;
+        } else if pending_favs < self.campaign_data.pending.favorites_min
+            || self.campaign_data.pending.favorites_min == 0
         {
-            session_data.pending.favorites_min = pending_favs;
+            self.campaign_data.pending.favorites_min = pending_favs;
         }
-        session_data.pending.favorites_cum += pending_favs;
+        self.campaign_data.pending.favorites_cum += pending_favs;
     }
 
-    fn process_pending_total(value: &str, session_data: &mut CampaignData) {
+    fn process_pending_total(&mut self, value: &str) {
         let pending_total = value.parse::<usize>().unwrap_or(0);
-        if pending_total > session_data.pending.total_max {
-            session_data.pending.total_max = pending_total;
-        } else if pending_total < session_data.pending.total_min
-            || session_data.pending.total_min == 0
+        if pending_total > self.campaign_data.pending.total_max {
+            self.campaign_data.pending.total_max = pending_total;
+        } else if pending_total < self.campaign_data.pending.total_min
+            || self.campaign_data.pending.total_min == 0
         {
-            session_data.pending.total_min = pending_total;
+            self.campaign_data.pending.total_min = pending_total;
         }
-        session_data.pending.total_cum += pending_total;
+        self.campaign_data.pending.total_cum += pending_total;
     }
 
-    fn process_stability(value: &str, session_data: &mut CampaignData) {
+    fn process_stability(&mut self, value: &str) {
         let stability = value.trim_end_matches('%').parse::<f64>().unwrap_or(0.0);
-        if stability > session_data.stability.max {
-            session_data.stability.max = stability;
-        } else if stability < session_data.stability.min || session_data.stability.min == 0.0 {
-            session_data.stability.min = stability;
+        if stability > self.campaign_data.stability.max {
+            self.campaign_data.stability.max = stability;
+        } else if stability < self.campaign_data.stability.min
+            || self.campaign_data.stability.min == 0.0
+        {
+            self.campaign_data.stability.min = stability;
         }
     }
 
-    fn process_corpus_count(value: &str, session_data: &mut CampaignData) {
+    fn process_corpus_count(&mut self, value: &str) {
         let corpus_count = value.parse::<usize>().unwrap_or(0);
-        if corpus_count > session_data.corpus.max {
-            session_data.corpus.max = corpus_count;
-        } else if corpus_count < session_data.corpus.min || session_data.corpus.min == 0 {
-            session_data.corpus.min = corpus_count;
+        if corpus_count > self.campaign_data.corpus.max {
+            self.campaign_data.corpus.max = corpus_count;
+        } else if corpus_count < self.campaign_data.corpus.min || self.campaign_data.corpus.min == 0
+        {
+            self.campaign_data.corpus.min = corpus_count;
         }
-        session_data.corpus.cum += corpus_count;
+        self.campaign_data.corpus.cum += corpus_count;
     }
 
-    fn process_bitmap_cvg(value: &str, session_data: &mut CampaignData) {
+    fn process_bitmap_cvg(&mut self, value: &str) {
         let cvg = value.trim_end_matches('%').parse::<f64>().unwrap_or(0.0);
-        if cvg < session_data.coverage.min || session_data.coverage.min == 0.0 {
-            session_data.coverage.min = cvg;
-        } else if cvg > session_data.coverage.max {
-            session_data.coverage.max = cvg;
+        if cvg < self.campaign_data.coverage.min || self.campaign_data.coverage.min == 0.0 {
+            self.campaign_data.coverage.min = cvg;
+        } else if cvg > self.campaign_data.coverage.max {
+            self.campaign_data.coverage.max = cvg;
         }
     }
 
-    fn process_max_depth(value: &str, session_data: &mut CampaignData) {
+    fn process_max_depth(&mut self, value: &str) {
         let levels = value.parse::<usize>().unwrap_or(0);
-        if levels > session_data.levels.max {
-            session_data.levels.max = levels;
-        } else if levels < session_data.levels.min || session_data.levels.min == 0 {
-            session_data.levels.min = levels;
+        if levels > self.campaign_data.levels.max {
+            self.campaign_data.levels.max = levels;
+        } else if levels < self.campaign_data.levels.min || self.campaign_data.levels.min == 0 {
+            self.campaign_data.levels.min = levels;
         }
     }
 
-    fn process_saved_crashes(value: &str, session_data: &mut CampaignData) {
+    fn process_saved_crashes(&mut self, value: &str) {
         let saved_crashes = value.parse::<usize>().unwrap_or(0);
-        if saved_crashes > session_data.crashes.max {
-            session_data.crashes.max = saved_crashes;
-        } else if saved_crashes < session_data.crashes.min || session_data.crashes.min == 0 {
-            session_data.crashes.min = saved_crashes;
+        if saved_crashes > self.campaign_data.crashes.max {
+            self.campaign_data.crashes.max = saved_crashes;
+        } else if saved_crashes < self.campaign_data.crashes.min
+            || self.campaign_data.crashes.min == 0
+        {
+            self.campaign_data.crashes.min = saved_crashes;
         }
-        session_data.crashes.cum += saved_crashes;
+        self.campaign_data.crashes.cum += saved_crashes;
     }
 
-    fn process_saved_hangs(value: &str, session_data: &mut CampaignData) {
+    fn process_saved_hangs(&mut self, value: &str) {
         let saved_hangs = value.parse::<usize>().unwrap_or(0);
-        if saved_hangs > session_data.hangs.max {
-            session_data.hangs.max = saved_hangs;
-        } else if saved_hangs < session_data.hangs.min || session_data.hangs.min == 0 {
-            session_data.hangs.min = saved_hangs;
+        if saved_hangs > self.campaign_data.hangs.max {
+            self.campaign_data.hangs.max = saved_hangs;
+        } else if saved_hangs < self.campaign_data.hangs.min || self.campaign_data.hangs.min == 0 {
+            self.campaign_data.hangs.min = saved_hangs;
         }
-        session_data.hangs.cum += saved_hangs;
+        self.campaign_data.hangs.cum += saved_hangs;
     }
 
-    fn process_last_find(value: &str, session_data: &mut CampaignData) {
+    fn process_last_find(&mut self, value: &str) {
         let last_find = value.parse::<u64>().unwrap_or(0);
         let last_find = UNIX_EPOCH + Duration::from_secs(last_find);
         let current_time = SystemTime::now();
         let duration = current_time.duration_since(last_find).unwrap();
-        if duration > session_data.time_without_finds {
-            session_data.time_without_finds = duration;
+        if duration > self.campaign_data.time_without_finds {
+            self.campaign_data.time_without_finds = duration;
         }
     }
 
-    fn process_cycles_done(value: &str, session_data: &mut CampaignData) {
+    fn process_cycles_done(&mut self, value: &str) {
         let cycles_done = value.parse::<usize>().unwrap_or(0);
-        if cycles_done > session_data.cycles.done_max {
-            session_data.cycles.done_max = cycles_done;
-        } else if cycles_done < session_data.cycles.done_min || session_data.cycles.done_min == 0 {
-            session_data.cycles.done_min = cycles_done;
-        }
-    }
-
-    fn process_cycles_wo_finds(value: &str, session_data: &mut CampaignData) {
-        let cycles_wo_finds = value.parse::<usize>().unwrap_or(0);
-        if cycles_wo_finds > session_data.cycles.wo_finds_max {
-            session_data.cycles.wo_finds_max = cycles_wo_finds;
-        } else if cycles_wo_finds < session_data.cycles.wo_finds_min
-            || session_data.cycles.wo_finds_min == 0
+        if cycles_done > self.campaign_data.cycles.done_max {
+            self.campaign_data.cycles.done_max = cycles_done;
+        } else if cycles_done < self.campaign_data.cycles.done_min
+            || self.campaign_data.cycles.done_min == 0
         {
-            session_data.cycles.wo_finds_min = cycles_wo_finds;
+            self.campaign_data.cycles.done_min = cycles_done;
         }
     }
 
-    fn calculate_averages(session_data: &mut CampaignData, fuzzers_alive: usize) {
-        let is_fuzzers_alive = fuzzers_alive > 0;
+    fn process_cycles_wo_finds(&mut self, value: &str) {
+        let cycles_wo_finds = value.parse::<usize>().unwrap_or(0);
+        if cycles_wo_finds > self.campaign_data.cycles.wo_finds_max {
+            self.campaign_data.cycles.wo_finds_max = cycles_wo_finds;
+        } else if cycles_wo_finds < self.campaign_data.cycles.wo_finds_min
+            || self.campaign_data.cycles.wo_finds_min == 0
+        {
+            self.campaign_data.cycles.wo_finds_min = cycles_wo_finds;
+        }
+    }
 
-        session_data.executions.ps_avg = if is_fuzzers_alive {
-            session_data.executions.ps_cum / fuzzers_alive as f64
+    fn calculate_averages(&mut self) {
+        let is_fuzzers_alive = self.campaign_data.fuzzers_alive > 0;
+
+        self.campaign_data.executions.ps_avg = if is_fuzzers_alive {
+            self.campaign_data.executions.ps_cum / self.campaign_data.fuzzers_alive as f64
         } else {
             0.0
         };
 
         let cumulative_avg = |cum: usize| {
             if is_fuzzers_alive {
-                cum / fuzzers_alive
+                cum / self.campaign_data.fuzzers_alive
             } else {
                 0
             }
         };
 
-        session_data.executions.avg = cumulative_avg(session_data.executions.cum);
-        session_data.pending.favorites_avg = cumulative_avg(session_data.pending.favorites_cum);
-        session_data.pending.total_avg = cumulative_avg(session_data.pending.total_cum);
-        session_data.corpus.avg = cumulative_avg(session_data.corpus.cum);
-        session_data.crashes.avg = cumulative_avg(session_data.crashes.cum);
-        session_data.hangs.avg = cumulative_avg(session_data.hangs.cum);
+        self.campaign_data.executions.avg = cumulative_avg(self.campaign_data.executions.cum);
+        self.campaign_data.pending.favorites_avg =
+            cumulative_avg(self.campaign_data.pending.favorites_cum);
+        self.campaign_data.pending.total_avg = cumulative_avg(self.campaign_data.pending.total_cum);
+        self.campaign_data.corpus.avg = cumulative_avg(self.campaign_data.corpus.cum);
+        self.campaign_data.crashes.avg = cumulative_avg(self.campaign_data.crashes.cum);
+        self.campaign_data.hangs.avg = cumulative_avg(self.campaign_data.hangs.cum);
 
-        session_data.coverage.avg = (session_data.coverage.min + session_data.coverage.max) / 2.0;
-        session_data.stability.avg =
-            (session_data.stability.min + session_data.stability.max) / 2.0;
-        session_data.cycles.done_avg =
-            (session_data.cycles.done_min + session_data.cycles.done_max) / 2;
-        session_data.cycles.wo_finds_avg =
-            (session_data.cycles.wo_finds_min + session_data.cycles.wo_finds_max) / 2;
-        session_data.levels.avg = (session_data.levels.min + session_data.levels.max) / 2;
+        self.campaign_data.coverage.avg =
+            (self.campaign_data.coverage.min + self.campaign_data.coverage.max) / 2.0;
+        self.campaign_data.stability.avg =
+            (self.campaign_data.stability.min + self.campaign_data.stability.max) / 2.0;
+        self.campaign_data.cycles.done_avg =
+            (self.campaign_data.cycles.done_min + self.campaign_data.cycles.done_max) / 2;
+        self.campaign_data.cycles.wo_finds_avg =
+            (self.campaign_data.cycles.wo_finds_min + self.campaign_data.cycles.wo_finds_max) / 2;
+        self.campaign_data.levels.avg =
+            (self.campaign_data.levels.min + self.campaign_data.levels.max) / 2;
     }
 
     /// Collects information about the latest crashes and hangs from the output directory

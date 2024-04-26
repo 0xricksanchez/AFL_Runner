@@ -17,6 +17,9 @@ COMMANDS=(
 # Start a new tmux session (detached)
 tmux -2u new-session -d -s $SESSION_NAME
 
+# Initialize the PID list
+AFLR_PID_LIST=""
+
 # Create and rename a window for each command
 for i in "${!COMMANDS[@]}"; do
 	sleep 0.1
@@ -30,7 +33,24 @@ for i in "${!COMMANDS[@]}"; do
 		tmux new-window -t $SESSION_NAME -n $WINDOW_NAME
     tmux send-keys -t $SESSION_NAME:$WINDOW_NAME " ${COMMANDS[$i]}" C-m
 	fi
+	# Get the PID of the started process
+	PID=$(tmux display-message -p -t $SESSION_NAME:$WINDOW_NAME '#{pane_pid}')
+	# Check if the process is still running
+	if ps -p $PID > /dev/null; then
+		# If the process is running, add its PID to the list
+		if [ -z "$AFLR_PID_LIST" ]; then
+			AFLR_PID_LIST="$PID"
+		else
+			AFLR_PID_LIST="$AFLR_PID_LIST:$PID"
+		fi
+	else
+		# If the process has died, set the PID list to 0
+		AFLR_PID_LIST="$AFLR_PID_LIST:-1"
+		break
+	fi
 done
 
 # Redirect tmux server log to a specific file
 tmux pipe-pane -o -t $SESSION_NAME "cat >> $LOG_FILE"
+
+echo $AFLR_PID_LIST > "{{ pid_file }}"

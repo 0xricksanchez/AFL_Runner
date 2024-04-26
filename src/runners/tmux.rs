@@ -12,9 +12,9 @@ pub struct Tmux {
 }
 
 impl Runner for Tmux {
-    fn new(session_name: &str, commands: &[String]) -> Self {
+    fn new(session_name: &str, commands: &[String], pid_file: &Path) -> Self {
         Self {
-            inner: Session::new(session_name, commands, "tmux"),
+            inner: Session::new(session_name, commands, "tmux", pid_file),
         }
     }
 
