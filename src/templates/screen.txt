@@ -7,6 +7,8 @@ HISTCONTROL="ignorespace"
 # Define the session name
 SESSION_NAME="{{ session_name }}"
 LOG_FILE="{{ log_file }}"
+PID_FILE="{{ pid_file }}"
+
 # Array of commands to run in separate windows
 COMMANDS=(
 	{% for command in commands %}
@@ -24,33 +26,39 @@ AFLR_PID_LIST=""
 for i in "${!COMMANDS[@]}"; do
 	sleep 0.1
 	WINDOW_NAME="window-$i"
+	TEMP_PID_FILE="/tmp/aflr_pid_${i}.txt"
+	COMMAND_ESCAPED=$(echo "${COMMANDS[$i]}" | sed 's/"/\\"/g')
 	if [ $i -eq 0 ]; then
 		# For the first command, send it to the first window and rename it
-		screen -S $SESSION_NAME -p 0 -X stuff $'{{ commands[0] }}\n'
+		screen -S $SESSION_NAME -p 0 -X stuff $'{ '"$COMMAND_ESCAPED"' & echo $! > '"$TEMP_PID_FILE"'; }\n'
 		screen -S $SESSION_NAME -p 0 -X title $WINDOW_NAME
 	else
 		# For subsequent commands, create new windows and rename them
 		screen -S $SESSION_NAME -X screen -t $WINDOW_NAME
-		screen -S $SESSION_NAME -p $WINDOW_NAME -X stuff $'{{ commands[i] }}\n'
+		screen -S $SESSION_NAME -p $WINDOW_NAME -X stuff $'{ '"$COMMAND_ESCAPED"' & echo $! > '"$TEMP_PID_FILE"'; }\n'
 	fi
-	# Get the PID of the started process
-	PID=$(screen -S $SESSION_NAME -Q echo $'\t')
-	# Check if the process is still running
-	if ps -p $PID > /dev/null; then
-		# If the process is running, add its PID to the list
-		if [ -z "$AFLR_PID_LIST" ]; then
-			AFLR_PID_LIST="$PID"
-		else
-			AFLR_PID_LIST="$AFLR_PID_LIST:$PID"
+done
+
+# Wait for all commands to start and PIDs to be written
+sleep 1
+
+# Capture the PIDs from the temporary files
+for i in "${!COMMANDS[@]}"; do
+	TEMP_PID_FILE="/tmp/aflr_pid_${i}.txt"
+	if [ -f "$TEMP_PID_FILE" ]; then
+		PID=$(cat "$TEMP_PID_FILE")
+		if [ -n "$PID" ]; then
+			if [ -z "$AFLR_PID_LIST" ]; then
+				AFLR_PID_LIST="$PID"
+			else
+				AFLR_PID_LIST="$AFLR_PID_LIST:$PID"
+			fi
 		fi
-	else
-		# If the process has died, insert a negative PID
-		AFLR_PID_LIST="$AFLR_PID_LIST:-1"
-		break
+		rm "$TEMP_PID_FILE"
 	fi
 done
 
 # Redirect screen session log to a specific file
 screen -S $SESSION_NAME -X logfile $LOG_FILE
 
-echo $AFLR_PID_LIST > "{{ pid_file }}"
+echo $AFLR_PID_LIST > "$PID_FILE"
