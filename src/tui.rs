@@ -231,8 +231,7 @@ Last saved hang: {}",
             .block(
                 Block::default()
                     .title("Process timing")
-                    .borders(Borders::ALL)
-                    .add_modifier(Modifier::BOLD),
+                    .borders(Borders::ALL),
             )
             .style(Style::default())
     }
@@ -265,8 +264,7 @@ Corpus count: {} ({}->{}<-{})",
             .block(
                 Block::default()
                     .title("Overall results")
-                    .borders(Borders::ALL)
-                    .add_modifier(Modifier::BOLD),
+                    .borders(Borders::ALL),
             )
             .style(Style::default())
     }
@@ -294,8 +292,7 @@ Coverage: {:.2}% ({:.2}%/{:.2}%)",
             .block(
                 Block::default()
                     .title("Stage Progress")
-                    .borders(Borders::ALL)
-                    .add_modifier(Modifier::BOLD),
+                    .borders(Borders::ALL),
             )
             .style(Style::default())
     }
