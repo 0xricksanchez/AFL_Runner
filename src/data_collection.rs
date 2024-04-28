@@ -20,7 +20,6 @@ impl DataFetcher {
         let fuzzer_pids = match pid_file {
             Some(pid_file) => {
                 let content = fs::read_to_string(pid_file).unwrap_or_default();
-                let _ = fs::remove_file(pid_file);
                 content
                     .split(':')
                     .filter_map(|pid| pid.trim().parse::<u32>().ok())

@@ -213,9 +213,6 @@ impl Tui {
         let last_seen_hang =
             Self::format_last_event(&session_data.last_hangs, &session_data.total_run_time);
 
-        // TODO: Check if fuzzers are actually alive and report back when >1 was lost (warning)
-        // TODO: If all fuzzers are dead display an error and stop `total_run_time`
-
         let content = format!(
             "Fuzzers alive: {}/{}
 Total run time: {}
