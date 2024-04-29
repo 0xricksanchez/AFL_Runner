@@ -46,7 +46,7 @@ runner = "tmux"
 
 [misc]
 # Enable TUI mode
-tui = false
+tui = true
 
 # Start with no tui and detached from any session
-detached = true
+detached = false

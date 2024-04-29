@@ -17,18 +17,14 @@ pub struct DataFetcher {
 impl DataFetcher {
     /// Create a new `DataFetcher` instance
     pub fn new(output_dir: &Path, pid_file: Option<&Path>) -> Self {
-        let fuzzer_pids = match pid_file {
-            Some(pid_file) => {
-                let content = fs::read_to_string(pid_file).unwrap_or_default();
-                content
-                    .split(':')
-                    .filter_map(|pid| pid.trim().parse::<u32>().ok())
-                    .filter(|&pid| pid != 0)
-                    .collect::<Vec<u32>>()
-            }
-            None => Vec::new(),
-        };
-
+        let fuzzer_pids = pid_file.map_or_else(Vec::new, |pid_file| {
+            fs::read_to_string(pid_file)
+                .unwrap_or_default()
+                .split(':')
+                .filter_map(|pid| pid.trim().parse::<u32>().ok())
+                .filter(|&pid| pid != 0)
+                .collect::<Vec<u32>>()
+        });
         let fuzzers_alive = count_alive_fuzzers(&fuzzer_pids);
 
         let campaign_data = CampaignData {
@@ -260,8 +256,13 @@ impl DataFetcher {
     fn calculate_averages(&mut self) {
         let is_fuzzers_alive = self.campaign_data.fuzzers_alive > 0;
 
+        // FIXME: Change once https://github.com/rust-lang/rust/issues/15701 is resolved
+        #[allow(clippy::cast_possible_truncation)]
+        #[allow(clippy::cast_sign_loss)]
+        #[allow(clippy::cast_precision_loss)]
+        let fuzzers_alive_f64 = self.campaign_data.fuzzers_alive as f64;
         self.campaign_data.executions.ps_avg = if is_fuzzers_alive {
-            self.campaign_data.executions.ps_cum / self.campaign_data.fuzzers_alive as f64
+            self.campaign_data.executions.ps_cum / fuzzers_alive_f64
         } else {
             0.0
         };
