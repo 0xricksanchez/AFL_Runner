@@ -16,7 +16,8 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     prelude::*,
     style::{Color, Style},
-    widgets::{Block, Borders, Paragraph},
+    text::Span,
+    widgets::{Block, Borders, Paragraph, Wrap},
     Terminal,
 };
 
@@ -39,7 +40,6 @@ impl Tui {
     pub fn run(output_dir: &Path, pid_file: Option<&Path>) -> Result<()> {
         let output_dir = output_dir.to_path_buf();
         let mut dfetcher = DataFetcher::new(&output_dir, pid_file);
-        println!("ONLY ONCE");
         let (session_data_tx, session_data_rx) = mpsc::channel();
         thread::spawn(move || loop {
             let session_data = dfetcher.collect_session_data().clone();
@@ -68,8 +68,10 @@ impl Tui {
             }
 
             if crossterm::event::poll(Duration::from_millis(200))? {
-                if let crossterm::event::Event::Key(_) = crossterm::event::read()? {
-                    break;
+                if let crossterm::event::Event::Key(key_event) = crossterm::event::read()? {
+                    if key_event.code == crossterm::event::KeyCode::Char('q') {
+                        break;
+                    }
                 }
             }
         }
@@ -181,28 +183,36 @@ impl Tui {
 
     /// Renders the crash solutions section of the TUI
     fn render_crash_solutions(f: &mut Frame, session_data: &CampaignData, area: Rect) {
-        let p_crash_solutions = Paragraph::new(Self::format_solutions(&session_data.last_crashes))
-            .block(
-                Block::default()
-                    .title("10 Latest Crashes")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default()),
-            )
-            .style(Style::default());
+        let p_crash_solutions = Paragraph::new(Self::format_solutions(
+            &session_data.total_run_time,
+            &session_data.last_crashes,
+        ))
+        .block(
+            Block::default()
+                .title("Latest Crashes")
+                .borders(Borders::ALL)
+                .border_style(Style::default().add_modifier(Modifier::BOLD))
+                .title_style(Style::default().add_modifier(Modifier::BOLD)),
+        )
+        .style(Style::default());
 
         f.render_widget(p_crash_solutions, area);
     }
 
     /// Renders the hang solutions section of the TUI
     fn render_hang_solutions(f: &mut Frame, session_data: &CampaignData, area: Rect) {
-        let p_hang_solutions = Paragraph::new(Self::format_solutions(&session_data.last_hangs))
-            .block(
-                Block::default()
-                    .title("10 Latest Hangs")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default()),
-            )
-            .style(Style::default());
+        let p_hang_solutions = Paragraph::new(Self::format_solutions(
+            &session_data.total_run_time,
+            &session_data.last_hangs,
+        ))
+        .block(
+            Block::default()
+                .title("Latest Hangs")
+                .borders(Borders::ALL)
+                .border_style(Style::default().add_modifier(Modifier::BOLD))
+                .title_style(Style::default().add_modifier(Modifier::BOLD)),
+        )
+        .style(Style::default());
 
         f.render_widget(p_hang_solutions, area);
     }
@@ -214,27 +224,44 @@ impl Tui {
         let last_seen_hang =
             Self::format_last_event(&session_data.last_hangs, &session_data.total_run_time);
 
-        let content = format!(
-            "Fuzzers alive: {}/{}
-Total run time: {}
-Time without finds: {}
-Last saved crash: {}
-Last saved hang: {}",
-            session_data.fuzzers_alive,
-            session_data.fuzzers_started,
-            Self::format_duration(session_data.total_run_time),
-            Self::format_duration(session_data.time_without_finds),
-            last_seen_crash,
-            last_seen_hang
-        );
+        let fuzzers_alive_style = if session_data.fuzzers_alive < session_data.fuzzers_started {
+            Style::default().fg(Color::Red)
+        } else {
+            Style::default()
+        };
 
-        Paragraph::new(content)
-            .block(
-                Block::default()
-                    .title("Process timing")
-                    .borders(Borders::ALL),
-            )
-            .style(Style::default())
+        let text = vec![
+            Line::from(vec![
+                Span::raw("Fuzzers alive: "),
+                Span::styled(
+                    format!(
+                        "{}/{}",
+                        session_data.fuzzers_alive, session_data.fuzzers_started
+                    ),
+                    fuzzers_alive_style,
+                ),
+            ]),
+            Line::from(format!(
+                "Total run time: {}",
+                Self::format_duration(session_data.total_run_time)
+            )),
+            Line::from(format!(
+                "Time without finds: {}",
+                Self::format_duration(session_data.time_without_finds)
+            )),
+            Line::from(format!("Last saved crash: {last_seen_crash}")),
+            Line::from(format!("Last saved hang: {last_seen_hang}")),
+        ];
+
+        let block = Block::default()
+            .title(Span::styled(
+                "Process timing",
+                Style::default().add_modifier(Modifier::BOLD),
+            ))
+            .borders(Borders::ALL)
+            .border_style(Style::default().add_modifier(Modifier::BOLD));
+
+        Paragraph::new(text).block(block).wrap(Wrap { trim: true })
     }
 
     /// Creates the overall results paragraph
@@ -265,7 +292,9 @@ Corpus count: {} ({}->{}<-{})",
             .block(
                 Block::default()
                     .title("Overall results")
-                    .borders(Borders::ALL),
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().add_modifier(Modifier::BOLD))
+                    .title_style(Style::default().add_modifier(Modifier::BOLD)),
             )
             .style(Style::default())
     }
@@ -293,7 +322,9 @@ Coverage: {:.2}% ({:.2}%/{:.2}%)",
             .block(
                 Block::default()
                     .title("Stage Progress")
-                    .borders(Borders::ALL),
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().add_modifier(Modifier::BOLD))
+                    .title_style(Style::default().add_modifier(Modifier::BOLD)),
             )
             .style(Style::default())
     }
@@ -322,7 +353,13 @@ Cycles without finds: {} ({}/{})",
         );
 
         Paragraph::new(content)
-            .block(Block::default().title("Nerd Stats").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Nerd Stats")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().add_modifier(Modifier::BOLD))
+                    .title_style(Style::default().add_modifier(Modifier::BOLD)),
+            )
             .style(Style::default())
     }
 
@@ -336,24 +373,87 @@ Cycles without finds: {} ({}/{})",
         }
     }
 
+    /// Format the solution time to a human readable representation
+    fn format_solution_time(total_runtime: &Duration, solution_time: u64) -> String {
+        let solution_duration = Duration::from_millis(solution_time);
+        let time_ago = total_runtime.checked_sub(solution_duration);
+
+        time_ago.map_or_else(
+            || String::from("Solution found in the future"),
+            |duration| {
+                let seconds = duration.as_secs();
+                let minutes = seconds / 60;
+                let hours = minutes / 60;
+
+                if hours > 0 {
+                    if minutes % 60 > 0 {
+                        format!("{hours} hour(s) {} minute(s) ago", minutes % 60)
+                    } else {
+                        format!("{hours} hour(s) ago")
+                    }
+                } else if minutes > 0 {
+                    format!("{minutes} minute(s) ago")
+                } else {
+                    format!("{seconds} second(s) ago")
+                }
+            },
+        )
+    }
+
     /// Formats the solutions into a string
-    fn format_solutions(solutions: &[CrashInfoDetails]) -> String {
-        solutions
+    fn format_solutions(total_run_time: &Duration, solutions: &[CrashInfoDetails]) -> String {
+        let max_fuzzer_name_length = solutions
+            .iter()
+            .map(|s| s.fuzzer_name.len())
+            .max()
+            .unwrap_or(0)
+            .min(25);
+
+        let header = format!(
+            "{:<width$} | {:<5} | {:<25} | {:<10} | {:<15} | {:<10} | {:<10}",
+            "Fuzzer Name",
+            "SIG",
+            "TIME",
+            "EXEC",
+            "SRC",
+            "OP",
+            "REP",
+            width = max_fuzzer_name_length
+        );
+
+        let separator = "-".repeat(header.len());
+
+        let rows = solutions
             .iter()
             .map(|s| {
+                let fuzzer_name = if s.fuzzer_name.len() > 25 {
+                    format!("{}...", &s.fuzzer_name[..22])
+                } else {
+                    s.fuzzer_name.clone()
+                };
+
+                let src = if s.src.len() > 15 {
+                    format!("{}...", &s.src[..12])
+                } else {
+                    s.src.clone()
+                };
+
                 format!(
-                    "{} | SIG: {} | TIME: {} | EXEC: {} | SRC: {} | OP: {} | REP: {}",
-                    s.fuzzer_name,
+                    "{:<width$} | {:<5} | {:<25} | {:<10} | {:<15} | {:<10} | {:<10}",
+                    fuzzer_name,
                     s.sig.clone().unwrap_or_else(|| "-".to_string()),
-                    s.time,
+                    Self::format_solution_time(total_run_time, s.time),
                     s.execs,
-                    s.src,
+                    src,
                     s.op,
-                    s.rep
+                    s.rep,
+                    width = max_fuzzer_name_length
                 )
             })
             .collect::<Vec<String>>()
-            .join("\n")
+            .join("\n");
+
+        format!("{}\n{}\n{}", header, separator, rows)
     }
 
     /// Formats a duration into a string
