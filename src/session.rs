@@ -60,6 +60,23 @@ impl Default for CampaignData {
     }
 }
 
+impl CampaignData {
+    pub fn clear(&mut self) {
+        self.executions = ExecutionsInfo::default();
+        self.pending = PendingInfo::default();
+        self.corpus = CorpusInfo::default();
+        self.coverage = CoverageInfo::default();
+        self.cycles = Cycles::default();
+        self.stability = StabilityInfo::default();
+        self.crashes = Solutions::default();
+        self.hangs = Solutions::default();
+        self.levels = Levels::default();
+        self.time_without_finds = Duration::from_secs(0);
+        self.last_crashes.clear();
+        self.last_hangs.clear();
+    }
+}
+
 #[derive(Default, Debug, Clone)]
 pub struct Levels {
     pub avg: usize,

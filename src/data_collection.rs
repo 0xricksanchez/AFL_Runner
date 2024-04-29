@@ -45,7 +45,11 @@ impl DataFetcher {
 
     /// Collects session data from the specified output directory
     pub fn collect_session_data(&mut self) -> &CampaignData {
+        self.campaign_data.clear();
         self.campaign_data.fuzzers_alive = count_alive_fuzzers(&self.campaign_data.fuzzer_pids);
+        if self.campaign_data.fuzzers_alive == 0 {
+            return &self.campaign_data;
+        }
 
         fs::read_dir(&self.output_dir)
             .unwrap()

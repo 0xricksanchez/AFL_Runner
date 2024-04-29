@@ -65,7 +65,6 @@ fn handle_run_command(run_args: &cli::RunArgs) -> Result<()> {
         SessionRunner::Screen => Box::new(Screen::new(&sname, &afl_cmds, pid_fn_path)),
         SessionRunner::Tmux => Box::new(Tmux::new(&sname, &afl_cmds, pid_fn_path)),
     };
-    println!("merged_args: {:?}", merged_args);
 
     if merged_args.tui {
         srunner.run_with_tui(&merged_args.gen_args.output_dir.unwrap())?;
