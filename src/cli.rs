@@ -254,6 +254,13 @@ pub struct RunArgs {
     /// Enable tui mode
     #[arg(long, help = "Enable TUI mode", required = false)]
     pub tui: bool,
+    /// Start detached from any session (not compatible with TUI)
+    #[arg(
+        long,
+        help = "Started detached from TMUX/screen session",
+        required = false
+    )]
+    pub detached: bool,
 }
 
 impl RunArgs {
@@ -282,6 +289,11 @@ impl RunArgs {
                 false
             } else {
                 self.tui || config.misc.tui.unwrap_or(false)
+            },
+            detached: if self.dry_run {
+                false
+            } else {
+                self.detached || config.misc.detached.unwrap_or(false)
             },
         }
     }
@@ -348,4 +360,6 @@ pub struct SessionConfig {
 pub struct MiscConfig {
     /// Enable TUI mode
     pub tui: Option<bool>,
+    /// Enabled detached mode
+    pub detached: Option<bool>,
 }

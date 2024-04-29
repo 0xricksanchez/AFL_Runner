@@ -39,6 +39,7 @@ impl Tui {
     pub fn run(output_dir: &Path, pid_file: Option<&Path>) -> Result<()> {
         let output_dir = output_dir.to_path_buf();
         let mut dfetcher = DataFetcher::new(&output_dir, pid_file);
+        println!("ONLY ONCE");
         let (session_data_tx, session_data_rx) = mpsc::channel();
         thread::spawn(move || loop {
             let session_data = dfetcher.collect_session_data().clone();

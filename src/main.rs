@@ -45,6 +45,9 @@ fn handle_run_command(run_args: &cli::RunArgs) -> Result<()> {
     let config_args = load_config(run_args.gen_args.config.as_ref())?;
     let raw_afl_flags = config_args.afl_cfg.afl_flags.clone();
     let merged_args = run_args.merge(&config_args);
+    if merged_args.tui && merged_args.detached {
+        bail!("TUI and detached mode cannot be used together");
+    }
     let harness = create_harness(&merged_args.gen_args)?;
     let afl_runner = create_afl_runner(&merged_args.gen_args, harness, raw_afl_flags);
     let afl_cmds = afl_runner.generate_afl_commands()?;
@@ -62,12 +65,15 @@ fn handle_run_command(run_args: &cli::RunArgs) -> Result<()> {
         SessionRunner::Screen => Box::new(Screen::new(&sname, &afl_cmds, pid_fn_path)),
         SessionRunner::Tmux => Box::new(Tmux::new(&sname, &afl_cmds, pid_fn_path)),
     };
+    println!("merged_args: {:?}", merged_args);
 
     if merged_args.tui {
         srunner.run_with_tui(&merged_args.gen_args.output_dir.unwrap())?;
     } else {
         srunner.run()?;
-        srunner.attach()?;
+        if !merged_args.detached {
+            srunner.attach()?;
+        }
     }
 
     Ok(())
