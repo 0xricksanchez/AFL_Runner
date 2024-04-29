@@ -453,7 +453,7 @@ Cycles without finds: {} ({}/{})",
             .collect::<Vec<String>>()
             .join("\n");
 
-        format!("{}\n{}\n{}", header, separator, rows)
+        format!("{header}\n{separator}\n{rows}")
     }
 
     /// Formats a duration into a string

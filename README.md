@@ -21,14 +21,14 @@ You can compile `AFL_Runner` yourself:
 git clone https://github.com/0xricksanchez/AFL_Runner.git alfrunner
 cd alfrunner
 cargo build --release
-./target/release/afl_runner --help
+./target/release/aflr--help
 ```
 
 Or install via [crates.io](https://crates.io/crates/afl_runner):
 
 ```bash
 cargo install afl_runner
-afl_runner --help
+aflr--help
 ```
 
 ## Features ✨
@@ -70,7 +70,7 @@ Here's an example of generating AFL++ commands with `AFL_Runner`:
 $ export AFL_PRELOAD=/tmp/mySharedLib.so
 # Exported AFL_* environment variables that we set explicitly are ignored!
 $ export AFL_IGNORE_SEED_PROBLEMS=1
-$ afl_runner gen -t /tmp/test_bins/target -s /tmp/test_bins/target_asan -c /tmp/test_bins/target_cmplog -l /tmp/test_bins/target_cmpcov -n 16 -i /tmp/seed_corpus -o /tmp/afl_out -x /tmp/fuzzing.dict -- 'arg1 arg2 --arg3 --arg4 @@'
+$ aflr gen -t /tmp/test_bins/target -s /tmp/test_bins/target_asan -c /tmp/test_bins/target_cmplog -l /tmp/test_bins/target_cmpcov -n 16 -i /tmp/seed_corpus -o /tmp/afl_out -x /tmp/fuzzing.dict -- 'arg1 arg2 --arg3 --arg4 @@'
 Generated commands:
   0. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=0 AFL_EXPAND_HAVOC_NOW=1 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250 /usr/local/bin/afl-fuzz -Z -p fast -i /tmp/seed_corpus -o /tmp/afl_out -M main_target -- /tmp/test_bins/target_asan arg1 arg2 --arg3 --arg4 @@
   1. AFL_PRELOAD=/tmp/mySharedLib.so AFL_AUTORESUME=1 AFL_FINAL_SYNC=0 AFL_DISABLE_TRIM=1 AFL_KEEP_TIMEOUTS=1 AFL_EXPAND_HAVOC_NOW=0 AFL_IGNORE_SEED_PROBLEMS=0 AFL_IMPORT_FIRST=0 AFL_TESTCACHE_SIZE=250 /usr/local/bin/afl-fuzz -p explore -i /tmp/seed_corpus -o /tmp/afl_out -S secondary_0_target -l 2 -c /tmp/test_bins/target_cmplog -- /tmp/test_bins/target arg1 arg2 --arg3 --arg4 @@
