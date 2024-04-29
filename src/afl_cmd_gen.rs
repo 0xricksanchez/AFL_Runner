@@ -95,7 +95,10 @@ fn get_free_mem_in_mb() -> u64 {
 }
 
 /// Applies a flag to a percentage of AFL configurations
-fn apply_flags(configs: &mut [AFLEnv], flag: AFLFlag, percentage: f64, rng: &mut impl Rng) {
+fn apply_flags(configs: &mut [AFLEnv], flag: &AFLFlag, percentage: f64, rng: &mut impl Rng) {
+    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_precision_loss)]
     let count = (configs.len() as f64 * percentage) as usize;
     let mut indices = HashSet::new();
     while indices.len() < count {
@@ -111,6 +114,9 @@ fn apply_flags(configs: &mut [AFLEnv], flag: AFLFlag, percentage: f64, rng: &mut
 fn apply_constrained_args(cmds: &mut [AflCmd], args: &[(&str, f64)], rng: &mut impl Rng) {
     let n = cmds.len();
     for &(arg, percentage) in args {
+        #[allow(clippy::cast_possible_truncation)]
+        #[allow(clippy::cast_sign_loss)]
+        #[allow(clippy::cast_precision_loss)]
         let count = (n as f64 * percentage) as usize;
         let mut available_indices: Vec<usize> = (0..n)
             .filter(|i| !cmds[*i].misc_afl_flags.iter().any(|f| f.contains(arg)))
@@ -125,6 +131,9 @@ fn apply_constrained_args(cmds: &mut [AflCmd], args: &[(&str, f64)], rng: &mut i
 
 /// Applies an argument to a percentage of AFL commands
 fn apply_args(cmds: &mut [AflCmd], arg: &str, percentage: f64, rng: &mut impl Rng) {
+    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_precision_loss)]
     let count = (cmds.len() as f64 * percentage) as usize;
     let mut indices = HashSet::new();
     while indices.len() < count {
@@ -264,9 +273,9 @@ impl AFLCmdGenerator {
         // Enable FinalSync for the last configuration
         configs.last_mut().unwrap().enable_flag(AFLFlag::FinalSync);
 
-        apply_flags(&mut configs, AFLFlag::DisableTrim, 0.65, rng);
-        apply_flags(&mut configs, AFLFlag::KeepTimeouts, 0.5, rng);
-        apply_flags(&mut configs, AFLFlag::ExpandHavocNow, 0.4, rng);
+        apply_flags(&mut configs, &AFLFlag::DisableTrim, 0.65, rng);
+        apply_flags(&mut configs, &AFLFlag::KeepTimeouts, 0.5, rng);
+        apply_flags(&mut configs, &AFLFlag::ExpandHavocNow, 0.4, rng);
 
         let free_mb = get_free_mem_in_mb();
         for c in &mut configs {
@@ -380,6 +389,9 @@ impl AFLCmdGenerator {
     /// Applies CMPLOG instrumentation to AFL commands
     fn apply_cmplog(&self, cmds: &mut [AflCmd], rng: &mut impl Rng) {
         if let Some(cmplog_binary) = self.harness.cmplog_binary.as_ref() {
+            #[allow(clippy::cast_possible_truncation)]
+            #[allow(clippy::cast_sign_loss)]
+            #[allow(clippy::cast_precision_loss)]
             let num_cmplog_cfgs = (f64::from(self.runners) * 0.3) as usize;
             match num_cmplog_cfgs {
                 0 => {}
