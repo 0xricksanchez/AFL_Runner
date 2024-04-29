@@ -7,36 +7,62 @@ HISTCONTROL="ignorespace"
 # Define the session name
 SESSION_NAME="{{ session_name }}"
 LOG_FILE="{{ log_file }}"
+PID_FILE="{{ pid_file }}"
+
 # Array of commands to run in separate windows
 COMMANDS=(
-    {% for command in commands %}
-    "{{ command }}"
-    {% endfor %}
+	{% for command in commands %}
+	"{{ command }}"
+	{% endfor %}
 )
 
 # Start a new screen session (detached)
 screen -dmS $SESSION_NAME
 
-# Apply startup message and caption settings
-screen -S $SESSION_NAME -X startup_message off
-screen -S $SESSION_NAME -X title "$SESSION_NAME"
-screen -S $SESSION_NAME -X hardstatus alwayslastline "%{.kW}%-w%{.gK}%n %t%{-}%+w %= %{..B}%H %LD %MM/%d %YY %c"
+# Initialize the PID list
+AFLR_PID_LIST=""
 
 # Create and rename a window for each command
 for i in "${!COMMANDS[@]}"; do
-    sleep 0.1
-    WINDOW_NAME="window-$i"
-    if [ $i -eq 0 ]; then
-        # For the first command, send it to the first window and rename it
-        screen -S $SESSION_NAME -p 0 -X stuff "${COMMANDS[$i]}"$'\n'
-        screen -S $SESSION_NAME -p 0 -X title $WINDOW_NAME
-    else
-        # For subsequent commands, create new tabs and run the commands
-        screen -S $SESSION_NAME -X screen -t $WINDOW_NAME
-        screen -S $SESSION_NAME -p $WINDOW_NAME -X stuff "${COMMANDS[$i]}"$'\n'
-    fi
+	sleep 0.1
+	WINDOW_NAME="window-$i"
+	TEMP_PID_FILE="/tmp/aflr_pid_${i}.txt"
+	COMMAND_ESCAPED=$(echo "${COMMANDS[$i]}" | sed 's/"/\\"/g')
+	if [ $i -eq 0 ]; then
+		# For the first command, send it to the first window and rename it
+		screen -S $SESSION_NAME -p 0 -X stuff $'{ '"$COMMAND_ESCAPED"' & echo $! > '"$TEMP_PID_FILE"'; clear; fg }\n'
+		screen -S $SESSION_NAME -p 0 -X title $WINDOW_NAME
+	else
+		# For subsequent commands, create new windows and rename them
+		screen -S $SESSION_NAME -X screen -t $WINDOW_NAME
+		screen -S $SESSION_NAME -p $WINDOW_NAME -X stuff $'{ '"$COMMAND_ESCAPED"' & echo $! > '"$TEMP_PID_FILE"'; clear; fg }\n'
+	fi
 done
 
-# Redirect screen log to a specific file
+# Wait for all commands to start and PIDs to be written
+sleep 1
+
+# Capture the PIDs from the temporary files
+for i in "${!COMMANDS[@]}"; do
+	TEMP_PID_FILE="/tmp/aflr_pid_${i}.txt"
+	if [ -f "$TEMP_PID_FILE" ]; then
+		PID=$(cat "$TEMP_PID_FILE")
+		if [ -n "$PID" ]; then
+			if [ -z "$AFLR_PID_LIST" ]; then
+				AFLR_PID_LIST="$PID"
+			else
+				AFLR_PID_LIST="$AFLR_PID_LIST:$PID"
+			fi
+		fi
+		rm "$TEMP_PID_FILE"
+	fi
+done
+
+# Configure the screen status bar
+screen -S $SESSION_NAME -X hardstatus alwayslastline "%{.kW}%-w%{.gK}%n %t%{-}%+w %= %{..B}%H %LD %MM/%d %YY %c"
+screen -S $SESSION_NAME -X startup_message off
+
+# Redirect screen session log to a specific file
 screen -S $SESSION_NAME -X logfile $LOG_FILE
-screen -S $SESSION_NAME -X log on
+
+echo $AFLR_PID_LIST > "$PID_FILE"

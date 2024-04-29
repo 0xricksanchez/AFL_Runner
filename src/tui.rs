@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::io;
 use std::path::Path;
 use std::sync::mpsc;
@@ -6,6 +7,7 @@ use std::time::Duration;
 
 use crate::data_collection::DataFetcher;
 use crate::session::{CampaignData, CrashInfoDetails};
+use anyhow::bail;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
@@ -34,11 +36,13 @@ impl Tui {
     }
 
     /// Runs the TUI standalone with the specified output directory
-    pub fn run(output_dir: &Path) {
+    pub fn run(output_dir: &Path, pid_file: Option<&Path>) -> Result<()> {
         let output_dir = output_dir.to_path_buf();
+        let mut dfetcher = DataFetcher::new(&output_dir, pid_file);
+        println!("ONLY ONCE");
         let (session_data_tx, session_data_rx) = mpsc::channel();
         thread::spawn(move || loop {
-            let session_data = DataFetcher::new(&output_dir).collect_session_data();
+            let session_data = dfetcher.collect_session_data().clone();
             if let Err(e) = session_data_tx.send(session_data) {
                 eprintln!("Error sending session data: {e}");
                 break;
@@ -47,8 +51,9 @@ impl Tui {
         });
 
         if let Err(e) = Self::new().and_then(|mut tui| tui.run_internal(&session_data_rx)) {
-            eprintln!("Error running TUI: {e}");
+            bail!("Error running TUI: {e}");
         }
+        Ok(())
     }
 
     /// Runs the TUI with the specified session data receiver
@@ -209,15 +214,14 @@ impl Tui {
         let last_seen_hang =
             Self::format_last_event(&session_data.last_hangs, &session_data.total_run_time);
 
-        // TODO: Check if fuzzers are actually alive and report back when >1 was lost (warning)
-        // TODO: If all fuzzers are dead display an error and stop `total_run_time`
         let content = format!(
-            "Fuzzers alive: {} 
+            "Fuzzers alive: {}/{}
 Total run time: {}
 Time without finds: {}
 Last saved crash: {}
 Last saved hang: {}",
             session_data.fuzzers_alive,
+            session_data.fuzzers_started,
             Self::format_duration(session_data.total_run_time),
             Self::format_duration(session_data.time_without_finds),
             last_seen_crash,
@@ -228,8 +232,7 @@ Last saved hang: {}",
             .block(
                 Block::default()
                     .title("Process timing")
-                    .borders(Borders::ALL)
-                    .add_modifier(Modifier::BOLD),
+                    .borders(Borders::ALL),
             )
             .style(Style::default())
     }
@@ -262,8 +265,7 @@ Corpus count: {} ({}->{}<-{})",
             .block(
                 Block::default()
                     .title("Overall results")
-                    .borders(Borders::ALL)
-                    .add_modifier(Modifier::BOLD),
+                    .borders(Borders::ALL),
             )
             .style(Style::default())
     }
@@ -291,8 +293,7 @@ Coverage: {:.2}% ({:.2}%/{:.2}%)",
             .block(
                 Block::default()
                     .title("Stage Progress")
-                    .borders(Borders::ALL)
-                    .add_modifier(Modifier::BOLD),
+                    .borders(Borders::ALL),
             )
             .style(Style::default())
     }

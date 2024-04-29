@@ -7,6 +7,8 @@ HISTCONTROL="ignorespace"
 # Define the session name
 SESSION_NAME="{{ session_name }}"
 LOG_FILE="{{ log_file }}"
+PID_FILE="{{ pid_file }}"
+
 # Array of commands to run in separate windows
 COMMANDS=(
 	{% for command in commands %}
@@ -17,20 +19,45 @@ COMMANDS=(
 # Start a new tmux session (detached)
 tmux -2u new-session -d -s $SESSION_NAME
 
+# Initialize the PID list
+AFLR_PID_LIST=""
+
 # Create and rename a window for each command
 for i in "${!COMMANDS[@]}"; do
 	sleep 0.1
 	WINDOW_NAME="window-$i"
+	TEMP_PID_FILE="/tmp/aflr_pid_${i}.txt"
 	if [ $i -eq 0 ]; then
 		# For the first command, send it to the first window and rename it
-    tmux send-keys -t $SESSION_NAME " ${COMMANDS[$i]}" C-m
+    tmux send-keys -t $SESSION_NAME "{ ${COMMANDS[$i]} & echo \$! > $TEMP_PID_FILE; clear; fg }" C-m
 		tmux rename-window -t $SESSION_NAME $WINDOW_NAME
 	else
 		# For subsequent commands, create new windows and rename them
 		tmux new-window -t $SESSION_NAME -n $WINDOW_NAME
-    tmux send-keys -t $SESSION_NAME:$WINDOW_NAME " ${COMMANDS[$i]}" C-m
+    tmux send-keys -t $SESSION_NAME:$WINDOW_NAME "{ ${COMMANDS[$i]} & echo \$! > $TEMP_PID_FILE; clear; fg; }" C-m
+	fi
+done
+
+# Wait for all commands to start and PIDs to be written
+sleep 1
+
+# Capture the PIDs from the temporary files
+for i in "${!COMMANDS[@]}"; do
+	TEMP_PID_FILE="/tmp/aflr_pid_${i}.txt"
+	if [ -f "$TEMP_PID_FILE" ]; then
+		PID=$(cat "$TEMP_PID_FILE")
+		if [ -n "$PID" ]; then
+			if [ -z "$AFLR_PID_LIST" ]; then
+				AFLR_PID_LIST="$PID"
+			else
+				AFLR_PID_LIST="$AFLR_PID_LIST:$PID"
+			fi
+		fi
+		rm "$TEMP_PID_FILE"
 	fi
 done
 
 # Redirect tmux server log to a specific file
 tmux pipe-pane -o -t $SESSION_NAME "cat >> $LOG_FILE"
+
+echo $AFLR_PID_LIST > "$PID_FILE"

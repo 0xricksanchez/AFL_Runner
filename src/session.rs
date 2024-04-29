@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 #[allow(dead_code)]
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct CrashInfoDetails {
     pub fuzzer_name: String,
     pub file_path: PathBuf,
@@ -15,9 +15,11 @@ pub struct CrashInfoDetails {
     pub rep: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CampaignData {
     pub fuzzers_alive: usize,
+    pub fuzzers_started: usize,
+    pub fuzzer_pids: Vec<u32>,
     pub total_run_time: Duration,
     pub executions: ExecutionsInfo,
     pub pending: PendingInfo,
@@ -38,6 +40,8 @@ impl Default for CampaignData {
     fn default() -> Self {
         Self {
             fuzzers_alive: 0,
+            fuzzers_started: 0,
+            fuzzer_pids: Vec::new(),
             total_run_time: Duration::from_secs(0),
             executions: ExecutionsInfo::default(),
             pending: PendingInfo::default(),
@@ -57,19 +61,30 @@ impl Default for CampaignData {
 }
 
 impl CampaignData {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn clear(&mut self) {
+        self.executions = ExecutionsInfo::default();
+        self.pending = PendingInfo::default();
+        self.corpus = CorpusInfo::default();
+        self.coverage = CoverageInfo::default();
+        self.cycles = Cycles::default();
+        self.stability = StabilityInfo::default();
+        self.crashes = Solutions::default();
+        self.hangs = Solutions::default();
+        self.levels = Levels::default();
+        self.time_without_finds = Duration::from_secs(0);
+        self.last_crashes.clear();
+        self.last_hangs.clear();
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Levels {
     pub avg: usize,
     pub min: usize,
     pub max: usize,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Solutions {
     pub cum: usize,
     pub avg: usize,
@@ -77,14 +92,14 @@ pub struct Solutions {
     pub max: usize,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct StabilityInfo {
     pub avg: f64,
     pub min: f64,
     pub max: f64,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Cycles {
     pub done_avg: usize,
     pub done_min: usize,
@@ -94,7 +109,7 @@ pub struct Cycles {
     pub wo_finds_max: usize,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct ExecutionsInfo {
     pub avg: usize,
     pub min: usize,
@@ -106,14 +121,14 @@ pub struct ExecutionsInfo {
     pub ps_cum: f64,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct CoverageInfo {
     pub avg: f64,
     pub min: f64,
     pub max: f64,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct PendingInfo {
     pub favorites_avg: usize,
     pub favorites_cum: usize,
@@ -125,7 +140,7 @@ pub struct PendingInfo {
     pub total_max: usize,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct CorpusInfo {
     pub avg: usize,
     pub cum: usize,
@@ -133,7 +148,7 @@ pub struct CorpusInfo {
     pub max: usize,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Misc {
     pub afl_version: String,
     pub afl_banner: String,

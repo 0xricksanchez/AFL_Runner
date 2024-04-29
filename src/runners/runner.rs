@@ -13,7 +13,7 @@ use crate::utils::{get_user_input, mkdir_helper};
 
 #[allow(unused)]
 pub trait Runner {
-    fn new(session_name: &str, commands: &[String]) -> Self
+    fn new(session_name: &str, commands: &[String], pid_file: &Path) -> Self
     where
         Self: Sized;
     fn create_bash_script(&self) -> Result<String, anyhow::Error>;
@@ -28,10 +28,16 @@ pub struct Session {
     pub commands: Vec<String>,
     pub log_file: PathBuf,
     pub runner_name: &'static str,
+    pub pid_file: PathBuf,
 }
 
 impl Session {
-    pub fn new(session_name: &str, commands: &[String], runner_name: &'static str) -> Self {
+    pub fn new(
+        session_name: &str,
+        commands: &[String],
+        runner_name: &'static str,
+        pid_file: &Path,
+    ) -> Self {
         let commands = commands
             .iter()
             .map(|c| c.replace('"', "\\\""))
@@ -45,6 +51,7 @@ impl Session {
             commands,
             log_file,
             runner_name,
+            pid_file: pid_file.to_path_buf(),
         }
     }
 
@@ -57,6 +64,7 @@ impl Session {
                 session_name :self.name.clone(),
                 commands : self.commands.clone(),
                 log_file : self.log_file.to_str().unwrap().to_string(),
+                pid_file: self.pid_file.to_str().unwrap().to_string(),
             })
             .to_string()
             .map_err(|e| anyhow::anyhow!("Error creating bash script: {}", e))
@@ -91,15 +99,13 @@ impl Session {
         mkdir_helper(&outdir, true)?;
 
         println!(
-            "Starting {} session '{}' for {} generated commands...",
+            "Starting {} session '{}' for {} generated commands. Continue [Y/n]?",
             self.runner_name,
             self.name,
             self.commands.len()
         );
-
-        print!("Continue [Y/n]? ");
         std::io::stdout().flush()?;
-        if get_user_input() != "y" {
+        if get_user_input() != 'y' {
             anyhow::bail!("Aborting");
         }
 
@@ -135,12 +141,12 @@ impl Session {
 
     pub fn run_with_tui(&self, out_dir: &Path) -> Result<()> {
         if let Err(e) = self.run_detached() {
-            eprintln!("Error running TUI: {e}");
+            eprintln!("Error running TUI: '{e}'");
             return Err(e);
         }
 
         thread::sleep(Duration::from_secs(1));
-        Tui::run(out_dir);
+        Tui::run(out_dir, Some(&self.pid_file))?;
         Ok(())
     }
 

@@ -1,9 +1,10 @@
-use std::env;
 use std::fs;
 use std::hash::{DefaultHasher, Hasher};
 use std::io::{stdin, Read};
 use std::path::Path;
 use std::path::PathBuf;
+use std::{char, env};
+use sysinfo::{Pid, System};
 
 use anyhow::bail;
 use anyhow::Context;
@@ -137,19 +138,19 @@ pub fn print_generated_commands(cmds: &[String]) {
 }
 
 /// Gets user input from stdin
-pub fn get_user_input() -> String {
+pub fn get_user_input() -> char {
     std::io::stdin()
         .bytes()
         .next()
         .and_then(std::result::Result::ok)
-        .map_or("y".to_string(), |byte| {
+        .map_or('y', |byte| {
             let b = byte as char;
             if b.is_ascii_alphabetic() {
-                b.to_lowercase().to_string()
+                b.to_lowercase().next().unwrap()
             } else if b == '\n' {
-                'y'.to_string()
+                'y'
             } else {
-                b.to_string()
+                b
             }
         })
 }
@@ -175,4 +176,17 @@ pub fn mkdir_helper(dir: &Path, check_empty: bool) -> Result<()> {
         fs::create_dir_all(dir)?;
     }
     Ok(())
+}
+
+/// Count the number of alive procsses based on a list of PIDs
+pub fn count_alive_fuzzers(fuzzer_pids: &[u32]) -> usize {
+    let s = System::new_all();
+    fuzzer_pids
+        .iter()
+        .filter(|&pid| *pid != 0)
+        .filter(|&pid| match s.process(Pid::from(*pid as usize)).is_none() {
+            true => false,
+            false => true,
+        })
+        .count()
 }
