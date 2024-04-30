@@ -72,26 +72,23 @@ impl DataFetcher {
             .status()
             .is_ok();
         if pgrep_available {
-            if let Some(command_line) = content
+            content
                 .lines()
                 .find(|line| line.starts_with("command_line"))
-            {
-                let value = command_line.split(':').last().unwrap_or("").trim();
-                let pgrep_command = format!("pgrep -f \"{}\"", value);
-                println!("Executing command: {}", pgrep_command);
-                let output = Command::new("sh")
-                    .arg("-c")
-                    .arg(&pgrep_command)
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .output()
-                    .expect("Failed to execute pgrep command");
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let _stderr = String::from_utf8_lossy(&output.stderr);
-                stdout.trim().parse::<u32>().ok()
-            } else {
-                None
-            }
+                .and_then(|command_line| {
+                    let value = command_line.split(':').last().unwrap_or("").trim();
+                    let pgrep_command = format!("pgrep -f \"{value}\"");
+                    let output = Command::new("sh")
+                        .arg("-c")
+                        .arg(&pgrep_command)
+                        .stdout(Stdio::piped())
+                        .stderr(Stdio::piped())
+                        .output()
+                        .expect("Failed to execute pgrep command");
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let _stderr = String::from_utf8_lossy(&output.stderr);
+                    stdout.trim().parse::<u32>().ok()
+                })
         } else {
             None
         }
