@@ -5,17 +5,7 @@ repository = "https://github.com/0xricksanchez/AFL_Runner"
 description = "Scaling best-practice AFLPlusPlus fuzzing campaigns made easy"
 version = "0.4.0"
 edition = "2021"
-keywords = [
-  "afl",
-  "fuzzing",
-  "fuzzer",
-  "fuzz",
-  "afl++",
-  "aflplusplus",
-  "testing",
-  "fuzz-testing",
-  "fuzz-test",
-]
+keywords = ["afl", "fuzzing", "fuzz-testing", "testing", "fuzzer"]
 license = "Apache-2.0"
 
 [[bin]]
