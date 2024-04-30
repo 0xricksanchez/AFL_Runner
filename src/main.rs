@@ -51,6 +51,10 @@ fn handle_run_command(run_args: &cli::RunArgs) -> Result<()> {
     let harness = create_harness(&merged_args.gen_args)?;
     let afl_runner = create_afl_runner(&merged_args.gen_args, harness, raw_afl_flags);
     let afl_cmds = afl_runner.generate_afl_commands()?;
+    if merged_args.dry_run {
+        utils::print_generated_commands(&afl_cmds);
+        return Ok(());
+    }
     let target_args = merged_args
         .gen_args
         .target_args
