@@ -24,14 +24,14 @@ You can compile `AFL_Runner` yourself:
 git clone https://github.com/0xricksanchez/AFL_Runner.git alfrunner
 cd alfrunner
 cargo build --release
-./target/release/aflr--help
+./target/release/aflr --help
 ```
 
 Or install via [crates.io](https://crates.io/crates/afl_runner):
 
 ```bash
 cargo install afl_runner
-aflr--help
+aflr --help
 ```
 
 ## Features ✨
