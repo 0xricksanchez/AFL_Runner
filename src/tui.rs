@@ -21,6 +21,8 @@ use ratatui::{
     Terminal,
 };
 
+static SLOW_EXEC_PS_THRESHOLD: f64 = 250.0;
+
 /// Represents the TUI (Text User Interface)
 pub struct Tui {
     /// The terminal instance
@@ -301,32 +303,76 @@ Corpus count: {} ({}->{}<-{})",
 
     /// Creates the stage progress paragraph
     fn create_stage_progress_paragraph(session_data: &CampaignData) -> Paragraph {
-        let content = format!(
-            "Execs: {} ({}->{}<-{})
-Execs/s: {:.2} ({:.2}->{:.2}<-{:.2}),
-Coverage: {:.2}% ({:.2}%/{:.2}%)",
-            session_data.executions.cum,
-            session_data.executions.min,
-            session_data.executions.avg,
-            session_data.executions.max,
-            session_data.executions.ps_cum,
-            session_data.executions.ps_min,
-            session_data.executions.ps_avg,
-            session_data.executions.ps_max,
-            session_data.coverage.avg,
-            session_data.coverage.min,
-            session_data.coverage.max,
-        );
+        let ps_cum_style = if session_data.executions.ps_cum < SLOW_EXEC_PS_THRESHOLD {
+            Style::default().fg(Color::Red)
+        } else {
+            Style::default()
+        };
 
-        Paragraph::new(content)
-            .block(
-                Block::default()
-                    .title("Stage Progress")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().add_modifier(Modifier::BOLD))
-                    .title_style(Style::default().add_modifier(Modifier::BOLD)),
-            )
-            .style(Style::default())
+        let ps_min_style = if session_data.executions.ps_min < SLOW_EXEC_PS_THRESHOLD {
+            Style::default().fg(Color::Red)
+        } else {
+            Style::default()
+        };
+
+        let ps_avg_style = if session_data.executions.ps_avg < SLOW_EXEC_PS_THRESHOLD {
+            Style::default().fg(Color::Red)
+        } else {
+            Style::default()
+        };
+
+        let ps_max_style = if session_data.executions.ps_max < SLOW_EXEC_PS_THRESHOLD {
+            Style::default().fg(Color::Red)
+        } else {
+            Style::default()
+        };
+
+        let text = vec![
+            Line::from(format!(
+                "Execs: {} ({}->{}<-{})",
+                session_data.executions.cum,
+                session_data.executions.min,
+                session_data.executions.avg,
+                session_data.executions.max,
+            )),
+            Line::from(vec![
+                Span::raw("Execs/s: "),
+                Span::styled(
+                    format!("{:.2}", session_data.executions.ps_cum),
+                    ps_cum_style,
+                ),
+                Span::raw(" ("),
+                Span::styled(
+                    format!("{:.2}", session_data.executions.ps_min),
+                    ps_min_style,
+                ),
+                Span::raw("->"),
+                Span::styled(
+                    format!("{:.2}", session_data.executions.ps_avg),
+                    ps_avg_style,
+                ),
+                Span::raw("<-"),
+                Span::styled(
+                    format!("{:.2}", session_data.executions.ps_max),
+                    ps_max_style,
+                ),
+                Span::raw(")"),
+            ]),
+            Line::from(format!(
+                "Coverage: {:.2}% ({:.2}%/{:.2}%)",
+                session_data.coverage.avg, session_data.coverage.min, session_data.coverage.max,
+            )),
+        ];
+
+        let block = Block::default()
+            .title(Span::styled(
+                "Stage Progress",
+                Style::default().add_modifier(Modifier::BOLD),
+            ))
+            .borders(Borders::ALL)
+            .border_style(Style::default().add_modifier(Modifier::BOLD));
+
+        Paragraph::new(text).block(block).wrap(Wrap { trim: true })
     }
 
     /// Creates the nerd stats paragraph
