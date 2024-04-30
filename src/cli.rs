@@ -12,7 +12,7 @@ const AFL_OUTPUT: &str = "/tmp/afl_output";
 #[derive(Parser, Debug, Clone)]
 #[command(name = "Parallelized AFLPlusPlus Campaign Runner")]
 #[command(author = "C.K. <admin@0x434b.dev>")]
-#[command(version = "0.4.0")]
+#[command(version = "0.4.1")]
 pub struct Cli {
     /// Subcommand to execute
     #[command(subcommand)]
