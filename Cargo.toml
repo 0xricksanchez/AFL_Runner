@@ -23,6 +23,16 @@ serde = { version = "1.0.199", features = ["derive"] }
 ratatui = { version = "0.26.2", features = ["crossterm", "all-widgets"] }
 crossterm = "0.27.0"
 
+[dev-dependencies]
+cargo-make = "0.37.11"
+
+[workspace]
+members = ["examples"]
+
+[workspace.metadata.make]
+default = "default"
+working-directory = "examples"
+
 [profile.release]
 opt-level = 3
 debug = false

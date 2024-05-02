@@ -1,0 +1,179 @@
+[tasks.default]
+alias = "run"
+
+
+# ----------------- GET AFLR ----------------
+
+[tasks.build_aflr]
+cwd = "../"
+condition = { files_modified = { input = [
+  "${CARGO_MAKE_WORKING_DIRECTORY}/Cargo.toml",
+  "./src/**/*.rs",
+], output = [
+  "./target/**/myapp*",
+] } }
+command = "cargo"
+args = ["build", "--release"]
+
+
+# ----------------- GET CORPUS ----------------
+
+[tasks.get_corpus]
+condition = { files_not_exist = ["seed_corpus"] }
+script_runner = "@shell"
+script = """
+  mkdir seed_corpus && cd seed_corpus
+  wget -q https://raw.githubusercontent.com/antonio-morales/Fuzzing101/main/Exercise%205/SampleInput.xml
+"""
+
+# ----------------- GET DICTIONARY -------------
+
+[tasks.get_dict]
+condition = { files_not_exist = ["xml.dict"] }
+script_runner = "@shell"
+script = """
+  wget -q https://raw.githubusercontent.com/AFLplusplus/AFLplusplus/stable/dictionaries/xml.dict
+"""
+
+# ----------------- GET libxml2 -----------------
+
+[tasks.get_libxml2]
+condition = { files_not_exist = ["libxml2-2.10.0"] }
+description = "Download and extract libxml2 2.10.0"
+script_runner = "@shell"
+script = """
+  wget https://github.com/GNOME/libxml2/archive/refs/tags/v2.10.0.tar.gz
+  tar -xzvf v2.10.0.tar.gz
+  rm -rf v2.10.0.tar.gz
+"""
+
+# ----------------- BUILD libxml2 -----------------
+
+[tasks.is_tooling_installed]
+description = "Check if compile tooling is installed"
+script_runner = "@shell"
+script = """
+commands="clang afl-clang-lto afl-clang-lto++ afl-clang-fast afl-clang-fast++ make autoconf"
+for cmd in $commands; do
+  if ! command -v "$cmd" > /dev/null 2>&1; then
+    echo "[!] Necessary command \"$cmd\" could not be found"
+    exit 1
+  fi
+done
+exit 0 
+"""
+
+[tasks.build_libxml2]
+description = "Build libxml2/xmllint in all 4 versions"
+dependencies = [
+  "get_libxml2",
+  "is_tooling_installed",
+  "build_libxml2_instrumented",
+  "build_libxml2_sanitized",
+  "build_libxml2_cmplog",
+  "build_libxml2_cmpcov",
+]
+
+[tasks.build_libxml2_instrumented]
+description = "Build libxml2 with plain AFL++ instrumentation"
+condition = { files_not_exist = ["../xmllint_instr"] }
+dependencies = ["get_libxml2"]
+cwd = "libxml2-2.10.0/"
+script_runner = "@shell"
+script = """
+  if [ -f Makefile ]; then
+    make clean
+  fi
+  autoreconf -fvi
+  ./configure --disable-shared --prefix="$(pwd)/install" --without-ftp --without-http --without-legacy --without-python
+  make -j$(nproc)
+  make install
+  mv install/bin/xmllint ../xmllint_instr
+"""
+
+[tasks.build_libxml2_instrumented.env]
+CC = "afl-clang-fast"
+
+[tasks.build_libxml2_sanitized]
+description = "Build libxml2 with plain AFL++ instrumentation"
+condition = { files_not_exist = ["../xmllint_san"] }
+dependencies = ["get_libxml2"]
+cwd = "libxml2-2.10.0/"
+script_runner = "@shell"
+script = """
+  if [ -f Makefile ]; then
+    make clean
+  fi
+  autoreconf -fvi
+  ./configure --disable-shared --prefix="$(pwd)/install" --without-ftp --without-http --without-legacy --without-python
+  make -j$(nproc)
+  make install
+  mv install/bin/xmllint ../xmllint_san
+"""
+
+[tasks.build_libxml2_sanitized.env]
+CC = "afl-clang-fast"
+AFL_USE_ASAN = "1"
+AFL_USE_UBSAN = "1"
+AFL_USE_CFISAN = "1"
+
+[tasks.build_libxml2_cmplog]
+description = "Build libxml2 with cmplog AFL++ instrumentation"
+condition = { files_not_exist = ["../xmllint_cmplog"] }
+dependencies = ["get_libxml2"]
+cwd = "libxml2-2.10.0/"
+script_runner = "@shell"
+script = """
+  if [ -f Makefile ]; then
+    make clean
+  fi
+  autoreconf -fvi
+  ./configure --disable-shared --prefix="$(pwd)/install" --without-ftp --without-http --without-legacy --without-python
+  make -j$(nproc)
+  make install
+  mv install/bin/xmllint ../xmllint_cmplog
+"""
+
+[tasks.build_libxml2_cmplog.env]
+CC = "afl-clang-fast"
+AFL_LLVM_CMPLOG = "1"
+
+[tasks.build_libxml2_cmpcov]
+description = "Build libxml2 with cmpcov AFL++ instrumentation"
+condition = { files_not_exist = ["../xmllint_cmpcov"] }
+dependencies = ["get_libxml2"]
+cwd = "libxml2-2.10.0/"
+script_runner = "@shell"
+script = """
+  if [ -f Makefile ]; then
+    make clean
+  fi
+  autoreconf -fvi
+  ./configure --disable-shared --prefix="$(pwd)/install" --without-ftp --without-http --without-legacy --without-python
+  make -j$(nproc)
+  make install
+  mv install/bin/xmllint ../xmllint_cmpcov
+"""
+
+[tasks.build_libxml2_cmpcov.env]
+CC = "afl-clang-fast"
+AFL_LLVM_LAF_ALL = "1"
+
+
+# ----------------- RUN CAMPAIGN -----------------
+
+[tasks.run]
+dependencies = ["build_aflr", "build_libxml2", "get_corpus", "get_dict"]
+description = "Run aflr with the optimizal settings"
+script_runner = "@shell"
+script = """
+../target/release/aflr run --config aflr_config.toml
+"""
+
+[tasks.run_dry]
+dependencies = ["build_aflr", "build_libxml2", "get_corpus", "get_dict"]
+description = "Run aflr with the optimizal settings"
+script_runner = "@shell"
+script = """
+../target/release/aflr run --config aflr_config.toml --dry-run
+"""

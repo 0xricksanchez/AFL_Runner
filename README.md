@@ -13,8 +13,8 @@ Currently, this tool should work on all \*NIX flavor operating-systems.
 
 - [Rust (nightly) toolchain](https://www.rust-lang.org/tools/install) 🦀
 - [AFLPlusPlus](https://github.com/AFLplusplus/AFLplusplus)
+- [pgrep](https://man7.org/linux/man-pages/man1/pgrep.1.html)
 - [TMUX](https://github.com/tmux/tmux) || [screen](https://www.gnu.org/software/screen/) (Optional)
-- [pgrep](https://man7.org/linux/man-pages/man1/pgrep.1.html) (Optional)
 
 ### Installation
 
