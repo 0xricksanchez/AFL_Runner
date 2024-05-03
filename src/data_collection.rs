@@ -127,11 +127,8 @@ impl DataFetcher {
     }
 
     fn process_fuzzer_stats(&mut self, content: &str) {
-        let lines: Vec<&str> = content.lines().collect();
-        let mut start_time = None;
-        let mut last_find = None;
-
-        for line in &lines {
+        self.update_run_time();
+        for line in content.lines().collect::<Vec<&str>>() {
             let parts: Vec<&str> = line.split(':').map(str::trim).collect();
 
             if parts.len() == 2 {
@@ -139,29 +136,7 @@ impl DataFetcher {
                 let value = parts[1];
 
                 match key {
-                    "start_time" => start_time = Some(value.parse::<u64>().unwrap_or(0)),
-                    "last_find" => last_find = Some(value.parse::<u64>().unwrap_or(0)),
-                    _ => {}
-                }
-            }
-        }
-
-        if let Some(start_time) = start_time {
-            self.process_start_time(start_time);
-        }
-
-        if let Some(last_find) = last_find {
-            self.process_last_find(last_find);
-        }
-
-        for line in lines {
-            let parts: Vec<&str> = line.split(':').map(str::trim).collect();
-
-            if parts.len() == 2 {
-                let key = parts[0];
-                let value = parts[1];
-
-                match key {
+                    "last_find" => self.process_last_find(value),
                     "execs_per_sec" => self.process_execs_per_sec(value),
                     "execs_done" => self.process_execs_done(value),
                     "pending_favs" => self.process_pending_favs(value),
@@ -182,33 +157,19 @@ impl DataFetcher {
         }
     }
 
-    fn process_start_time(&mut self, start_time: u64) {
-        let current_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-
-        if current_time >= start_time {
-            let duration = Duration::from_secs(current_time - start_time);
+    fn update_run_time(&mut self) {
+        if let Ok(duration) = SystemTime::now().duration_since(self.campaign_data.start_time) {
             self.campaign_data.total_run_time = duration;
-        } else {
-            // Handle the case when start_time is in the future
-            self.campaign_data.total_run_time = Duration::default();
         }
     }
 
-    fn process_last_find(&mut self, last_find: u64) {
-        let current_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-
-        if current_time >= last_find {
-            let duration = Duration::from_secs(current_time - last_find);
-            self.campaign_data.time_without_finds = duration;
-        } else {
-            // Handle the case when last_find is in the future
-            self.campaign_data.time_without_finds = Duration::default();
+    fn process_last_find(&mut self, value: &str) {
+        let last_find = value.parse::<u64>().unwrap_or(0);
+        let last_find = UNIX_EPOCH + Duration::from_secs(last_find);
+        let current_time = SystemTime::now();
+        if let Ok(duration) = current_time.duration_since(last_find) {
+            self.campaign_data.time_without_finds =
+                self.campaign_data.time_without_finds.max(duration);
         }
     }
 
@@ -299,16 +260,6 @@ impl DataFetcher {
         self.campaign_data.hangs.min = self.campaign_data.hangs.min.min(saved_hangs).max(0);
         self.campaign_data.hangs.cum += saved_hangs;
     }
-
-    //fn process_last_find(&mut self, value: &str) {
-    //    let last_find = value.parse::<u64>().unwrap_or(0);
-    //    let last_find = UNIX_EPOCH + Duration::from_secs(last_find);
-    //    let current_time = SystemTime::now();
-    //    if let Ok(duration) = current_time.duration_since(last_find) {
-    //        self.campaign_data.time_without_finds =
-    //            self.campaign_data.time_without_finds.max(duration);
-    //    }
-    //}
 
     fn process_cycles_done(&mut self, value: &str) {
         let cycles_done = value.parse::<usize>().unwrap_or(0);
