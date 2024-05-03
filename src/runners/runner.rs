@@ -17,6 +17,7 @@ pub trait Runner {
     where
         Self: Sized;
     fn create_bash_script(&self) -> Result<String, anyhow::Error>;
+    fn is_present(&self) -> bool;
     fn kill_session(&self) -> Result<(), anyhow::Error>;
     fn attach(&self) -> Result<(), anyhow::Error>;
     fn run(&self) -> Result<(), anyhow::Error>;

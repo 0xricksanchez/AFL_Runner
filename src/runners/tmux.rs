@@ -22,6 +22,14 @@ impl Runner for Tmux {
         self.inner.create_bash_script(TMUX_TEMPLATE)
     }
 
+    fn is_present(&self) -> bool {
+        let output = Command::new("tmux")
+            .args(["has-session", "-t", &self.inner.name])
+            .output()
+            .unwrap();
+        output.status.success()
+    }
+
     fn kill_session(&self) -> Result<()> {
         let mut cmd = Command::new("tmux");
         cmd.arg("kill-session")

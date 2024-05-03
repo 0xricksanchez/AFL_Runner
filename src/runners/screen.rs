@@ -18,6 +18,21 @@ impl Runner for Screen {
         }
     }
 
+    fn is_present(&self) -> bool {
+        let output = Command::new("screen")
+            .args(["-list", &self.inner.name])
+            .output()
+            .unwrap();
+        if !output.status.success() {
+            return false;
+        }
+        if let Ok(output) = String::from_utf8(output.stdout) {
+            output.contains(&self.inner.name)
+        } else {
+            false
+        }
+    }
+
     fn create_bash_script(&self) -> Result<String> {
         self.inner.create_bash_script(SCREEN_TEMPLATE)
     }
@@ -27,7 +42,7 @@ impl Runner for Screen {
         cmd.arg("-S")
             .arg(&self.inner.name)
             .arg("-X")
-            .arg("quit")
+            .arg("kill")
             .stdout(Stdio::null())
             .stderr(Stdio::null());
         Session::run_command(cmd)

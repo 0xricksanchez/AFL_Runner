@@ -28,6 +28,8 @@ pub enum Commands {
     Run(RunArgs),
     /// Show stats TUI for a running campaign
     Tui(TuiArgs),
+    /// Kills a running session and all spawned processes inside
+    Kill(KillArgs),
 }
 
 /// Arguments for the `tui` subcommand
@@ -362,4 +364,11 @@ pub struct MiscConfig {
     pub tui: Option<bool>,
     /// Enabled detached mode
     pub detached: Option<bool>,
+}
+
+/// Arguments for the `kill` subcommand
+#[derive(Args, Clone, Debug, Default)]
+pub struct KillArgs {
+    /// Session name to kill
+    pub session_name: Option<String>,
 }

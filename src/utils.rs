@@ -16,6 +16,8 @@ use crate::cli::RunArgs;
 use crate::cli::AFL_CORPUS;
 use crate::harness::Harness;
 
+pub static DEFAULT_AFL_CONFIG: &str = "aflr_cfg.toml";
+
 /// Creates a new `Harness` instance based on the provided `GenArgs`.
 ///
 /// # Errors
@@ -34,7 +36,7 @@ pub fn create_harness(args: &GenArgs) -> Result<Harness> {
     ))
 }
 
-/// Generates a unique tmux session name based on the provided `RunArgs` and `target_args`.
+/// Generates a unique session name based on the provided `RunArgs` and `target_args`.
 ///
 /// If the `session_name` is not specified in `RunArgs`, the function generates a unique name
 /// by combining the target binary name, input directory name, and a hash of the `target_args`.
@@ -84,7 +86,7 @@ pub fn load_config(config_path: Option<&PathBuf>) -> Result<Config> {
             .with_context(|| format!("Failed to parse config file: {}", path.display()))
     } else {
         let cwd = env::current_dir().context("Failed to get current directory")?;
-        let default_config_path = cwd.join("aflr_cfg.toml");
+        let default_config_path = cwd.join(DEFAULT_AFL_CONFIG);
         if default_config_path.exists() {
             let config_content = fs::read_to_string(&default_config_path).with_context(|| {
                 format!(
@@ -99,7 +101,7 @@ pub fn load_config(config_path: Option<&PathBuf>) -> Result<Config> {
                 )
             })
         } else {
-            Ok(Config::default())
+            bail!("No config file provided and no default configuration file in CWD found")
         }
     }
 }

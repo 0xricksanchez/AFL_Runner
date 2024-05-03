@@ -26,14 +26,19 @@ fn main() -> Result<()> {
         Commands::Gen(gen_args) => handle_gen_command(&gen_args)?,
         Commands::Run(run_args) => handle_run_command(&run_args)?,
         Commands::Tui(tui_args) => handle_tui_command(&tui_args)?,
+        Commands::Kill(kill_args) => handle_kill_command(&kill_args)?,
     }
     Ok(())
 }
 
 fn handle_gen_command(gen_args: &cli::GenArgs) -> Result<()> {
-    let config_args = load_config(gen_args.config.as_ref())?;
-    let raw_afl_flags = config_args.afl_cfg.afl_flags.clone();
-    let merged_args = gen_args.merge(&config_args);
+    let (merged_args, raw_afl_flags) = if gen_args.config.is_some() {
+        let config_args = load_config(gen_args.config.as_ref())?;
+        let raw_afl_flags = config_args.afl_cfg.afl_flags.clone();
+        (gen_args.merge(&config_args), raw_afl_flags)
+    } else {
+        (gen_args.clone(), None)
+    };
     let harness = create_harness(&merged_args)?;
     let mut afl_runner = AFLCmdGenerator::new(
         harness,
@@ -56,9 +61,13 @@ fn handle_gen_command(gen_args: &cli::GenArgs) -> Result<()> {
 }
 
 fn handle_run_command(run_args: &cli::RunArgs) -> Result<()> {
-    let config_args = load_config(run_args.gen_args.config.as_ref())?;
-    let raw_afl_flags = config_args.afl_cfg.afl_flags.clone();
-    let merged_args = run_args.merge(&config_args);
+    let (merged_args, raw_afl_flags) = if run_args.gen_args.config.is_some() {
+        let config_args = load_config(run_args.gen_args.config.as_ref())?;
+        let raw_afl_flags = config_args.afl_cfg.afl_flags.clone();
+        (run_args.merge(&config_args), raw_afl_flags)
+    } else {
+        (run_args.clone(), None)
+    };
     if merged_args.tui && merged_args.detached {
         bail!("TUI and detached mode cannot be used together");
     }
@@ -134,5 +143,39 @@ fn validate_tui_output_dir(output_dir: &Path) -> Result<()> {
             }
         }
     }
+    Ok(())
+}
+
+fn handle_kill_command(kill_args: &cli::KillArgs) -> Result<()> {
+    // TODO: Add means to kill the session based on --config or AFLR_DEFAULT_CONFIG
+    if kill_args.session_name.is_none() {
+        bail!("Session name is required for kill command");
+    } else if kill_args.session_name.is_some() {
+        let tmux = Tmux::new(
+            kill_args.session_name.as_ref().unwrap(),
+            &[],
+            Path::new("/tmp/foobar"),
+        );
+        if tmux.is_present() {
+            println!(
+                "[+] Found TMUX session: {}. Terminating it...",
+                kill_args.session_name.as_ref().unwrap()
+            );
+            tmux.kill_session()?;
+        }
+        let screen = Screen::new(
+            kill_args.session_name.as_ref().unwrap(),
+            &[],
+            Path::new("/tmp/foobar"),
+        );
+        if screen.is_present() {
+            println!(
+                "[+] Found SCREEN session: {}. Terminating it...",
+                kill_args.session_name.as_ref().unwrap()
+            );
+            screen.kill_session()?;
+        }
+    }
+
     Ok(())
 }
