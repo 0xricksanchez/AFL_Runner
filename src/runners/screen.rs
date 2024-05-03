@@ -26,11 +26,7 @@ impl Runner for Screen {
         if !output.status.success() {
             return false;
         }
-        if let Ok(output) = String::from_utf8(output.stdout) {
-            output.contains(&self.inner.name)
-        } else {
-            false
-        }
+        String::from_utf8(output.stdout).map_or(false, |output| output.contains(&self.inner.name))
     }
 
     fn create_bash_script(&self) -> Result<String> {

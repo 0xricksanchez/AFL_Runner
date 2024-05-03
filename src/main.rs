@@ -31,64 +31,66 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn handle_gen_command(gen_args: &cli::GenArgs) -> Result<()> {
-    let (merged_args, raw_afl_flags) = if gen_args.config.is_some() {
+fn load_merged_gen_args_and_flags(
+    gen_args: &cli::GenArgs,
+) -> Result<(cli::GenArgs, Option<String>)> {
+    if gen_args.config.is_some() {
         let config_args = load_config(gen_args.config.as_ref())?;
         let raw_afl_flags = config_args.afl_cfg.afl_flags.clone();
-        (gen_args.merge(&config_args), raw_afl_flags)
+        Ok((gen_args.merge(&config_args), raw_afl_flags))
     } else {
-        (gen_args.clone(), None)
-    };
-    let harness = create_harness(&merged_args)?;
-    let mut afl_runner = AFLCmdGenerator::new(
+        Ok((gen_args.clone(), None))
+    }
+}
+
+fn load_merged_run_args_and_flags(
+    run_args: &cli::RunArgs,
+) -> Result<(cli::RunArgs, Option<String>)> {
+    if run_args.gen_args.config.is_some() {
+        let config_args = load_config(run_args.gen_args.config.as_ref())?;
+        let raw_afl_flags = config_args.afl_cfg.afl_flags.clone();
+        Ok((run_args.merge(&config_args), raw_afl_flags))
+    } else {
+        Ok((run_args.clone(), None))
+    }
+}
+
+fn create_afl_runner(
+    gen_args: &cli::GenArgs,
+    raw_afl_flags: Option<String>,
+) -> Result<AFLCmdGenerator> {
+    let harness = create_harness(gen_args)?;
+    Ok(AFLCmdGenerator::new(
         harness,
-        merged_args.runners.unwrap_or(1),
-        merged_args
+        gen_args.runners.unwrap_or(1),
+        gen_args
             .input_dir
             .clone()
             .unwrap_or_else(|| Path::new(AFL_CORPUS).to_path_buf()),
-        merged_args
+        gen_args
             .output_dir
             .clone()
             .unwrap_or_else(|| Path::new("/tmp/afl_output").to_path_buf()),
-        merged_args.dictionary.clone(),
+        gen_args.dictionary.clone(),
         raw_afl_flags,
-        merged_args.afl_binary,
-    );
+        gen_args.afl_binary.clone(),
+    ))
+}
+
+fn handle_gen_command(gen_args: &cli::GenArgs) -> Result<()> {
+    let (merged_args, raw_afl_flags) = load_merged_gen_args_and_flags(gen_args)?;
+    let mut afl_runner = create_afl_runner(&merged_args, raw_afl_flags)?;
     let cmds = afl_runner.generate_afl_commands()?;
     utils::print_generated_commands(&cmds);
     Ok(())
 }
 
 fn handle_run_command(run_args: &cli::RunArgs) -> Result<()> {
-    let (merged_args, raw_afl_flags) = if run_args.gen_args.config.is_some() {
-        let config_args = load_config(run_args.gen_args.config.as_ref())?;
-        let raw_afl_flags = config_args.afl_cfg.afl_flags.clone();
-        (run_args.merge(&config_args), raw_afl_flags)
-    } else {
-        (run_args.clone(), None)
-    };
+    let (merged_args, raw_afl_flags) = load_merged_run_args_and_flags(run_args)?;
     if merged_args.tui && merged_args.detached {
         bail!("TUI and detached mode cannot be used together");
     }
-    let harness = create_harness(&merged_args.gen_args)?;
-    let mut afl_runner = AFLCmdGenerator::new(
-        harness,
-        merged_args.gen_args.runners.unwrap_or(1),
-        merged_args
-            .gen_args
-            .input_dir
-            .clone()
-            .unwrap_or_else(|| Path::new(AFL_CORPUS).to_path_buf()),
-        merged_args
-            .gen_args
-            .output_dir
-            .clone()
-            .unwrap_or_else(|| Path::new("/tmp/afl_output").to_path_buf()),
-        merged_args.gen_args.dictionary.clone(),
-        raw_afl_flags,
-        merged_args.gen_args.afl_binary.clone(),
-    );
+    let mut afl_runner = create_afl_runner(&merged_args.gen_args, raw_afl_flags)?;
     let afl_cmds = afl_runner.generate_afl_commands()?;
     if merged_args.dry_run {
         utils::print_generated_commands(&afl_cmds);
