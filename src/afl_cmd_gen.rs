@@ -373,7 +373,7 @@ impl AFLCmdGenerator {
 
         for (i, cmd) in cmds[1..].iter_mut().enumerate() {
             let suffix = if cmd.misc_afl_flags.iter().any(|f| f.contains("-c")) {
-                format!("_{target_fname}+cmplog")
+                format!("_{target_fname}_cmplog")
             } else {
                 format!("_{target_fname}")
             };
@@ -504,6 +504,5 @@ impl AFLCmdGenerator {
                 cmds[i].target_binary.clone_from(cmpcov_binary);
             }
         }
-        println!("cmpcov_idxs: {:?}", self.cmpcov_idxs);
     }
 }
