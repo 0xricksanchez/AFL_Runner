@@ -10,7 +10,6 @@ use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
 
-use crate::afl_cmd_gen::AFLCmdGenerator;
 use crate::cli::Config;
 use crate::cli::GenArgs;
 use crate::cli::RunArgs;
@@ -33,30 +32,6 @@ pub fn create_harness(args: &GenArgs) -> Result<Harness> {
         args.cmpc_target.clone(),
         args.target_args.clone().map(|args| args.join(" ")),
     ))
-}
-
-/// Creates a new `AFLCmdGenerator` instance based on the provided `GenArgs` and `Harness`.
-///
-/// If the input directory is not specified, it defaults to `AFL_CORPUS`.
-/// If the output directory is not specified, it defaults to `/tmp/afl_output`.
-pub fn create_afl_runner(
-    args: &GenArgs,
-    harness: Harness,
-    raw_afl_flags: Option<String>,
-) -> AFLCmdGenerator {
-    AFLCmdGenerator::new(
-        harness,
-        args.runners.unwrap_or(1),
-        args.input_dir
-            .clone()
-            .unwrap_or_else(|| PathBuf::from(AFL_CORPUS)),
-        args.output_dir
-            .clone()
-            .unwrap_or_else(|| PathBuf::from("/tmp/afl_output")),
-        args.dictionary.clone(),
-        raw_afl_flags,
-        args.afl_binary.clone(),
-    )
 }
 
 /// Generates a unique tmux session name based on the provided `RunArgs` and `target_args`.

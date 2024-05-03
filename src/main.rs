@@ -12,13 +12,13 @@ mod data_collection;
 mod harness;
 mod runners;
 mod session;
-use crate::runners::runner::Runner;
-use crate::runners::screen::Screen;
 use crate::runners::tmux::Tmux;
+use crate::{afl_cmd_gen::AFLCmdGenerator, runners::runner::Runner};
+use crate::{cli::AFL_CORPUS, runners::screen::Screen};
 mod tui;
 mod utils;
 
-use utils::{create_afl_runner, create_harness, generate_session_name, load_config};
+use utils::{create_harness, generate_session_name, load_config};
 
 fn main() -> Result<()> {
     let cli_args = Cli::parse();
@@ -35,7 +35,21 @@ fn handle_gen_command(gen_args: &cli::GenArgs) -> Result<()> {
     let raw_afl_flags = config_args.afl_cfg.afl_flags.clone();
     let merged_args = gen_args.merge(&config_args);
     let harness = create_harness(&merged_args)?;
-    let afl_runner = create_afl_runner(&merged_args, harness, raw_afl_flags);
+    let mut afl_runner = AFLCmdGenerator::new(
+        harness,
+        merged_args.runners.unwrap_or(1),
+        merged_args
+            .input_dir
+            .clone()
+            .unwrap_or_else(|| Path::new(AFL_CORPUS).to_path_buf()),
+        merged_args
+            .output_dir
+            .clone()
+            .unwrap_or_else(|| Path::new("/tmp/afl_output").to_path_buf()),
+        merged_args.dictionary.clone(),
+        raw_afl_flags,
+        merged_args.afl_binary,
+    );
     let cmds = afl_runner.generate_afl_commands()?;
     utils::print_generated_commands(&cmds);
     Ok(())
@@ -49,7 +63,23 @@ fn handle_run_command(run_args: &cli::RunArgs) -> Result<()> {
         bail!("TUI and detached mode cannot be used together");
     }
     let harness = create_harness(&merged_args.gen_args)?;
-    let afl_runner = create_afl_runner(&merged_args.gen_args, harness, raw_afl_flags);
+    let mut afl_runner = AFLCmdGenerator::new(
+        harness,
+        merged_args.gen_args.runners.unwrap_or(1),
+        merged_args
+            .gen_args
+            .input_dir
+            .clone()
+            .unwrap_or_else(|| Path::new(AFL_CORPUS).to_path_buf()),
+        merged_args
+            .gen_args
+            .output_dir
+            .clone()
+            .unwrap_or_else(|| Path::new("/tmp/afl_output").to_path_buf()),
+        merged_args.gen_args.dictionary.clone(),
+        raw_afl_flags,
+        merged_args.gen_args.afl_binary.clone(),
+    );
     let afl_cmds = afl_runner.generate_afl_commands()?;
     if merged_args.dry_run {
         utils::print_generated_commands(&afl_cmds);

@@ -19,7 +19,7 @@ rand = "0.8.5"
 sysinfo = "0.30.11"
 upon = "0.8.1"
 toml = "0.8.12"
-serde = { version = "1.0.199", features = ["derive"] }
+serde = { version = "1.0.200", features = ["derive"] }
 ratatui = { version = "0.26.2", features = ["crossterm", "all-widgets"] }
 crossterm = "0.27.0"
 
@@ -30,7 +30,7 @@ cargo-make = "0.37.11"
 members = ["examples"]
 
 [workspace.metadata.make]
-default = "default"
+default = "run"
 working-directory = "examples"
 
 [profile.release]
