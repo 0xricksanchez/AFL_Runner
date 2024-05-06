@@ -30,7 +30,7 @@ pub struct CampaignData {
     pub crashes: Solutions,
     pub hangs: Solutions,
     pub levels: Levels,
-    pub time_without_finds: Duration,
+    pub time_without_finds: TimeWOFinds,
     pub last_crashes: Vec<CrashInfoDetails>,
     pub last_hangs: Vec<CrashInfoDetails>,
     pub misc: Misc,
@@ -53,7 +53,7 @@ impl Default for CampaignData {
             crashes: Solutions::default(),
             hangs: Solutions::default(),
             levels: Levels::default(),
-            time_without_finds: Duration::from_secs(0),
+            time_without_finds: TimeWOFinds::default(),
             last_crashes: Vec::with_capacity(10),
             last_hangs: Vec::with_capacity(10),
             misc: Misc::default(),
@@ -73,10 +73,17 @@ impl CampaignData {
         self.crashes = Solutions::default();
         self.hangs = Solutions::default();
         self.levels = Levels::default();
-        self.time_without_finds = Duration::from_secs(0);
+        self.time_without_finds = TimeWOFinds::default();
         self.last_crashes.clear();
         self.last_hangs.clear();
     }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct TimeWOFinds {
+    pub avg: usize,
+    pub min: usize,
+    pub max: usize,
 }
 
 #[derive(Default, Debug, Clone)]

@@ -58,7 +58,7 @@ impl Tui {
         if let Err(e) = Self::new().and_then(|mut tui| tui.run_internal(&session_data_rx)) {
             bail!("Error running TUI: {e}");
         }
-        println!("Campaign data: {:?}", session_data_rx.recv().unwrap());
+        //println!("Campaign data: {:?}", session_data_rx.recv().unwrap());
         Ok(())
     }
 
@@ -254,8 +254,10 @@ impl Tui {
                 Self::format_duration(session_data.total_run_time)
             )),
             Line::from(format!(
-                "Time without finds: {}",
-                Self::format_duration(session_data.time_without_finds)
+                "Time without finds: {}s ({}s/{}s)",
+                session_data.time_without_finds.avg,
+                session_data.time_without_finds.min,
+                session_data.time_without_finds.max,
             )),
             Line::from(format!("Last saved crash: {last_seen_crash}")),
             Line::from(format!("Last saved hang: {last_seen_hang}")),
@@ -307,10 +309,10 @@ impl Tui {
             )),
             Line::from(format!(
                 "Corpus count: {} ({}->{}->{})",
-                session_data.corpus.cum,
-                session_data.corpus.min,
-                session_data.corpus.avg,
-                session_data.corpus.max,
+                Self::format_int_to_hint(session_data.corpus.cum),
+                Self::format_int_to_hint(session_data.corpus.min),
+                Self::format_int_to_hint(session_data.corpus.avg),
+                Self::format_int_to_hint(session_data.corpus.max),
             )),
             Line::from(vec![
                 Span::raw("Stability: "),
@@ -366,30 +368,30 @@ impl Tui {
         let text = vec![
             Line::from(format!(
                 "Execs: {} ({}->{}<-{})",
-                session_data.executions.cum,
-                session_data.executions.min,
-                session_data.executions.avg,
-                session_data.executions.max,
+                Self::format_int_to_hint(session_data.executions.cum),
+                Self::format_int_to_hint(session_data.executions.min),
+                Self::format_int_to_hint(session_data.executions.avg),
+                Self::format_int_to_hint(session_data.executions.max),
             )),
             Line::from(vec![
                 Span::raw("Execs/s: "),
                 Span::styled(
-                    format!("{:.2}", session_data.executions.ps_cum),
+                    Self::format_float_to_hfloat(session_data.executions.ps_cum),
                     ps_cum_style,
                 ),
                 Span::raw(" ("),
                 Span::styled(
-                    format!("{:.2}", session_data.executions.ps_min),
+                    Self::format_float_to_hfloat(session_data.executions.ps_min),
                     ps_min_style,
                 ),
                 Span::raw("->"),
                 Span::styled(
-                    format!("{:.2}", session_data.executions.ps_avg),
+                    Self::format_float_to_hfloat(session_data.executions.ps_avg),
                     ps_avg_style,
                 ),
                 Span::raw("<-"),
                 Span::styled(
-                    format!("{:.2}", session_data.executions.ps_max),
+                    Self::format_float_to_hfloat(session_data.executions.ps_max),
                     ps_max_style,
                 ),
                 Span::raw(")"),
@@ -421,14 +423,14 @@ Cycles without finds: {} ({}/{})",
             session_data.levels.avg,
             session_data.levels.min,
             session_data.levels.max,
-            session_data.pending.favorites_cum,
-            session_data.pending.favorites_min,
-            session_data.pending.favorites_avg,
-            session_data.pending.favorites_max,
-            session_data.pending.total_cum,
-            session_data.pending.total_min,
-            session_data.pending.total_avg,
-            session_data.pending.total_max,
+            Self::format_int_to_hint(session_data.pending.favorites_cum),
+            Self::format_int_to_hint(session_data.pending.favorites_min),
+            Self::format_int_to_hint(session_data.pending.favorites_avg),
+            Self::format_int_to_hint(session_data.pending.favorites_max),
+            Self::format_int_to_hint(session_data.pending.total_cum),
+            Self::format_int_to_hint(session_data.pending.total_min),
+            Self::format_int_to_hint(session_data.pending.total_avg),
+            Self::format_int_to_hint(session_data.pending.total_max),
             session_data.cycles.wo_finds_avg,
             session_data.cycles.wo_finds_min,
             session_data.cycles.wo_finds_max
@@ -443,6 +445,38 @@ Cycles without finds: {} ({}/{})",
                     .title_style(Style::default().add_modifier(Modifier::BOLD)),
             )
             .style(Style::default())
+    }
+
+    /// Format a floating-point number in a more human readable representation
+    fn format_float_to_hfloat(float_num: f64) -> String {
+        if float_num < 1000.0 {
+            format!("{float_num:.2}")
+        } else if float_num < 1_000_000.0 {
+            format!("{:.2}K", float_num / 1000.0)
+        } else if float_num < 1_000_000_000.0 {
+            format!("{:.2}M", float_num / 1_000_000.0)
+        } else if float_num < 1_000_000_000_000.0 {
+            format!("{:.2}B", float_num / 1_000_000_000.0)
+        } else {
+            format!("{:.2}T", float_num / 1_000_000_000_000.0)
+        }
+    }
+
+    /// Format a integer in a more human readable representation
+    // TODO: Merge with format_float_to_hfloat
+    // TODO: Fix the clippy warnings regarding f64 conversion
+    fn format_int_to_hint(int_num: usize) -> String {
+        if int_num < 1000 {
+            format!("{int_num}")
+        } else if int_num < 1_000_000 {
+            format!("{:.2}K", int_num as f64 / 1000.0)
+        } else if int_num < 1_000_000_000 {
+            format!("{:.2}M", int_num as f64 / 1_000_000.0)
+        } else if int_num < 1_000_000_000_000 {
+            format!("{:.2}B", int_num as f64 / 1_000_000_000.0)
+        } else {
+            format!("{:.2}T", int_num as f64 / 1_000_000_000_000.0)
+        }
     }
 
     /// Formats the last event duration
@@ -525,7 +559,7 @@ Cycles without finds: {} ({}/{})",
                     fuzzer_name,
                     s.sig.clone().unwrap_or_else(|| "-".to_string()),
                     Self::format_solution_time(total_run_time, s.time),
-                    s.execs,
+                    Self::format_int_to_hint(usize::try_from(s.execs).unwrap_or(0)),
                     src,
                     s.op,
                     s.rep,
@@ -538,7 +572,7 @@ Cycles without finds: {} ({}/{})",
         format!("{header}\n{separator}\n{rows}")
     }
 
-    /// Formats a duration into a string
+    /// Formats a duration into a string based on days, hours, minutes, and seconds
     fn format_duration(duration: Duration) -> String {
         let mut secs = duration.as_secs();
         let days = secs / 86400;

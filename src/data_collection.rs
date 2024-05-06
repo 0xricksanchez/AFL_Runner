@@ -172,7 +172,7 @@ impl DataFetcher {
 
                 match key {
                     "run_time" => self.process_run_time(value),
-                    "last_find" => self.process_last_find(value),
+                    "time_wo_finds" => self.process_time_wo_finds(value),
                     "execs_per_sec" => self.process_execs_per_sec(value),
                     "execs_done" => self.process_execs_done(value),
                     "pending_favs" => self.process_pending_favs(value),
@@ -193,12 +193,17 @@ impl DataFetcher {
         }
     }
 
-    fn process_last_find(&mut self, value: &str) {
-        let last_find = value.parse::<u64>().unwrap_or(0);
-        let instant = Instant::now()
-            .checked_sub(Duration::from_millis(last_find))
-            .unwrap();
-        self.campaign_data.time_without_finds = instant.elapsed();
+    fn process_time_wo_finds(&mut self, value: &str) {
+        let twof = value.parse::<usize>().unwrap_or(0);
+        self.campaign_data.time_without_finds.max =
+            self.campaign_data.time_without_finds.max.max(twof);
+
+        if self.campaign_data.time_without_finds.min == 0 {
+            self.campaign_data.time_without_finds.min = twof;
+        } else {
+            self.campaign_data.time_without_finds.min =
+                self.campaign_data.time_without_finds.min.min(twof);
+        }
     }
 
     fn update_run_time(&mut self) {
@@ -406,6 +411,10 @@ impl DataFetcher {
             (self.campaign_data.cycles.wo_finds_min + self.campaign_data.cycles.wo_finds_max) / 2;
         self.campaign_data.levels.avg =
             (self.campaign_data.levels.min + self.campaign_data.levels.max) / 2;
+
+        self.campaign_data.time_without_finds.avg = (self.campaign_data.time_without_finds.min
+            + self.campaign_data.time_without_finds.max)
+            / 2;
     }
 
     /// Collects information about the latest crashes and hangs from the output directory
