@@ -10,6 +10,7 @@ use rand::Rng;
 use sysinfo::System;
 
 /// Represents an AFL command
+#[derive(Debug)]
 pub struct AflCmd {
     /// Path to the AFL binary
     pub afl_binary: PathBuf,
@@ -265,7 +266,11 @@ impl AFLCmdGenerator {
         for cmd in &mut cmds {
             let to_apply = afl_env_vars
                 .iter()
-                .filter(|env| !cmd.env.iter().any(|e| e.starts_with(*env)))
+                .filter(|env| {
+                    !cmd.env
+                        .iter()
+                        .any(|e| e.split('=').next().unwrap() == env.split('=').next().unwrap())
+                })
                 .cloned()
                 .collect::<Vec<String>>();
             cmd.extend_env(to_apply, true);
