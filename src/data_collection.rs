@@ -142,14 +142,14 @@ impl DataFetcher {
     fn process_fuzzer_stats(&mut self, content: &str) {
         let mut is_alive = false;
 
-        for line in content.lines().collect::<Vec<&str>>() {
+        for line in content.lines() {
             let parts: Vec<&str> = line.split(':').map(str::trim).collect();
 
             if parts.len() == 2 {
                 let key = parts[0];
                 let value = parts[1];
 
-                if let "fuzzer_pid" = key {
+                if key == "fuzzer_pid" {
                     let pid = value.parse::<usize>().unwrap_or(0);
                     if self.campaign_data.fuzzers_alive.contains(&pid) {
                         is_alive = true;
@@ -163,7 +163,7 @@ impl DataFetcher {
         }
 
         self.update_run_time();
-        for line in content.lines().collect::<Vec<&str>>() {
+        for line in content.lines() {
             let parts: Vec<&str> = line.split(':').map(str::trim).collect();
 
             if parts.len() == 2 {
@@ -171,7 +171,6 @@ impl DataFetcher {
                 let value = parts[1];
 
                 match key {
-                    //"start_time" => self.process_start_time(value),
                     "run_time" => self.process_run_time(value),
                     "last_find" => self.process_last_find(value),
                     "execs_per_sec" => self.process_execs_per_sec(value),
@@ -196,7 +195,9 @@ impl DataFetcher {
 
     fn process_last_find(&mut self, value: &str) {
         let last_find = value.parse::<u64>().unwrap_or(0);
-        let instant = Instant::now() - Duration::from_millis(last_find);
+        let instant = Instant::now()
+            .checked_sub(Duration::from_millis(last_find))
+            .unwrap();
         self.campaign_data.time_without_finds = instant.elapsed();
     }
 
@@ -216,7 +217,7 @@ impl DataFetcher {
                 // written, it's written roughly every minute
                 // https://github.com/AFLplusplus/AFLplusplus/blob/ad0d0c77fb313e6edfee111fecf2bcd16d8f915e/src/afl-fuzz-stats.c#L745
                 let duration = Duration::from_secs(run_time + 75);
-                let start_time = Instant::now() - duration;
+                let start_time = Instant::now().checked_sub(duration).unwrap();
                 self.campaign_data.start_time = Some(start_time);
                 self.campaign_data.total_run_time = duration;
             }

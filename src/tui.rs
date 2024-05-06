@@ -451,11 +451,7 @@ Cycles without finds: {} ({}/{})",
             "N/A".to_string()
         } else {
             let event_time = (*total_run_time).checked_sub(Duration::from_millis(events[0].time));
-            if let Some(etime) = event_time {
-                Self::format_duration(etime)
-            } else {
-                "N/A".to_string()
-            }
+            event_time.map_or_else(|| "N/A".to_string(), Self::format_duration)
         }
     }
 
