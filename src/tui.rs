@@ -90,49 +90,102 @@ impl Tui {
         Ok(())
     }
 
-    /// Draws the TUI with the specified session data
-    fn draw(&mut self, session_data: &CampaignData) -> io::Result<()> {
-        self.terminal.draw(|f| {
-            let chunks = Self::create_layout(f.size());
-            Self::render_title(f, session_data, chunks[0]);
-            Self::render_process_timings_and_overall_results(f, session_data, chunks[1]);
-            Self::render_stage_progress_and_nerd_stats(f, session_data, chunks[2]);
-            Self::render_crash_solutions(f, session_data, chunks[3]);
-            Self::render_hang_solutions(f, session_data, chunks[4]);
-        })?;
-        Ok(())
-    }
-
     /// Creates the layout for the TUI
-    fn create_layout(size: Rect) -> Vec<Rect> {
+    fn create_layout(size: Rect, show_crashes: bool, show_hangs: bool) -> Vec<Rect> {
         let main_layout = Layout::default()
             .direction(Direction::Vertical)
             .margin(1)
             .constraints([Constraint::Length(1), Constraint::Min(0)].as_ref())
             .split(size);
 
+        let mut constraints = vec![
+            Constraint::Length(7), // Process timings and Overall results
+            Constraint::Length(6), // Stage progress and Nerd stats
+        ];
+
+        if show_crashes {
+            constraints.push(Constraint::Length(14)); // Latest crashes
+        }
+        if show_hangs {
+            constraints.push(Constraint::Length(14)); // Latest hangs
+        }
+
+        constraints.push(Constraint::Min(10)); // Logs (at least 10 lines)
+
         let inner_layout = Layout::default()
             .direction(Direction::Vertical)
             .margin(1)
-            .constraints(
-                [
-                    Constraint::Percentage(15),
-                    Constraint::Percentage(10),
-                    Constraint::Percentage(30),
-                    Constraint::Percentage(30),
-                ]
-                .as_ref(),
-            )
+            .constraints(&constraints)
             .split(main_layout[1]);
 
-        [
-            main_layout[0],
-            inner_layout[0],
-            inner_layout[1],
-            inner_layout[2],
-            inner_layout[3],
-        ]
-        .to_vec()
+        let mut chunks = vec![main_layout[0]];
+        chunks.extend_from_slice(&inner_layout);
+
+        chunks
+    }
+
+    /// Draws the TUI with the specified session data
+    fn draw(&mut self, session_data: &CampaignData) -> io::Result<()> {
+        self.terminal.draw(|f| {
+            let show_crashes = f.size().height >= 16;
+            let show_hangs = f.size().height >= 30;
+
+            let chunks = Self::create_layout(f.size(), show_crashes, show_hangs);
+
+            Self::render_title(f, session_data, chunks[0]);
+
+            let process_overall_layout = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
+                .split(chunks[1]);
+            Self::render_process_timings(f, session_data, process_overall_layout[0]);
+            Self::render_overall_results(f, session_data, process_overall_layout[1]);
+
+            let stage_nerd_layout = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
+                .split(chunks[2]);
+            Self::render_stage_progress(f, session_data, stage_nerd_layout[0]);
+            Self::render_nerd_stats(f, session_data, stage_nerd_layout[1]);
+
+            let mut idx = 3;
+
+            if show_crashes {
+                Self::render_crash_solutions(f, session_data, chunks[idx]);
+                idx += 1;
+            }
+            if show_hangs {
+                Self::render_hang_solutions(f, session_data, chunks[idx]);
+                idx += 1;
+            }
+
+            Self::render_logs(f, session_data, chunks[idx]);
+        })?;
+        Ok(())
+    }
+
+    /// Renders the overall results section of the TUI
+    fn render_overall_results(f: &mut Frame, session_data: &CampaignData, area: Rect) {
+        let p_overall_res = Self::create_overall_results_paragraph(session_data);
+        f.render_widget(p_overall_res, area);
+    }
+
+    /// Renders the process timings section of the TUI
+    fn render_process_timings(f: &mut Frame, session_data: &CampaignData, area: Rect) {
+        let p_proc_timings = Self::create_process_timings_paragraph(session_data);
+        f.render_widget(p_proc_timings, area);
+    }
+
+    /// Renders the stage progress section of the TUI
+    fn render_stage_progress(f: &mut Frame, session_data: &CampaignData, area: Rect) {
+        let p_stage_prog = Self::create_stage_progress_paragraph(session_data);
+        f.render_widget(p_stage_prog, area);
+    }
+
+    /// Renders the nerd stats section of the TUI
+    fn render_nerd_stats(f: &mut Frame, session_data: &CampaignData, area: Rect) {
+        let p_nerd_stats = Self::create_nerd_stats_paragraph(session_data);
+        f.render_widget(p_nerd_stats, area);
     }
 
     /// Renders the title section of the TUI
@@ -149,42 +202,6 @@ impl Tui {
         );
 
         f.render_widget(title, area);
-    }
-
-    /// Renders the process timings and overall results section of the TUI
-    fn render_process_timings_and_overall_results(
-        f: &mut Frame,
-        session_data: &CampaignData,
-        area: Rect,
-    ) {
-        let hor_layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
-            .split(area);
-
-        let p_proc_timings = Self::create_process_timings_paragraph(session_data);
-        let p_overall_res = Self::create_overall_results_paragraph(session_data);
-
-        f.render_widget(p_proc_timings, hor_layout[0]);
-        f.render_widget(p_overall_res, hor_layout[1]);
-    }
-
-    /// Renders the stage progress and nerd stats section of the TUI
-    fn render_stage_progress_and_nerd_stats(
-        f: &mut Frame,
-        session_data: &CampaignData,
-        area: Rect,
-    ) {
-        let hor_layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
-            .split(area);
-
-        let p_stage_prog = Self::create_stage_progress_paragraph(session_data);
-        let p_nerd_stats = Self::create_nerd_stats_paragraph(session_data);
-
-        f.render_widget(p_stage_prog, hor_layout[0]);
-        f.render_widget(p_nerd_stats, hor_layout[1]);
     }
 
     /// Renders the crash solutions section of the TUI
@@ -447,6 +464,23 @@ Cycles without finds: {} ({}/{})",
             .style(Style::default())
     }
 
+    /// Renders the logs section of the TUI
+    fn render_logs(f: &mut Frame, session_data: &CampaignData, area: Rect) {
+        let content = session_data.logs.join("\n");
+        let paragraph = Paragraph::new(content)
+            .block(
+                Block::default()
+                    .title("Logs")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().add_modifier(Modifier::BOLD))
+                    .title_style(Style::default().add_modifier(Modifier::BOLD)),
+            )
+            .style(Style::default())
+            .wrap(Wrap { trim: true });
+
+        f.render_widget(paragraph, area);
+    }
+
     /// Format a floating-point number in a more human readable representation
     fn format_float_to_hfloat(float_num: f64) -> String {
         if float_num < 1000.0 {
@@ -481,12 +515,13 @@ Cycles without finds: {} ({}/{})",
 
     /// Formats the last event duration
     fn format_last_event(events: &[CrashInfoDetails], total_run_time: &Duration) -> String {
-        if events.is_empty() {
-            "N/A".to_string()
-        } else {
-            let event_time = (*total_run_time).checked_sub(Duration::from_millis(events[0].time));
-            event_time.map_or_else(|| "N/A".to_string(), Self::format_duration)
-        }
+        events.first().map_or_else(
+            || "N/A".to_string(),
+            |event| {
+                let event_time = (*total_run_time).checked_sub(Duration::from_millis(event.time));
+                event_time.map_or_else(|| "N/A".to_string(), Self::format_duration)
+            },
+        )
     }
 
     /// Format the solution time to a human readable representation
@@ -522,8 +557,7 @@ Cycles without finds: {} ({}/{})",
             .iter()
             .map(|s| s.fuzzer_name.len())
             .max()
-            .unwrap_or(0)
-            .min(25);
+            .map_or(0, |len| std::cmp::min(len, 25));
 
         let header = format!(
             "{:<width$} | {:<5} | {:<25} | {:<10} | {:<15} | {:<12} | {:<10}",

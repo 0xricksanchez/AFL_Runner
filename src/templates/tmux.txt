@@ -34,7 +34,7 @@ for i in "${!COMMANDS[@]}"; do
 	else
 		# For subsequent commands, create new windows and rename them
 		tmux new-window -t $SESSION_NAME -n $WINDOW_NAME
-    tmux send-keys -t $SESSION_NAME:$WINDOW_NAME "{ ${COMMANDS[$i]} & echo \$! > $TEMP_PID_FILE; clear; fg; }" C-m
+    tmux send-keys -t $SESSION_NAME:$WINDOW_NAME " { ${COMMANDS[$i]} & echo \$! > $TEMP_PID_FILE; clear; fg; }" C-m
 	fi
 done
 

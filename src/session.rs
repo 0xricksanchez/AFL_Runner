@@ -35,6 +35,7 @@ pub struct CampaignData {
     pub last_hangs: Vec<CrashInfoDetails>,
     pub misc: Misc,
     pub start_time: Option<Instant>,
+    pub logs: Vec<String>,
 }
 
 impl Default for CampaignData {
@@ -58,6 +59,7 @@ impl Default for CampaignData {
             last_hangs: Vec::with_capacity(10),
             misc: Misc::default(),
             start_time: None,
+            logs: Vec::from(["Dummy log".to_string()]),
         }
     }
 }

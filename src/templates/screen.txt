@@ -35,7 +35,7 @@ for i in "${!COMMANDS[@]}"; do
 	else
 		# For subsequent commands, create new windows and rename them
 		screen -S $SESSION_NAME -X screen -t $WINDOW_NAME
-		screen -S $SESSION_NAME -p $WINDOW_NAME -X stuff $'{ '"$COMMAND_ESCAPED"' & echo $! > '"$TEMP_PID_FILE"'; clear; fg }\n'
+		screen -S $SESSION_NAME -p $WINDOW_NAME -X stuff $' { '"$COMMAND_ESCAPED"' & echo $! > '"$TEMP_PID_FILE"'; clear; fg }\n'
 	fi
 done
 
