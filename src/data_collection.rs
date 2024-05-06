@@ -102,7 +102,8 @@ impl DataFetcher {
         }
     }
 
-    /// Collects session data from the specified output directory
+    /// Collects session data from the specified output directory and returns the `CampaignData`.
+    /// Only 'alive' fuzzers are considered for data collection.
     pub fn collect_session_data(&mut self) -> &CampaignData {
         self.campaign_data.fuzzers_alive = count_alive_fuzzers(&self.campaign_data.fuzzer_pids);
         if self.campaign_data.fuzzers_alive.is_empty() {
@@ -119,7 +120,11 @@ impl DataFetcher {
                     let fuzzer_stats_path = path.join("fuzzer_stats");
                     if fuzzer_stats_path.exists() {
                         if let Ok(content) = fs::read_to_string(fuzzer_stats_path) {
-                            self.process_fuzzer_stats(&content);
+                            if let Some(pid) = Self::fetch_pid_from_fuzzer_stats(&content) {
+                                if self.campaign_data.fuzzers_alive.contains(&(pid as usize)) {
+                                    self.process_fuzzer_stats(&content);
+                                }
+                            }
                         }
                     }
                 }
@@ -207,10 +212,10 @@ impl DataFetcher {
         if run_time > 0 {
             // If run_time is greater than 0, set start_time and total_run_time based on the run_time value
             if self.campaign_data.start_time.is_none() {
-                // BUG: We add 60 seconds as we don't know when the `fuzzer_stats` file was last
+                // BUG: We add 75 seconds as we don't know when the `fuzzer_stats` file was last
                 // written, it's written roughly every minute
                 // https://github.com/AFLplusplus/AFLplusplus/blob/ad0d0c77fb313e6edfee111fecf2bcd16d8f915e/src/afl-fuzz-stats.c#L745
-                let duration = Duration::from_secs(run_time + 60);
+                let duration = Duration::from_secs(run_time + 75);
                 let start_time = Instant::now() - duration;
                 self.campaign_data.start_time = Some(start_time);
                 self.campaign_data.total_run_time = duration;
@@ -218,6 +223,8 @@ impl DataFetcher {
         } else {
             // If run_time is 0, start the internal counter if not already started
             if self.campaign_data.start_time.is_none() {
+                // BUG: This will still cause issues if we start a fuzzing run detached and attach
+                // separately if `run_time` has not yet been written to `fuzzer_stats`
                 self.campaign_data.start_time = Some(Instant::now());
                 self.campaign_data.total_run_time = Duration::from_secs(0);
             }
@@ -242,8 +249,11 @@ impl DataFetcher {
     fn process_execs_done(&mut self, value: &str) {
         let execs_done = value.parse::<usize>().unwrap_or(0);
         self.campaign_data.executions.max = self.campaign_data.executions.max.max(execs_done);
-        self.campaign_data.executions.min =
-            self.campaign_data.executions.min.min(execs_done).max(0);
+        if self.campaign_data.executions.min == 0 {
+            self.campaign_data.executions.min = execs_done;
+        } else {
+            self.campaign_data.executions.min = self.campaign_data.executions.min.min(execs_done);
+        }
         self.campaign_data.executions.cum += execs_done;
     }
 
@@ -251,12 +261,12 @@ impl DataFetcher {
         let pending_favs = value.parse::<usize>().unwrap_or(0);
         self.campaign_data.pending.favorites_max =
             self.campaign_data.pending.favorites_max.max(pending_favs);
-        self.campaign_data.pending.favorites_min = self
-            .campaign_data
-            .pending
-            .favorites_min
-            .min(pending_favs)
-            .max(0);
+        if self.campaign_data.pending.favorites_min == 0 {
+            self.campaign_data.pending.favorites_min = pending_favs;
+        } else {
+            self.campaign_data.pending.favorites_min =
+                self.campaign_data.pending.favorites_min.min(pending_favs);
+        }
         self.campaign_data.pending.favorites_cum += pending_favs;
     }
 
@@ -264,51 +274,75 @@ impl DataFetcher {
         let pending_total = value.parse::<usize>().unwrap_or(0);
         self.campaign_data.pending.total_max =
             self.campaign_data.pending.total_max.max(pending_total);
-        self.campaign_data.pending.total_min = self
-            .campaign_data
-            .pending
-            .total_min
-            .min(pending_total)
-            .max(0);
+        if self.campaign_data.pending.total_min == 0 {
+            self.campaign_data.pending.total_min = pending_total;
+        } else {
+            self.campaign_data.pending.total_min =
+                self.campaign_data.pending.total_min.min(pending_total);
+        }
         self.campaign_data.pending.total_cum += pending_total;
     }
 
     fn process_stability(&mut self, value: &str) {
         let stability = value.trim_end_matches('%').parse::<f64>().unwrap_or(0.0);
         self.campaign_data.stability.max = self.campaign_data.stability.max.max(stability);
-        self.campaign_data.stability.min = self.campaign_data.stability.min.min(stability).max(0.0);
+        if self.campaign_data.stability.min == 0.0 {
+            self.campaign_data.stability.min = stability;
+        } else {
+            self.campaign_data.stability.min = self.campaign_data.stability.min.min(stability);
+        }
     }
 
     fn process_corpus_count(&mut self, value: &str) {
         let corpus_count = value.parse::<usize>().unwrap_or(0);
         self.campaign_data.corpus.max = self.campaign_data.corpus.max.max(corpus_count);
-        self.campaign_data.corpus.min = self.campaign_data.corpus.min.min(corpus_count).max(0);
+        if self.campaign_data.corpus.min == 0 {
+            self.campaign_data.corpus.min = corpus_count;
+        } else {
+            self.campaign_data.corpus.min = self.campaign_data.corpus.min.min(corpus_count);
+        }
         self.campaign_data.corpus.cum += corpus_count;
-    }
-
-    fn process_bitmap_cvg(&mut self, value: &str) {
-        let cvg = value.trim_end_matches('%').parse::<f64>().unwrap_or(0.0);
-        self.campaign_data.coverage.min = self.campaign_data.coverage.min.min(cvg).max(0.0);
-        self.campaign_data.coverage.max = self.campaign_data.coverage.max.max(cvg);
     }
 
     fn process_max_depth(&mut self, value: &str) {
         let levels = value.parse::<usize>().unwrap_or(0);
         self.campaign_data.levels.max = self.campaign_data.levels.max.max(levels);
-        self.campaign_data.levels.min = self.campaign_data.levels.min.min(levels).max(0);
+        if self.campaign_data.levels.min == 0 {
+            self.campaign_data.levels.min = levels;
+        } else {
+            self.campaign_data.levels.min = self.campaign_data.levels.min.min(levels);
+        }
+    }
+
+    fn process_bitmap_cvg(&mut self, value: &str) {
+        let cvg = value.trim_end_matches('%').parse::<f64>().unwrap_or(0.0);
+        if self.campaign_data.coverage.min == 0.0 {
+            self.campaign_data.coverage.min = cvg;
+        } else {
+            self.campaign_data.coverage.min = self.campaign_data.coverage.min.min(cvg);
+        }
+        self.campaign_data.coverage.max = self.campaign_data.coverage.max.max(cvg);
     }
 
     fn process_saved_crashes(&mut self, value: &str) {
         let saved_crashes = value.parse::<usize>().unwrap_or(0);
         self.campaign_data.crashes.max = self.campaign_data.crashes.max.max(saved_crashes);
-        self.campaign_data.crashes.min = self.campaign_data.crashes.min.min(saved_crashes).max(0);
+        if self.campaign_data.crashes.min == 0 {
+            self.campaign_data.crashes.min = saved_crashes;
+        } else {
+            self.campaign_data.crashes.min = self.campaign_data.crashes.min.min(saved_crashes);
+        }
         self.campaign_data.crashes.cum += saved_crashes;
     }
 
     fn process_saved_hangs(&mut self, value: &str) {
         let saved_hangs = value.parse::<usize>().unwrap_or(0);
         self.campaign_data.hangs.max = self.campaign_data.hangs.max.max(saved_hangs);
-        self.campaign_data.hangs.min = self.campaign_data.hangs.min.min(saved_hangs).max(0);
+        if self.campaign_data.hangs.min == 0 {
+            self.campaign_data.hangs.min = saved_hangs;
+        } else {
+            self.campaign_data.hangs.min = self.campaign_data.hangs.min.min(saved_hangs);
+        }
         self.campaign_data.hangs.cum += saved_hangs;
     }
 

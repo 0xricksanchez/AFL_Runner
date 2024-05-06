@@ -22,6 +22,9 @@ use ratatui::{
 };
 
 static SLOW_EXEC_PS_THRESHOLD: f64 = 250.0;
+static CAUTION_STABILITY: f64 = 90.0;
+static WARN_STABILITY: f64 = 75.0;
+static ERROR_STABILITY: f64 = 60.0;
 
 /// Represents the TUI (Text User Interface)
 pub struct Tui {
@@ -271,27 +274,57 @@ impl Tui {
 
     /// Creates the overall results paragraph
     fn create_overall_results_paragraph(session_data: &CampaignData) -> Paragraph {
-        let content = format!(
-            "Cycles done: {} ({}/{})
-Crashes saved: {} ({}->{}<-{})
-Hangs saved: {} ({}->{}<-{})
-Corpus count: {} ({}->{}<-{})",
-            session_data.cycles.done_avg,
-            session_data.cycles.done_min,
-            session_data.cycles.done_max,
-            session_data.crashes.cum,
-            session_data.crashes.min,
-            session_data.crashes.avg,
-            session_data.crashes.max,
-            session_data.hangs.cum,
-            session_data.hangs.min,
-            session_data.hangs.avg,
-            session_data.hangs.max,
-            session_data.corpus.cum,
-            session_data.corpus.min,
-            session_data.corpus.avg,
-            session_data.corpus.max
-        );
+        let stability_style = if session_data.stability.avg >= CAUTION_STABILITY {
+            Style::default()
+        } else if session_data.stability.avg >= WARN_STABILITY {
+            Style::default().fg(Color::Yellow)
+        } else if session_data.stability.avg >= ERROR_STABILITY {
+            Style::default().fg(Color::Rgb(255, 165, 0)) // Orange color
+        } else {
+            Style::default().fg(Color::Red)
+        };
+
+        let content = vec![
+            Line::from(format!(
+                "Cycles done: {} ({}/{})",
+                session_data.cycles.done_avg,
+                session_data.cycles.done_min,
+                session_data.cycles.done_max,
+            )),
+            Line::from(format!(
+                "Crashes saved: {} ({}->{}->{})",
+                session_data.crashes.cum,
+                session_data.crashes.min,
+                session_data.crashes.avg,
+                session_data.crashes.max,
+            )),
+            Line::from(format!(
+                "Hangs saved: {} ({}->{}->{})",
+                session_data.hangs.cum,
+                session_data.hangs.min,
+                session_data.hangs.avg,
+                session_data.hangs.max,
+            )),
+            Line::from(format!(
+                "Corpus count: {} ({}->{}->{})",
+                session_data.corpus.cum,
+                session_data.corpus.min,
+                session_data.corpus.avg,
+                session_data.corpus.max,
+            )),
+            Line::from(vec![
+                Span::raw("Stability: "),
+                Span::styled(
+                    format!(
+                        "{}% ({}%/{}%)",
+                        session_data.stability.avg,
+                        session_data.stability.min,
+                        session_data.stability.max,
+                    ),
+                    stability_style,
+                ),
+            ]),
+        ];
 
         Paragraph::new(content)
             .block(
@@ -301,7 +334,7 @@ Corpus count: {} ({}->{}<-{})",
                     .border_style(Style::default().add_modifier(Modifier::BOLD))
                     .title_style(Style::default().add_modifier(Modifier::BOLD)),
             )
-            .style(Style::default())
+            .wrap(Wrap { trim: true })
     }
 
     /// Creates the stage progress paragraph

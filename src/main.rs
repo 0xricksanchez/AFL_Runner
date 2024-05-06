@@ -153,10 +153,11 @@ fn handle_kill_command(kill_args: &cli::KillArgs) -> Result<()> {
     if kill_args.session_name.is_none() {
         bail!("Session name is required for kill command");
     } else if kill_args.session_name.is_some() {
+        let mut is_term = false;
         let tmux = Tmux::new(
             kill_args.session_name.as_ref().unwrap(),
             &[],
-            Path::new("/tmp/foobar"),
+            Path::new("/tmp/aflr_foobar_1337"),
         );
         if tmux.is_present() {
             println!(
@@ -164,11 +165,12 @@ fn handle_kill_command(kill_args: &cli::KillArgs) -> Result<()> {
                 kill_args.session_name.as_ref().unwrap()
             );
             tmux.kill_session()?;
+            is_term |= true;
         }
         let screen = Screen::new(
             kill_args.session_name.as_ref().unwrap(),
             &[],
-            Path::new("/tmp/foobar"),
+            Path::new("/tmp/aflr_foobar_1337"),
         );
         if screen.is_present() {
             println!(
@@ -176,6 +178,13 @@ fn handle_kill_command(kill_args: &cli::KillArgs) -> Result<()> {
                 kill_args.session_name.as_ref().unwrap()
             );
             screen.kill_session()?;
+            is_term |= true;
+        }
+        if !is_term {
+            println!(
+                "[-] No session found with the name: {}",
+                kill_args.session_name.as_ref().unwrap()
+            );
         }
     }
 
