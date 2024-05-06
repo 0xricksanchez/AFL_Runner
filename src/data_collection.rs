@@ -1,4 +1,7 @@
-use std::process::{Command, Stdio};
+use std::{
+    process::{Command, Stdio},
+    time::Instant,
+};
 
 use crate::{
     session::{CampaignData, CrashInfoDetails},
@@ -6,7 +9,7 @@ use crate::{
 };
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 /// Data fetcher that collects session data based on the `AFLPlusPlus` `fuzzer_stats` file
 #[derive(Debug, Clone)]
@@ -20,9 +23,10 @@ pub struct DataFetcher {
 impl DataFetcher {
     /// Create a new `DataFetcher` instance
     pub fn new(output_dir: &Path, pid_file: Option<&Path>) -> Self {
-        let fuzzer_pids = pid_file.map_or_else(
+        let (fuzzer_pids, fuzzer_pids_dead) = pid_file.map_or_else(
             || {
-                let mut pids = Vec::new();
+                let mut pids_alive = Vec::new();
+                let mut pids_dead = Vec::new();
                 fs::read_dir(output_dir)
                     .unwrap()
                     .flatten()
@@ -33,28 +37,32 @@ impl DataFetcher {
                             if fuzzer_stats_path.exists() {
                                 if let Ok(content) = fs::read_to_string(fuzzer_stats_path) {
                                     if let Some(pid) = Self::fetch_pid_from_fuzzer_stats(&content) {
-                                        pids.push(pid);
+                                        pids_alive.push(pid);
+                                    } else {
+                                        pids_dead.push(path);
                                     }
                                 }
                             }
                         }
                     });
-                pids
+                (pids_alive, pids_dead)
             },
             |pid_file| {
-                fs::read_to_string(pid_file)
+                let pids_alive = fs::read_to_string(pid_file)
                     .unwrap_or_default()
                     .split(':')
                     .filter_map(|pid| pid.trim().parse::<u32>().ok())
                     .filter(|&pid| pid != 0)
-                    .collect::<Vec<u32>>()
+                    .collect::<Vec<u32>>();
+                (pids_alive, Vec::new())
             },
         );
         let fuzzers_alive = count_alive_fuzzers(&fuzzer_pids);
+        let fuzzers_started = fuzzers_alive.len() + fuzzer_pids_dead.len();
 
         let campaign_data = CampaignData {
             fuzzers_alive,
-            fuzzers_started: fuzzer_pids.len(),
+            fuzzers_started,
             fuzzer_pids,
             ..CampaignData::default()
         };
@@ -97,7 +105,7 @@ impl DataFetcher {
     /// Collects session data from the specified output directory
     pub fn collect_session_data(&mut self) -> &CampaignData {
         self.campaign_data.fuzzers_alive = count_alive_fuzzers(&self.campaign_data.fuzzer_pids);
-        if self.campaign_data.fuzzers_alive == 0 {
+        if self.campaign_data.fuzzers_alive.is_empty() {
             return &self.campaign_data;
         }
         self.campaign_data.clear();
@@ -127,6 +135,28 @@ impl DataFetcher {
     }
 
     fn process_fuzzer_stats(&mut self, content: &str) {
+        let mut is_alive = false;
+
+        for line in content.lines().collect::<Vec<&str>>() {
+            let parts: Vec<&str> = line.split(':').map(str::trim).collect();
+
+            if parts.len() == 2 {
+                let key = parts[0];
+                let value = parts[1];
+
+                if let "fuzzer_pid" = key {
+                    let pid = value.parse::<usize>().unwrap_or(0);
+                    if self.campaign_data.fuzzers_alive.contains(&pid) {
+                        is_alive = true;
+                    }
+                }
+            }
+        }
+
+        if !is_alive {
+            return;
+        }
+
         self.update_run_time();
         for line in content.lines().collect::<Vec<&str>>() {
             let parts: Vec<&str> = line.split(':').map(str::trim).collect();
@@ -136,6 +166,8 @@ impl DataFetcher {
                 let value = parts[1];
 
                 match key {
+                    //"start_time" => self.process_start_time(value),
+                    "run_time" => self.process_run_time(value),
                     "last_find" => self.process_last_find(value),
                     "execs_per_sec" => self.process_execs_per_sec(value),
                     "execs_done" => self.process_execs_done(value),
@@ -157,19 +189,38 @@ impl DataFetcher {
         }
     }
 
+    fn process_last_find(&mut self, value: &str) {
+        let last_find = value.parse::<u64>().unwrap_or(0);
+        let instant = Instant::now() - Duration::from_millis(last_find);
+        self.campaign_data.time_without_finds = instant.elapsed();
+    }
+
     fn update_run_time(&mut self) {
-        if let Ok(duration) = SystemTime::now().duration_since(self.campaign_data.start_time) {
-            self.campaign_data.total_run_time = duration;
+        if let Some(start_time) = self.campaign_data.start_time {
+            self.campaign_data.total_run_time = start_time.elapsed();
         }
     }
 
-    fn process_last_find(&mut self, value: &str) {
-        let last_find = value.parse::<u64>().unwrap_or(0);
-        let last_find = UNIX_EPOCH + Duration::from_secs(last_find);
-        let current_time = SystemTime::now();
-        if let Ok(duration) = current_time.duration_since(last_find) {
-            self.campaign_data.time_without_finds =
-                self.campaign_data.time_without_finds.max(duration);
+    fn process_run_time(&mut self, value: &str) {
+        let run_time = value.parse::<u64>().unwrap_or(0);
+
+        if run_time > 0 {
+            // If run_time is greater than 0, set start_time and total_run_time based on the run_time value
+            if self.campaign_data.start_time.is_none() {
+                // BUG: We add 60 seconds as we don't know when the `fuzzer_stats` file was last
+                // written, it's written roughly every minute
+                // https://github.com/AFLplusplus/AFLplusplus/blob/ad0d0c77fb313e6edfee111fecf2bcd16d8f915e/src/afl-fuzz-stats.c#L745
+                let duration = Duration::from_secs(run_time + 60);
+                let start_time = Instant::now() - duration;
+                self.campaign_data.start_time = Some(start_time);
+                self.campaign_data.total_run_time = duration;
+            }
+        } else {
+            // If run_time is 0, start the internal counter if not already started
+            if self.campaign_data.start_time.is_none() {
+                self.campaign_data.start_time = Some(Instant::now());
+                self.campaign_data.total_run_time = Duration::from_secs(0);
+            }
         }
     }
 
@@ -281,13 +332,13 @@ impl DataFetcher {
     }
 
     fn calculate_averages(&mut self) {
-        let is_fuzzers_alive = self.campaign_data.fuzzers_alive > 0;
+        let is_fuzzers_alive = !self.campaign_data.fuzzers_alive.is_empty();
 
         // FIXME: Change once https://github.com/rust-lang/rust/issues/15701 is resolved
         #[allow(clippy::cast_possible_truncation)]
         #[allow(clippy::cast_sign_loss)]
         #[allow(clippy::cast_precision_loss)]
-        let fuzzers_alive_f64 = self.campaign_data.fuzzers_alive as f64;
+        let fuzzers_alive_f64 = self.campaign_data.fuzzers_alive.len() as f64;
         self.campaign_data.executions.ps_avg = if is_fuzzers_alive {
             self.campaign_data.executions.ps_cum / fuzzers_alive_f64
         } else {
@@ -296,7 +347,7 @@ impl DataFetcher {
 
         let cumulative_avg = |cum: usize| {
             if is_fuzzers_alive {
-                cum / self.campaign_data.fuzzers_alive
+                cum / self.campaign_data.fuzzers_alive.len()
             } else {
                 0
             }

@@ -55,6 +55,7 @@ impl Tui {
         if let Err(e) = Self::new().and_then(|mut tui| tui.run_internal(&session_data_rx)) {
             bail!("Error running TUI: {e}");
         }
+        println!("Campaign data: {:?}", session_data_rx.recv().unwrap());
         Ok(())
     }
 
@@ -226,7 +227,8 @@ impl Tui {
         let last_seen_hang =
             Self::format_last_event(&session_data.last_hangs, &session_data.total_run_time);
 
-        let fuzzers_alive_style = if session_data.fuzzers_alive < session_data.fuzzers_started {
+        let fuzzers_alive_style = if session_data.fuzzers_alive.len() < session_data.fuzzers_started
+        {
             Style::default().fg(Color::Red)
         } else {
             Style::default()
@@ -238,7 +240,8 @@ impl Tui {
                 Span::styled(
                     format!(
                         "{}/{}",
-                        session_data.fuzzers_alive, session_data.fuzzers_started
+                        session_data.fuzzers_alive.len(),
+                        session_data.fuzzers_started
                     ),
                     fuzzers_alive_style,
                 ),
@@ -414,8 +417,12 @@ Cycles without finds: {} ({}/{})",
         if events.is_empty() {
             "N/A".to_string()
         } else {
-            let event_time = *total_run_time - Duration::from_millis(events[0].time);
-            Self::format_duration(event_time)
+            let event_time = (*total_run_time).checked_sub(Duration::from_millis(events[0].time));
+            if let Some(etime) = event_time {
+                Self::format_duration(etime)
+            } else {
+                "N/A".to_string()
+            }
         }
     }
 
@@ -456,7 +463,7 @@ Cycles without finds: {} ({}/{})",
             .min(25);
 
         let header = format!(
-            "{:<width$} | {:<5} | {:<25} | {:<10} | {:<15} | {:<10} | {:<10}",
+            "{:<width$} | {:<5} | {:<25} | {:<10} | {:<15} | {:<12} | {:<10}",
             "Fuzzer Name",
             "SIG",
             "TIME",
@@ -485,7 +492,7 @@ Cycles without finds: {} ({}/{})",
                 };
 
                 format!(
-                    "{:<width$} | {:<5} | {:<25} | {:<10} | {:<15} | {:<10} | {:<10}",
+                    "{:<width$} | {:<5} | {:<25} | {:<10} | {:<15} | {:<12} | {:<10}",
                     fuzzer_name,
                     s.sig.clone().unwrap_or_else(|| "-".to_string()),
                     Self::format_solution_time(total_run_time, s.time),

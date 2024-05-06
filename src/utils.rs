@@ -156,11 +156,12 @@ pub fn mkdir_helper(dir: &Path, check_empty: bool) -> Result<()> {
 }
 
 /// Count the number of alive procsses based on a list of PIDs
-pub fn count_alive_fuzzers(fuzzer_pids: &[u32]) -> usize {
+pub fn count_alive_fuzzers(fuzzer_pids: &[u32]) -> Vec<usize> {
     let s = System::new_all();
     fuzzer_pids
         .iter()
         .filter(|&pid| *pid != 0)
         .filter(|&pid| s.process(Pid::from(*pid as usize)).is_some())
-        .count()
+        .map(|&pid| pid as usize)
+        .collect()
 }

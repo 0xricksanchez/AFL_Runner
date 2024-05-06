@@ -29,7 +29,7 @@ for i in "${!COMMANDS[@]}"; do
 	TEMP_PID_FILE="/tmp/aflr_pid_${i}.txt"
 	if [ $i -eq 0 ]; then
 		# For the first command, send it to the first window and rename it
-    tmux send-keys -t $SESSION_NAME "{ ${COMMANDS[$i]} & echo \$! > $TEMP_PID_FILE; clear; fg }" C-m
+    tmux send-keys -t $SESSION_NAME " { ${COMMANDS[$i]} & echo \$! > $TEMP_PID_FILE; clear; fg }" C-m
 		tmux rename-window -t $SESSION_NAME $WINDOW_NAME
 	else
 		# For subsequent commands, create new windows and rename them

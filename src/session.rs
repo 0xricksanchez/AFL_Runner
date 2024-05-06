@@ -1,5 +1,5 @@
 use std::time::Duration;
-use std::{path::PathBuf, time::SystemTime};
+use std::{path::PathBuf, time::Instant};
 
 #[allow(dead_code)]
 #[derive(Default, Debug, Clone)]
@@ -17,7 +17,7 @@ pub struct CrashInfoDetails {
 
 #[derive(Debug, Clone)]
 pub struct CampaignData {
-    pub fuzzers_alive: usize,
+    pub fuzzers_alive: Vec<usize>,
     pub fuzzers_started: usize,
     pub fuzzer_pids: Vec<u32>,
     pub total_run_time: Duration,
@@ -34,13 +34,13 @@ pub struct CampaignData {
     pub last_crashes: Vec<CrashInfoDetails>,
     pub last_hangs: Vec<CrashInfoDetails>,
     pub misc: Misc,
-    pub start_time: SystemTime,
+    pub start_time: Option<Instant>,
 }
 
 impl Default for CampaignData {
     fn default() -> Self {
         Self {
-            fuzzers_alive: 0,
+            fuzzers_alive: Vec::new(),
             fuzzers_started: 0,
             fuzzer_pids: Vec::new(),
             total_run_time: Duration::from_secs(0),
@@ -57,7 +57,7 @@ impl Default for CampaignData {
             last_crashes: Vec::with_capacity(10),
             last_hangs: Vec::with_capacity(10),
             misc: Misc::default(),
-            start_time: SystemTime::now(),
+            start_time: None,
         }
     }
 }
