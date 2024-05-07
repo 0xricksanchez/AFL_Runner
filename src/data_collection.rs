@@ -97,17 +97,20 @@ impl DataFetcher {
                 .find(|line| line.starts_with("command_line"))
                 .and_then(|command_line| {
                     let value = command_line.split(':').last().unwrap_or("").trim();
-                    let pgrep_command = format!("pgrep -f \"{value}\"");
-                    let output = Command::new("sh")
-                        .arg("-c")
-                        .arg(&pgrep_command)
+                    let output = Command::new("pgrep")
+                        .arg("-f")
+                        .arg(value)
                         .stdout(Stdio::piped())
                         .stderr(Stdio::piped())
                         .output()
                         .expect("Failed to execute pgrep command");
                     let stdout = String::from_utf8_lossy(&output.stdout);
-                    let _stderr = String::from_utf8_lossy(&output.stderr);
-                    stdout.trim().parse::<u32>().ok()
+                    let pids: Vec<&str> = stdout.split_whitespace().collect();
+                    if pids.is_empty() {
+                        None
+                    } else {
+                        pids[0].parse::<u32>().ok()
+                    }
                 })
         } else {
             None
@@ -131,11 +134,17 @@ impl DataFetcher {
                 if path.is_dir() {
                     let fuzzer_stats_path = path.join("fuzzer_stats");
                     if fuzzer_stats_path.exists() {
-                        if let Ok(content) = fs::read_to_string(fuzzer_stats_path) {
-                            if let Some(pid) = Self::fetch_pid_from_fuzzer_stats(&content) {
+                        if let Ok(content) = fs::read_to_string(&fuzzer_stats_path) {
+                            let pid = Self::fetch_pid_from_fuzzer_stats(&content);
+                            if let Some(pid) = pid {
                                 if self.campaign_data.fuzzers_alive.contains(&(pid as usize)) {
                                     self.process_fuzzer_stats(&content);
                                 }
+                            } else {
+                                self.campaign_data.append_log(&format!(
+                                    "Failed to fetch PID from fuzzer_stats: {}",
+                                    fuzzer_stats_path.clone().display()
+                                ));
                             }
                         }
                     }

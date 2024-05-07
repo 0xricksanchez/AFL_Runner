@@ -1,7 +1,6 @@
 [tasks.default]
 alias = "run"
 
-
 # ----------------- GET AFLR ----------------
 
 [tasks.build_aflr]
