@@ -29,7 +29,7 @@ Currently, this tool should work on all \*NIX flavor operating-systems.
 
 ### Installation
 
-You can compile `AFL_Runner` yourself:
+You can compile `AFL_Runner` yourself...:
 
 ```bash
 git clone https://github.com/0xricksanchez/AFL_Runner.git
@@ -37,6 +37,8 @@ cd AFL_Runner
 cargo build --release
 ./target/release/aflr --help
 ```
+
+...or install directly via [crates.io](https://crates.io/crates/afl_runner):
 
 ```bash
 cargo install afl_runner

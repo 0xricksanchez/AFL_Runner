@@ -162,7 +162,13 @@ AFL_LLVM_LAF_ALL = "1"
 # ----------------- RUN CAMPAIGN -----------------
 
 [tasks.run]
-dependencies = ["build_aflr", "build_libxml2", "get_corpus", "get_dict"]
+dependencies = [
+  "build_aflr",
+  "build_libxml2",
+  "get_corpus",
+  "get_dict",
+  "run_dry",
+]
 description = "Run aflr with the optimizal settings"
 script_runner = "@shell"
 script = """
@@ -175,4 +181,7 @@ description = "Run aflr with the optimizal settings"
 script_runner = "@shell"
 script = """
 ../target/release/aflr run --config aflr_config.toml --dry-run
+echo ""
+echo "About to run the above commands..."
+sleep 3s
 """
