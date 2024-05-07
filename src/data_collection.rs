@@ -64,12 +64,17 @@ impl DataFetcher {
             },
         );
         if pid_file.is_none() {
-            campaign_data.append_log("Attempted to fetch PIDs from fuzzer_stats files");
+            campaign_data.log("Attempted to fetch PIDs from fuzzer_stats files");
         } else {
-            campaign_data.append_log("PIDs fetched from the PID file");
+            campaign_data.log("PIDs fetched from the PID file");
         }
         let fuzzers_alive = count_alive_fuzzers(&fuzzer_pids);
-        campaign_data.append_log("Fuzzers alive count fetched");
+        if fuzzers_alive.is_empty() {
+            campaign_data.log("No fuzzers alive");
+        } else {
+            campaign_data.log("Fuzzers alive count fetched");
+        }
+
         let fuzzers_started = fuzzers_alive.len() + fuzzer_pids_dead.len();
 
         campaign_data.fuzzers_alive = fuzzers_alive;
@@ -122,6 +127,8 @@ impl DataFetcher {
     pub fn collect_session_data(&mut self) -> &CampaignData {
         self.campaign_data.fuzzers_alive = count_alive_fuzzers(&self.campaign_data.fuzzer_pids);
         if self.campaign_data.fuzzers_alive.is_empty() {
+            self.campaign_data
+                .log("No fuzzers alive. Skipping data collection");
             return &self.campaign_data;
         }
         self.campaign_data.clear();
@@ -141,7 +148,7 @@ impl DataFetcher {
                                     self.process_fuzzer_stats(&content);
                                 }
                             } else {
-                                self.campaign_data.append_log(&format!(
+                                self.campaign_data.log(&format!(
                                     "Failed to fetch PID from fuzzer_stats: {}",
                                     fuzzer_stats_path.display()
                                 ));

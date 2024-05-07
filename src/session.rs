@@ -85,7 +85,7 @@ impl CampaignData {
     }
 
     /// Append a log to the logs vector with the elapsed time since the start of the campaign
-    pub fn append_log(&mut self, log: &str) {
+    pub fn log(&mut self, log: &str) {
         let now = SystemTime::now();
         let datetime: DateTime<Local> = now.into();
         let ftime = datetime.format("%Y-%m-%d %H:%M:%S").to_string();

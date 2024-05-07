@@ -44,7 +44,7 @@ impl Tui {
     /// Runs the TUI standalone with the specified output directory
     pub fn run(output_dir: &Path, pid_file: Option<&Path>, cdata: &mut CampaignData) -> Result<()> {
         let output_dir = output_dir.to_path_buf();
-        cdata.append_log("Initialized TUI");
+        cdata.log("Initialized TUI");
         let mut dfetcher = DataFetcher::new(&output_dir, pid_file, cdata);
         let (session_data_tx, session_data_rx) = mpsc::channel();
         thread::spawn(move || loop {
