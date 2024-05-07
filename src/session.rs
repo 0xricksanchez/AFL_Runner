@@ -1,4 +1,7 @@
+use crate::log_buffer::LogRingBuffer;
+use chrono::{DateTime, Local};
 use std::time::Duration;
+use std::time::SystemTime;
 use std::{path::PathBuf, time::Instant};
 
 #[allow(dead_code)]
@@ -35,7 +38,7 @@ pub struct CampaignData {
     pub last_hangs: Vec<CrashInfoDetails>,
     pub misc: Misc,
     pub start_time: Option<Instant>,
-    pub logs: Vec<String>,
+    pub logs: LogRingBuffer<String>,
 }
 
 impl Default for CampaignData {
@@ -59,12 +62,13 @@ impl Default for CampaignData {
             last_hangs: Vec::with_capacity(10),
             misc: Misc::default(),
             start_time: None,
-            logs: Vec::from(["Dummy log".to_string()]),
+            logs: LogRingBuffer::new(10),
         }
     }
 }
 
 impl CampaignData {
+    /// Clear all the data in the CampaignData struct
     pub fn clear(&mut self) {
         self.executions = ExecutionsInfo::default();
         self.pending = PendingInfo::default();
@@ -78,6 +82,14 @@ impl CampaignData {
         self.time_without_finds = TimeWOFinds::default();
         self.last_crashes.clear();
         self.last_hangs.clear();
+    }
+
+    /// Append a log to the logs vector with the elapsed time since the start of the campaign
+    pub fn append_log(&mut self, log: &str) {
+        let now = SystemTime::now();
+        let datetime: DateTime<Local> = now.into();
+        let ftime = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
+        self.logs.push(format!("[{}] - {}", ftime, log));
     }
 }
 

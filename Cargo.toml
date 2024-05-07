@@ -13,18 +13,19 @@ name = "aflr"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.82"
+anyhow = "1.0.83"
 clap = { version = "4.5.4", features = ["wrap_help", "string", "derive"] }
 rand = "0.8.5"
-sysinfo = "0.30.11"
+sysinfo = "0.30.12"
 upon = "0.8.1"
 toml = "0.8.12"
 serde = { version = "1.0.200", features = ["derive"] }
 ratatui = { version = "0.26.2", features = ["crossterm", "all-widgets"] }
 crossterm = "0.27.0"
+chrono = "0.4.38"
 
 [dev-dependencies]
-cargo-make = "0.37.11"
+cargo-make = "0.37.12"
 
 [workspace]
 members = ["examples"]

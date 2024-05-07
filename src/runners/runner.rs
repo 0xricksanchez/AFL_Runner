@@ -6,10 +6,10 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
-use crate::runners::screen::SCREEN_TEMPLATE;
 use crate::runners::tmux::TMUX_TEMPLATE;
 use crate::tui::Tui;
 use crate::utils::{get_user_input, mkdir_helper};
+use crate::{runners::screen::SCREEN_TEMPLATE, session::CampaignData};
 
 #[allow(unused)]
 pub trait Runner {
@@ -141,13 +141,14 @@ impl Session {
     }
 
     pub fn run_with_tui(&self, out_dir: &Path) -> Result<()> {
+        let mut cdata = CampaignData::default();
         if let Err(e) = self.run_detached() {
             eprintln!("Error running TUI: '{e}'");
             return Err(e);
         }
 
         thread::sleep(Duration::from_secs(1));
-        Tui::run(out_dir, Some(&self.pid_file))?;
+        Tui::run(out_dir, Some(&self.pid_file), &mut cdata)?;
         Ok(())
     }
 

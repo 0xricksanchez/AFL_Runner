@@ -12,9 +12,10 @@ mod data_collection;
 mod harness;
 mod runners;
 mod session;
-use crate::runners::tmux::Tmux;
 use crate::{afl_cmd_gen::AFLCmdGenerator, runners::runner::Runner};
 use crate::{cli::AFL_CORPUS, runners::screen::Screen};
+use crate::{runners::tmux::Tmux, session::CampaignData};
+mod log_buffer;
 mod tui;
 mod utils;
 
@@ -128,7 +129,8 @@ fn handle_tui_command(tui_args: &cli::TuiArgs) -> Result<()> {
         bail!("Output directory is required for TUI mode");
     }
     validate_tui_output_dir(&tui_args.afl_output)?;
-    Tui::run(&tui_args.afl_output, None)?;
+    let mut cdata = CampaignData::default();
+    Tui::run(&tui_args.afl_output, None, &mut cdata)?;
     Ok(())
 }
 

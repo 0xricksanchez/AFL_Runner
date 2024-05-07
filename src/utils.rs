@@ -1,9 +1,9 @@
-use std::fs;
 use std::hash::{DefaultHasher, Hasher};
 use std::io::{stdin, Read};
 use std::path::Path;
 use std::path::PathBuf;
 use std::{char, env};
+use std::{fs, time::Duration};
 use sysinfo::{Pid, System};
 
 use anyhow::bail;
@@ -164,4 +164,22 @@ pub fn count_alive_fuzzers(fuzzer_pids: &[u32]) -> Vec<usize> {
         .filter(|&pid| s.process(Pid::from(*pid as usize)).is_some())
         .map(|&pid| pid as usize)
         .collect()
+}
+
+/// Formats a duration into a string based on days, hours, minutes, and seconds
+pub fn format_duration(duration: &Duration) -> String {
+    let mut secs = duration.as_secs();
+    let days = secs / 86400;
+    let hours = (secs % 86400) / 3600;
+    let mins = (secs % 3600) / 60;
+    secs %= 60;
+    if days > 0 {
+        format!("{days} days, {hours:02}:{mins:02}:{secs:02}")
+    } else if days == 0 && hours > 0 {
+        format!("{hours:02}:{mins:02}:{secs:02}")
+    } else if days == 0 && hours == 0 && mins > 0 {
+        format!("{mins:02}:{secs:02}")
+    } else {
+        format!("{secs:02}s")
+    }
 }

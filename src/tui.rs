@@ -5,8 +5,8 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use crate::data_collection::DataFetcher;
 use crate::session::{CampaignData, CrashInfoDetails};
+use crate::{data_collection::DataFetcher, utils::format_duration};
 use anyhow::bail;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
@@ -42,9 +42,10 @@ impl Tui {
     }
 
     /// Runs the TUI standalone with the specified output directory
-    pub fn run(output_dir: &Path, pid_file: Option<&Path>) -> Result<()> {
+    pub fn run(output_dir: &Path, pid_file: Option<&Path>, cdata: &mut CampaignData) -> Result<()> {
         let output_dir = output_dir.to_path_buf();
-        let mut dfetcher = DataFetcher::new(&output_dir, pid_file);
+        cdata.append_log("Initialized TUI");
+        let mut dfetcher = DataFetcher::new(&output_dir, pid_file, cdata);
         let (session_data_tx, session_data_rx) = mpsc::channel();
         thread::spawn(move || loop {
             let session_data = dfetcher.collect_session_data().clone();
@@ -52,7 +53,7 @@ impl Tui {
                 eprintln!("Error sending session data: {e}");
                 break;
             }
-            thread::sleep(Duration::from_millis(500));
+            thread::sleep(Duration::from_secs(1));
         });
 
         if let Err(e) = Self::new().and_then(|mut tui| tui.run_internal(&session_data_rx)) {
@@ -268,7 +269,7 @@ impl Tui {
             ]),
             Line::from(format!(
                 "Total run time: {}",
-                Self::format_duration(session_data.total_run_time)
+                format_duration(&session_data.total_run_time)
             )),
             Line::from(format!(
                 "Time without finds: {}s ({}s/{}s)",
@@ -466,7 +467,7 @@ Cycles without finds: {} ({}/{})",
 
     /// Renders the logs section of the TUI
     fn render_logs(f: &mut Frame, session_data: &CampaignData, area: Rect) {
-        let content = session_data.logs.join("\n");
+        let content = session_data.logs.join("\n", true);
         let paragraph = Paragraph::new(content)
             .block(
                 Block::default()
@@ -519,7 +520,10 @@ Cycles without finds: {} ({}/{})",
             || "N/A".to_string(),
             |event| {
                 let event_time = (*total_run_time).checked_sub(Duration::from_millis(event.time));
-                event_time.map_or_else(|| "N/A".to_string(), Self::format_duration)
+                event_time.map_or_else(
+                    || "N/A".to_string(),
+                    |duration: std::time::Duration| format_duration(&duration),
+                )
             },
         )
     }
@@ -604,16 +608,5 @@ Cycles without finds: {} ({}/{})",
             .join("\n");
 
         format!("{header}\n{separator}\n{rows}")
-    }
-
-    /// Formats a duration into a string based on days, hours, minutes, and seconds
-    fn format_duration(duration: Duration) -> String {
-        let mut secs = duration.as_secs();
-        let days = secs / 86400;
-        let hours = (secs % 86400) / 3600;
-        let mins = (secs % 3600) / 60;
-        secs %= 60;
-
-        format!("{days} days, {hours:02}:{mins:02}:{secs:02}")
     }
 }

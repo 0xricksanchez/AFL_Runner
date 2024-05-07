@@ -18,11 +18,17 @@ pub struct DataFetcher {
     pub output_dir: PathBuf,
     /// Campaign data collected from the output directory
     pub campaign_data: CampaignData,
+    pub update_once: bool,
+    pub update_never: bool,
 }
 
 impl DataFetcher {
     /// Create a new `DataFetcher` instance
-    pub fn new(output_dir: &Path, pid_file: Option<&Path>) -> Self {
+    pub fn new(
+        output_dir: &Path,
+        pid_file: Option<&Path>,
+        campaign_data: &mut CampaignData,
+    ) -> Self {
         let (fuzzer_pids, fuzzer_pids_dead) = pid_file.map_or_else(
             || {
                 let mut pids_alive = Vec::new();
@@ -57,18 +63,24 @@ impl DataFetcher {
                 (pids_alive, Vec::new())
             },
         );
+        if pid_file.is_none() {
+            campaign_data.append_log("Attempted to fetch PIDs from fuzzer_stats files");
+        } else {
+            campaign_data.append_log("PIDs fetched from the PID file");
+        }
         let fuzzers_alive = count_alive_fuzzers(&fuzzer_pids);
+        campaign_data.append_log("Fuzzers alive count fetched");
         let fuzzers_started = fuzzers_alive.len() + fuzzer_pids_dead.len();
 
-        let campaign_data = CampaignData {
-            fuzzers_alive,
-            fuzzers_started,
-            fuzzer_pids,
-            ..CampaignData::default()
-        };
+        campaign_data.fuzzers_alive = fuzzers_alive;
+        campaign_data.fuzzers_started = fuzzers_started;
+        campaign_data.fuzzer_pids = fuzzer_pids;
+
         Self {
             output_dir: output_dir.to_path_buf(),
-            campaign_data,
+            campaign_data: campaign_data.clone(),
+            update_once: true,
+            update_never: false,
         }
     }
 
@@ -130,12 +142,14 @@ impl DataFetcher {
                 }
             });
 
+        self.update_once = true;
         self.calculate_averages();
 
         let (last_crashes, last_hangs) = self.collect_session_crashes_hangs(10);
         self.campaign_data.last_crashes = last_crashes;
         self.campaign_data.last_hangs = last_hangs;
 
+        //self.campaign_data.append_log("Session data collected");
         &self.campaign_data
     }
 
@@ -162,7 +176,10 @@ impl DataFetcher {
             return;
         }
 
-        self.update_run_time();
+        if self.update_once {
+            self.update_run_time();
+        }
+
         for line in content.lines() {
             let parts: Vec<&str> = line.split(':').map(str::trim).collect();
 
@@ -171,7 +188,11 @@ impl DataFetcher {
                 let value = parts[1];
 
                 match key {
-                    "run_time" => self.process_run_time(value),
+                    "run_time" => {
+                        if self.update_once {
+                            self.process_run_time(value)
+                        }
+                    }
                     "time_wo_finds" => self.process_time_wo_finds(value),
                     "execs_per_sec" => self.process_execs_per_sec(value),
                     "execs_done" => self.process_execs_done(value),
@@ -183,14 +204,24 @@ impl DataFetcher {
                     "max_depth" => self.process_max_depth(value),
                     "saved_crashes" => self.process_saved_crashes(value),
                     "saved_hangs" => self.process_saved_hangs(value),
-                    "afl_banner" => self.campaign_data.misc.afl_banner = value.to_string(),
-                    "afl_version" => self.campaign_data.misc.afl_version = value.to_string(),
+                    "afl_banner" => {
+                        if !self.update_never {
+                            self.campaign_data.misc.afl_banner = value.to_string()
+                        }
+                    }
+                    "afl_version" => {
+                        if !self.update_never {
+                            self.campaign_data.misc.afl_version = value.to_string()
+                        }
+                    }
                     "cycles_done" => self.process_cycles_done(value),
                     "cycles_wo_finds" => self.process_cycles_wo_finds(value),
                     _ => {}
                 }
             }
         }
+        self.update_once = false;
+        self.update_never = true;
     }
 
     fn process_time_wo_finds(&mut self, value: &str) {
