@@ -15,11 +15,11 @@ use std::time::Duration;
 #[derive(Debug, Clone)]
 pub struct DataFetcher {
     /// Output directory of the `AFLPlusPlus` fuzzing run
-    pub output_dir: PathBuf,
+    output_dir: PathBuf,
     /// Campaign data collected from the output directory
     pub campaign_data: CampaignData,
-    pub update_once: bool,
-    pub update_never: bool,
+    update_once: bool,
+    update_never: bool,
 }
 
 impl DataFetcher {
@@ -143,7 +143,7 @@ impl DataFetcher {
                             } else {
                                 self.campaign_data.append_log(&format!(
                                     "Failed to fetch PID from fuzzer_stats: {}",
-                                    fuzzer_stats_path.clone().display()
+                                    fuzzer_stats_path.display()
                                 ));
                             }
                         }
@@ -199,7 +199,7 @@ impl DataFetcher {
                 match key {
                     "run_time" => {
                         if self.update_once {
-                            self.process_run_time(value)
+                            self.process_run_time(value);
                         }
                     }
                     "time_wo_finds" => self.process_time_wo_finds(value),
@@ -215,12 +215,12 @@ impl DataFetcher {
                     "saved_hangs" => self.process_saved_hangs(value),
                     "afl_banner" => {
                         if !self.update_never {
-                            self.campaign_data.misc.afl_banner = value.to_string()
+                            self.campaign_data.misc.afl_banner = value.to_string();
                         }
                     }
                     "afl_version" => {
                         if !self.update_never {
-                            self.campaign_data.misc.afl_version = value.to_string()
+                            self.campaign_data.misc.afl_version = value.to_string();
                         }
                     }
                     "cycles_done" => self.process_cycles_done(value),

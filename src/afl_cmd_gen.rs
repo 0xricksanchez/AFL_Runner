@@ -13,19 +13,19 @@ use sysinfo::System;
 #[derive(Debug)]
 pub struct AflCmd {
     /// Path to the AFL binary
-    pub afl_binary: PathBuf,
+    afl_binary: PathBuf,
     /// Environment variables for the AFL command
-    pub env: Vec<String>,
+    env: Vec<String>,
     /// Input directory for AFL
-    pub input_dir: PathBuf,
+    input_dir: PathBuf,
     /// Output directory for AFL
-    pub output_dir: PathBuf,
+    output_dir: PathBuf,
     /// Miscellaneous AFL flags
-    pub misc_afl_flags: Vec<String>,
+    misc_afl_flags: Vec<String>,
     /// Path to the target binary
-    pub target_binary: PathBuf,
+    target_binary: PathBuf,
     /// Arguments for the target binary
-    pub target_args: Option<String>,
+    target_args: Option<String>,
 }
 
 impl AflCmd {

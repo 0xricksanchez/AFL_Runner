@@ -68,7 +68,7 @@ impl Default for CampaignData {
 }
 
 impl CampaignData {
-    /// Clear all the data in the CampaignData struct
+    /// Clear all the data in the `CampaignData` struct
     pub fn clear(&mut self) {
         self.executions = ExecutionsInfo::default();
         self.pending = PendingInfo::default();
@@ -89,7 +89,7 @@ impl CampaignData {
         let now = SystemTime::now();
         let datetime: DateTime<Local> = now.into();
         let ftime = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
-        self.logs.push(format!("[{}] - {}", ftime, log));
+        self.logs.push(format!("[{ftime}] - {log}"));
     }
 }
 

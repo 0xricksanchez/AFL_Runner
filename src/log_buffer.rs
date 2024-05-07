@@ -9,7 +9,7 @@ pub struct LogRingBuffer<T> {
 
 impl<T> LogRingBuffer<T> {
     pub fn new(capacity: usize) -> Self {
-        LogRingBuffer {
+        Self {
             buffer: Vec::with_capacity(capacity),
             capacity,
             head: 0,
