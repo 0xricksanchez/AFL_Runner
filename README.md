@@ -10,7 +10,8 @@
     - [Prerequisites](#prerequisites)
     - [Installation](#installation)
   - [Features ✨](#features-)
-  - [Roadmap 🗺️](#roadmap-)
+    - [What is not? ❌](#what-is-not-)
+    - [Roadmap 🗺️](#roadmap-)
   - [Usage Example 💡](#usage-example-)
   - [Showcase 🎥](#showcase-)
   - [Contributing 🤝](#contributing-)
@@ -67,12 +68,22 @@ aflr --help
 
 _Note_: Arguments supplied over the command-line take precedence over any configuration file options.
 
-## Roadmap 🗺️
+### What is not? ❌
+
+`AFL_Runner` aims to be a plug & play solution for when you're at a stage of fuzzing campaign where all that is left is running a multi-core setup.
+So, this tool is **not** (yet) a helper for:
+
+- Compiling a target in multiple flavors
+- Preparing a good initial seed corpus
+- Providing a decent dictionary to boost code-coverage
+- Debugging a fuzzing campaign
+
+### Roadmap 🗺️
 
 - [ ] Add remote option 🌐
-- [ ] Integrate [statsd](https://registry.hub.docker.com/r/prom/statsd-exporter)
-- [ ] Add more sensible defaults for other options
+- [ ] Native integration for [statsd](https://registry.hub.docker.com/r/prom/statsd-exporter)
 - [ ] Add more configuration options
+  - [ ] Add more sensible defaults for other options
 - [ ] Allow AFLPlusPlus forks to be used on some amount of runners
 
 ## Usage Example 💡
