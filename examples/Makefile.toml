@@ -115,6 +115,8 @@ CC = "afl-clang-fast"
 AFL_USE_ASAN = "1"
 AFL_USE_UBSAN = "1"
 AFL_USE_CFISAN = "1"
+AFL_LLVM_CMPLOG = "0"
+AFL_LLVM_LAF_ALL = "0"
 
 [tasks.build_libxml2_cmplog]
 description = "Build libxml2 with cmplog AFL++ instrumentation"
@@ -136,6 +138,10 @@ script = """
 [tasks.build_libxml2_cmplog.env]
 CC = "afl-clang-fast"
 AFL_LLVM_CMPLOG = "1"
+AFL_LLVM_LAF_ALL = "0"
+AFL_USE_ASAN = "0"
+AFL_USE_UBSAN = "0"
+AFL_USE_CFISAN = "0"
 
 [tasks.build_libxml2_cmpcov]
 description = "Build libxml2 with cmpcov AFL++ instrumentation"
@@ -157,6 +163,10 @@ script = """
 [tasks.build_libxml2_cmpcov.env]
 CC = "afl-clang-fast"
 AFL_LLVM_LAF_ALL = "1"
+AFL_LLVM_CMPLOG = "0"
+AFL_USE_ASAN = "0"
+AFL_USE_UBSAN = "0"
+AFL_USE_CFISAN = "0"
 
 
 # ----------------- RUN CAMPAIGN -----------------
