@@ -31,7 +31,7 @@ cargo-make = "0.37.12"
 members = ["examples"]
 
 [workspace.metadata.make]
-default = "run"
+default = "demo"
 working-directory = "examples"
 
 [profile.release]

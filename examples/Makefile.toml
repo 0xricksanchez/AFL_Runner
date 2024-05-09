@@ -1,5 +1,5 @@
 [tasks.default]
-alias = "run"
+alias = "demo"
 
 # ----------------- GET AFLR ----------------
 
@@ -83,6 +83,9 @@ script = """
   if [ -f Makefile ]; then
     make clean
   fi
+  for var in $(compgen -v | grep AFL_); do
+    unset $var
+  done
   autoreconf -fvi
   ./configure --disable-shared --prefix="$(pwd)/install" --without-ftp --without-http --without-legacy --without-python
   make -j$(nproc)
@@ -92,6 +95,7 @@ script = """
 
 [tasks.build_libxml2_instrumented.env]
 CC = "afl-clang-fast"
+AFL_HARDEN = "1"
 
 [tasks.build_libxml2_sanitized]
 description = "Build libxml2 with plain AFL++ instrumentation"
@@ -115,8 +119,7 @@ CC = "afl-clang-fast"
 AFL_USE_ASAN = "1"
 AFL_USE_UBSAN = "1"
 AFL_USE_CFISAN = "1"
-AFL_LLVM_CMPLOG = "0"
-AFL_LLVM_LAF_ALL = "0"
+AFL_HARDEN = "1"
 
 [tasks.build_libxml2_cmplog]
 description = "Build libxml2 with cmplog AFL++ instrumentation"
@@ -128,6 +131,9 @@ script = """
   if [ -f Makefile ]; then
     make clean
   fi
+  for var in $(compgen -v | grep AFL_); do
+    unset $var
+  done
   autoreconf -fvi
   ./configure --disable-shared --prefix="$(pwd)/install" --without-ftp --without-http --without-legacy --without-python
   make -j$(nproc)
@@ -138,10 +144,7 @@ script = """
 [tasks.build_libxml2_cmplog.env]
 CC = "afl-clang-fast"
 AFL_LLVM_CMPLOG = "1"
-AFL_LLVM_LAF_ALL = "0"
-AFL_USE_ASAN = "0"
-AFL_USE_UBSAN = "0"
-AFL_USE_CFISAN = "0"
+AFL_HARDEN = "1"
 
 [tasks.build_libxml2_cmpcov]
 description = "Build libxml2 with cmpcov AFL++ instrumentation"
@@ -153,6 +156,9 @@ script = """
   if [ -f Makefile ]; then
     make clean
   fi
+  for var in $(compgen -v | grep AFL_); do
+    unset $var
+  done
   autoreconf -fvi
   ./configure --disable-shared --prefix="$(pwd)/install" --without-ftp --without-http --without-legacy --without-python
   make -j$(nproc)
@@ -163,35 +169,37 @@ script = """
 [tasks.build_libxml2_cmpcov.env]
 CC = "afl-clang-fast"
 AFL_LLVM_LAF_ALL = "1"
-AFL_LLVM_CMPLOG = "0"
-AFL_USE_ASAN = "0"
-AFL_USE_UBSAN = "0"
-AFL_USE_CFISAN = "0"
+AFL_HARDEN = "1"
 
 
 # ----------------- RUN CAMPAIGN -----------------
 
 [tasks.run]
-dependencies = [
-  "build_aflr",
-  "build_libxml2",
-  "get_corpus",
-  "get_dict",
-  "run_dry",
-]
+dependencies = ["build_aflr", "build_libxml2", "get_corpus", "get_dict"]
 description = "Run aflr with the optimizal settings"
 script_runner = "@shell"
 script = """
-../target/release/aflr run --config aflr_config.toml
+echo "y\ny\n" | ../target/release/aflr run --config aflr_config.toml
 """
 
-[tasks.run_dry]
+[tasks.dry_run]
 dependencies = ["build_aflr", "build_libxml2", "get_corpus", "get_dict"]
 description = "Run aflr with the optimizal settings"
 script_runner = "@shell"
 script = """
 ../target/release/aflr run --config aflr_config.toml --dry-run
-echo ""
-echo "About to run the above commands..."
-sleep 3s
 """
+
+[tasks.explain]
+description = "Explain the AFLR campaign"
+script_runner = "@shell"
+script = """
+echo ""
+echo 'AFLR dynamically generated the above 16 commands to run tge campaign...'
+echo ""
+sleep 2s
+""""
+
+[tasks.demo]
+dependencies = ["dry_run", "explain", "run"]
+description = "Run the AFLR demo campaign"

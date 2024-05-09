@@ -40,4 +40,4 @@ This will fetch all necessary files and kick-start the build-process for all the
 If the build succeeds `aflr` will based on the `aflr_config.toml` spin up _16_ fuzzing processes that closely follow
 the recommended best-practice setup described [here](https://aflplus.plus/docs/fuzzing_in_depth/#c-using-multiple-cores)
 
-_Note_: You can also just run `cargo make run_dry` to simply run the command generator (requires building) instead of running the actual fuzzing!
+_Note_: You can also just run `cargo make dry_run` to simply run the command generator (requires building) instead of running the actual fuzzing!

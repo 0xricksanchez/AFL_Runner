@@ -109,9 +109,7 @@ The example builds a recent version of _libxml2_ four times with different compi
 Afterwards, the necessary commands for 16 instances are being generated, which then are executed in a dedicated TMUX session.
 Finally, a custom TUI offered by \*_AFL Runner_ is tracking the progress of the fuzzing campaign in a centralized space:
 
-TODO: Replace with DEMO gif
-
-![AFL_Runner TUI](img/tui.png)
+![AFL_Runner demo](img/demo.gif)
 
 _Note_: The TUI can be used as a **full** replacement for `afl-whatsup` by using `afl_runner tui <afl_output_dir>`!
 
