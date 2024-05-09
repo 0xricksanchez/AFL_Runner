@@ -106,7 +106,7 @@ The example builds a recent version of _libxml2_ four times with different compi
 3. CMPCOV, and
 4. CMPLOG.
 
-Afterwards, the necessary commands for 32 instances are being generated, which then are executed in a dedicated TMUX session.
+Afterwards, the necessary commands for 16 instances are being generated, which then are executed in a dedicated TMUX session.
 Finally, a custom TUI offered by \*_AFL Runner_ is tracking the progress of the fuzzing campaign in a centralized space:
 
 TODO: Replace with DEMO gif
