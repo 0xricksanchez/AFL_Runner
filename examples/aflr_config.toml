@@ -1,15 +1,15 @@
 [target]
 # Target binary to fuzz
-path = "./xmllint_instr"
+path = "./xmllint_instr_2.10.0"
 
 # Instrumented with *SAN binary to use
-san_path = "./xmllint_san"
+san_path = "./xmllint_san_2.10.0"
 
 # Instrumented with CMPLOG binary to use
-cmpl_path = "./xmllint_cmplog"
+cmpl_path = "./xmllint_cmplog_2.10.0"
 
 # Instrumented with Laf-intel/CMPCOV binary to use
-cmpc_path = "./xmllint_cmpcov"
+cmpc_path = "./xmllint_cmpcov_2.10.0"
 
 # Target binary arguments, including @@ if needed
 args = [

@@ -1,7 +1,12 @@
 # AFL++ Fuzzing with AFLR
 
-This example demonstrates how to use `aflr` to start a best-practice multi-core fuzzing campaign for the libxml2 library.
+This example demonstrates how to use `aflr` to start a best-practice multi-core fuzzing campaign for the `libxml2` library.
 The setup is fully configured via the `Makefile.toml`, whereas the fuzzing campaign behavior is controlled from the `aflr_config.toml`.
+
+The default example pulls `libxml2` `v2.10.0`. Testing another version should be straightforward, you simply have to:
+
+1. Update the version number in the `Makefile.toml`
+2. Update the `aflr_config.toml` so that `aflr` uses the updated `xmllint` builds.
 
 ## Prerequisites
 

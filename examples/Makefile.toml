@@ -40,8 +40,8 @@ script = """
 # ----------------- GET libxml2 -----------------
 
 [tasks.get_libxml2]
-condition = { files_not_exist = ["libxml2-2.10.0"] }
-description = "Download and extract libxml2 2.10.0"
+condition = { files_not_exist = ["libxml2-${LIBXML2_VER}"] }
+description = "Download and extract libxml2"
 script_runner = "@shell"
 script = """
   wget https://github.com/GNOME/libxml2/archive/refs/tags/v${LIBXML2_VER}.tar.gz
@@ -248,7 +248,7 @@ echo ""
 echo 'AFLR dynamically generated the above 16 commands to run the campaign...'
 echo ""
 sleep 6s
-""""
+"""
 
 [tasks.demo]
 dependencies = ["dry_run", "explain", "run"]
