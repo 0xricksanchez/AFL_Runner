@@ -1,3 +1,6 @@
+[env]
+LIBXML2_VER = "2.10.0"
+
 [tasks.default]
 alias = "demo"
 
@@ -41,9 +44,9 @@ condition = { files_not_exist = ["libxml2-2.10.0"] }
 description = "Download and extract libxml2 2.10.0"
 script_runner = "@shell"
 script = """
-  wget https://github.com/GNOME/libxml2/archive/refs/tags/v2.10.0.tar.gz
-  tar -xzvf v2.10.0.tar.gz
-  rm -rf v2.10.0.tar.gz
+  wget https://github.com/GNOME/libxml2/archive/refs/tags/v${LIBXML2_VER}.tar.gz
+  tar -xzvf v${LIBXML2_VER}.tar.gz
+  rm -rf v${LIBXML2_VER}.tar.gz
 """
 
 # ----------------- BUILD libxml2 -----------------
@@ -75,22 +78,27 @@ dependencies = [
 
 [tasks.build_libxml2_instrumented]
 description = "Build libxml2 with plain AFL++ instrumentation"
-condition = { files_not_exist = ["../xmllint_instr"] }
+condition = { files_not_exist = ["../xmllint_instr_${LIBXML2_VER}"] }
 dependencies = ["get_libxml2"]
-cwd = "libxml2-2.10.0/"
+cwd = "libxml2-${LIBXML2_VER}/"
 script_runner = "@shell"
 script = """
   if [ -f Makefile ]; then
     make clean
   fi
-  for var in $(compgen -v | grep AFL_); do
-    unset $var
+
+  for var in $(env | grep -e "^AFL_"); do
+    var=$(echo $var | cut -d= -f1)
+    if [ "$var" != "AFL_HARDEN" ]; then
+      unset $var
+    fi
   done
+
   autoreconf -fvi
   ./configure --disable-shared --prefix="$(pwd)/install" --without-ftp --without-http --without-legacy --without-python
   make -j$(nproc)
   make install
-  mv install/bin/xmllint ../xmllint_instr
+  mv install/bin/xmllint ../xmllint_instr_${LIBXML2_VER}
 """
 
 [tasks.build_libxml2_instrumented.env]
@@ -99,19 +107,35 @@ AFL_HARDEN = "1"
 
 [tasks.build_libxml2_sanitized]
 description = "Build libxml2 with plain AFL++ instrumentation"
-condition = { files_not_exist = ["../xmllint_san"] }
+condition = { files_not_exist = ["../xmllint_san_${LIBXML2_VER}"] }
 dependencies = ["get_libxml2"]
-cwd = "libxml2-2.10.0/"
+cwd = "libxml2-${LIBXML2_VER}/"
 script_runner = "@shell"
 script = """
   if [ -f Makefile ]; then
     make clean
   fi
+
+  never_unset="AFL_USE_ASAN AFL_USE_UBSAN AFL_USE_CFISAN"
+  for var in $(env | grep -e "^AFL_"); do
+    var=$(echo $var | cut -d= -f1)
+    skip=0
+    for item in $never_unset; do
+      if [ "$var" = "$item" ]; then
+        skip=1
+        break
+      fi
+    done
+    if [ $skip -eq 0 ]; then
+      unset $var
+    fi
+  done
+
   autoreconf -fvi
   ./configure --disable-shared --prefix="$(pwd)/install" --without-ftp --without-http --without-legacy --without-python
   make -j$(nproc)
   make install
-  mv install/bin/xmllint ../xmllint_san
+  mv install/bin/xmllint ../xmllint_san_${LIBXML2_VER}
 """
 
 [tasks.build_libxml2_sanitized.env]
@@ -123,22 +147,35 @@ AFL_HARDEN = "1"
 
 [tasks.build_libxml2_cmplog]
 description = "Build libxml2 with cmplog AFL++ instrumentation"
-condition = { files_not_exist = ["../xmllint_cmplog"] }
+condition = { files_not_exist = ["../xmllint_cmplog_${LIBXML2_VER}"] }
 dependencies = ["get_libxml2"]
-cwd = "libxml2-2.10.0/"
+cwd = "libxml2-${LIBXML2_VER}/"
 script_runner = "@shell"
 script = """
   if [ -f Makefile ]; then
     make clean
   fi
-  for var in $(compgen -v | grep AFL_); do
-    unset $var
+
+  never_unset="AFL_LLVM_CMPLOG AFL_HARDEN"
+  for var in $(env | grep -e "^AFL_"); do
+    var=$(echo $var | cut -d= -f1)
+    skip=0
+    for item in $never_unset; do
+      if [ "$var" = "$item" ]; then
+        skip=1
+        break
+      fi
+    done
+    if [ $skip -eq 0 ]; then
+      unset $var
+    fi
   done
+
   autoreconf -fvi
   ./configure --disable-shared --prefix="$(pwd)/install" --without-ftp --without-http --without-legacy --without-python
   make -j$(nproc)
   make install
-  mv install/bin/xmllint ../xmllint_cmplog
+  mv install/bin/xmllint ../xmllint_cmplog_${LIBXML2_VER}
 """
 
 [tasks.build_libxml2_cmplog.env]
@@ -148,22 +185,35 @@ AFL_HARDEN = "1"
 
 [tasks.build_libxml2_cmpcov]
 description = "Build libxml2 with cmpcov AFL++ instrumentation"
-condition = { files_not_exist = ["../xmllint_cmpcov"] }
+condition = { files_not_exist = ["../xmllint_cmpcov_${LIBXML2_VER}"] }
 dependencies = ["get_libxml2"]
-cwd = "libxml2-2.10.0/"
+cwd = "libxml2-${LIBXML2_VER}/"
 script_runner = "@shell"
 script = """
   if [ -f Makefile ]; then
     make clean
   fi
-  for var in $(compgen -v | grep AFL_); do
-    unset $var
+
+  never_unset="AFL_LLVM_LAF_ALL AFL_HARDEN"
+  for var in $(env | grep -e "^AFL_"); do
+    var=$(echo $var | cut -d= -f1)
+    skip=0
+    for item in $never_unset; do
+      if [ "$var" = "$item" ]; then
+        skip=1
+        break
+      fi
+    done
+    if [ $skip -eq 0 ]; then
+      unset $var
+    fi
   done
+
   autoreconf -fvi
   ./configure --disable-shared --prefix="$(pwd)/install" --without-ftp --without-http --without-legacy --without-python
   make -j$(nproc)
   make install
-  mv install/bin/xmllint ../xmllint_cmpcov
+  mv install/bin/xmllint ../xmllint_cmpcov_${LIBXML2_VER}
 """
 
 [tasks.build_libxml2_cmpcov.env]
@@ -195,9 +245,9 @@ description = "Explain the AFLR campaign"
 script_runner = "@shell"
 script = """
 echo ""
-echo 'AFLR dynamically generated the above 16 commands to run tge campaign...'
+echo 'AFLR dynamically generated the above 16 commands to run the campaign...'
 echo ""
-sleep 2s
+sleep 6s
 """"
 
 [tasks.demo]
