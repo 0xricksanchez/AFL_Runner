@@ -3,7 +3,7 @@ name = "afl_runner"
 authors = ["0x434b <admin@0x434b.dev"]
 repository = "https://github.com/0xricksanchez/AFL_Runner"
 description = "Scaling best-practice AFLPlusPlus fuzzing campaigns made easy"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 keywords = ["afl", "fuzzing", "fuzz-testing", "testing", "fuzzer"]
 license = "Apache-2.0"
@@ -13,15 +13,26 @@ name = "aflr"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.82"
+anyhow = "1.0.83"
 clap = { version = "4.5.4", features = ["wrap_help", "string", "derive"] }
 rand = "0.8.5"
-sysinfo = "0.30.11"
+sysinfo = "0.30.12"
 upon = "0.8.1"
 toml = "0.8.12"
-serde = { version = "1.0.199", features = ["derive"] }
+serde = { version = "1.0.200", features = ["derive"] }
 ratatui = { version = "0.26.2", features = ["crossterm", "all-widgets"] }
 crossterm = "0.27.0"
+chrono = "0.4.38"
+
+[dev-dependencies]
+cargo-make = "0.37.12"
+
+[workspace]
+members = ["examples"]
+
+[workspace.metadata.make]
+default = "demo"
+working-directory = "examples"
 
 [profile.release]
 opt-level = 3

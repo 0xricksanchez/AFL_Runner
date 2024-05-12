@@ -1,0 +1,58 @@
+[target]
+# Target binary to fuzz
+path = "./xmllint_instr_2.10.0"
+
+# Instrumented with *SAN binary to use
+san_path = "./xmllint_san_2.10.0"
+
+# Instrumented with CMPLOG binary to use
+cmpl_path = "./xmllint_cmplog_2.10.0"
+
+# Instrumented with Laf-intel/CMPCOV binary to use
+cmpc_path = "./xmllint_cmpcov_2.10.0"
+
+# Target binary arguments, including @@ if needed
+args = [
+  "--memory",
+  "--noenc",
+  "--nocdata",
+  "--dtdattr",
+  "--loaddtd",
+  "--valid",
+  "--xinclude",
+  "@@",
+]
+
+[afl_cfg]
+# Amount of processes to spin up
+runners = 16
+
+# Seed corpus directory
+seed_dir = "./seed_corpus"
+
+# Solution/Crash output directory
+solution_dir = "/tmp/aflr_demo_solutions"
+
+# Token dictionary to use
+dictionary = "./xml.dict"
+
+# Custom AFL flags
+afl_flags = "-T 'AFLR_DEMO'"
+
+
+[session]
+# Spin up a custom tmux session with the fuzzers
+dry_run = false
+
+# Custom tmux session name
+name = "aflr_demo_session"
+
+# Runner backend to use: [tmux, screen]
+runner = "tmux"
+
+[misc]
+# Enable TUI mode
+tui = true
+
+# Start with no tui and detached from any session
+detached = false

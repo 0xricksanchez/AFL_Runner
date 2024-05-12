@@ -1,5 +1,8 @@
-use std::path::PathBuf;
+use crate::log_buffer::LogRingBuffer;
+use chrono::{DateTime, Local};
 use std::time::Duration;
+use std::time::SystemTime;
+use std::{path::PathBuf, time::Instant};
 
 #[allow(dead_code)]
 #[derive(Default, Debug, Clone)]
@@ -17,7 +20,7 @@ pub struct CrashInfoDetails {
 
 #[derive(Debug, Clone)]
 pub struct CampaignData {
-    pub fuzzers_alive: usize,
+    pub fuzzers_alive: Vec<usize>,
     pub fuzzers_started: usize,
     pub fuzzer_pids: Vec<u32>,
     pub total_run_time: Duration,
@@ -30,16 +33,18 @@ pub struct CampaignData {
     pub crashes: Solutions,
     pub hangs: Solutions,
     pub levels: Levels,
-    pub time_without_finds: Duration,
+    pub time_without_finds: TimeWOFinds,
     pub last_crashes: Vec<CrashInfoDetails>,
     pub last_hangs: Vec<CrashInfoDetails>,
     pub misc: Misc,
+    pub start_time: Option<Instant>,
+    pub logs: LogRingBuffer<String>,
 }
 
 impl Default for CampaignData {
     fn default() -> Self {
         Self {
-            fuzzers_alive: 0,
+            fuzzers_alive: Vec::new(),
             fuzzers_started: 0,
             fuzzer_pids: Vec::new(),
             total_run_time: Duration::from_secs(0),
@@ -52,15 +57,18 @@ impl Default for CampaignData {
             crashes: Solutions::default(),
             hangs: Solutions::default(),
             levels: Levels::default(),
-            time_without_finds: Duration::from_secs(0),
+            time_without_finds: TimeWOFinds::default(),
             last_crashes: Vec::with_capacity(10),
             last_hangs: Vec::with_capacity(10),
             misc: Misc::default(),
+            start_time: None,
+            logs: LogRingBuffer::new(10),
         }
     }
 }
 
 impl CampaignData {
+    /// Clear all the data in the `CampaignData` struct
     pub fn clear(&mut self) {
         self.executions = ExecutionsInfo::default();
         self.pending = PendingInfo::default();
@@ -71,10 +79,25 @@ impl CampaignData {
         self.crashes = Solutions::default();
         self.hangs = Solutions::default();
         self.levels = Levels::default();
-        self.time_without_finds = Duration::from_secs(0);
+        self.time_without_finds = TimeWOFinds::default();
         self.last_crashes.clear();
         self.last_hangs.clear();
     }
+
+    /// Append a log to the logs vector with the elapsed time since the start of the campaign
+    pub fn log(&mut self, log: &str) {
+        let now = SystemTime::now();
+        let datetime: DateTime<Local> = now.into();
+        let ftime = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
+        self.logs.push(format!("[{ftime}] - {log}"));
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct TimeWOFinds {
+    pub avg: usize,
+    pub min: usize,
+    pub max: usize,
 }
 
 #[derive(Default, Debug, Clone)]

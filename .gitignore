@@ -1,3 +1,10 @@
 /target
 core*
 tags
+
+# Ignore the example
+examples/libxml2*
+examples/xml*
+examples/seed*
+examples/target/
+

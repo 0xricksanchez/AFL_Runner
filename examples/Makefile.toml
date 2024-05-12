@@ -1,0 +1,255 @@
+[env]
+LIBXML2_VER = "2.10.0"
+
+[tasks.default]
+alias = "demo"
+
+# ----------------- GET AFLR ----------------
+
+[tasks.build_aflr]
+cwd = "../"
+condition = { files_modified = { input = [
+  "${CARGO_MAKE_WORKING_DIRECTORY}/Cargo.toml",
+  "./src/**/*.rs",
+], output = [
+  "./target/**/myapp*",
+] } }
+command = "cargo"
+args = ["build", "--release"]
+
+
+# ----------------- GET CORPUS ----------------
+
+[tasks.get_corpus]
+condition = { files_not_exist = ["seed_corpus"] }
+script_runner = "@shell"
+script = """
+  mkdir seed_corpus && cd seed_corpus
+  wget -q https://raw.githubusercontent.com/antonio-morales/Fuzzing101/main/Exercise%205/SampleInput.xml
+"""
+
+# ----------------- GET DICTIONARY -------------
+
+[tasks.get_dict]
+condition = { files_not_exist = ["xml.dict"] }
+script_runner = "@shell"
+script = """
+  wget -q https://raw.githubusercontent.com/AFLplusplus/AFLplusplus/stable/dictionaries/xml.dict
+"""
+
+# ----------------- GET libxml2 -----------------
+
+[tasks.get_libxml2]
+condition = { files_not_exist = ["libxml2-${LIBXML2_VER}"] }
+description = "Download and extract libxml2"
+script_runner = "@shell"
+script = """
+  wget https://github.com/GNOME/libxml2/archive/refs/tags/v${LIBXML2_VER}.tar.gz
+  tar -xzvf v${LIBXML2_VER}.tar.gz
+  rm -rf v${LIBXML2_VER}.tar.gz
+"""
+
+# ----------------- BUILD libxml2 -----------------
+
+[tasks.is_tooling_installed]
+description = "Check if compile tooling is installed"
+script_runner = "@shell"
+script = """
+commands="clang afl-clang-lto afl-clang-lto++ afl-clang-fast afl-clang-fast++ make autoconf"
+for cmd in $commands; do
+  if ! command -v "$cmd" > /dev/null 2>&1; then
+    echo "[!] Necessary command \"$cmd\" could not be found"
+    exit 1
+  fi
+done
+exit 0 
+"""
+
+[tasks.build_libxml2]
+description = "Build libxml2/xmllint in all 4 versions"
+dependencies = [
+  "get_libxml2",
+  "is_tooling_installed",
+  "build_libxml2_instrumented",
+  "build_libxml2_sanitized",
+  "build_libxml2_cmplog",
+  "build_libxml2_cmpcov",
+]
+
+[tasks.build_libxml2_instrumented]
+description = "Build libxml2 with plain AFL++ instrumentation"
+condition = { files_not_exist = ["../xmllint_instr_${LIBXML2_VER}"] }
+dependencies = ["get_libxml2"]
+cwd = "libxml2-${LIBXML2_VER}/"
+script_runner = "@shell"
+script = """
+  if [ -f Makefile ]; then
+    make clean
+  fi
+
+  for var in $(env | grep -e "^AFL_"); do
+    var=$(echo $var | cut -d= -f1)
+    if [ "$var" != "AFL_HARDEN" ]; then
+      unset $var
+    fi
+  done
+
+  autoreconf -fvi
+  ./configure --disable-shared --prefix="$(pwd)/install" --without-ftp --without-http --without-legacy --without-python
+  make -j$(nproc)
+  make install
+  mv install/bin/xmllint ../xmllint_instr_${LIBXML2_VER}
+"""
+
+[tasks.build_libxml2_instrumented.env]
+CC = "afl-clang-fast"
+AFL_HARDEN = "1"
+
+[tasks.build_libxml2_sanitized]
+description = "Build libxml2 with plain AFL++ instrumentation"
+condition = { files_not_exist = ["../xmllint_san_${LIBXML2_VER}"] }
+dependencies = ["get_libxml2"]
+cwd = "libxml2-${LIBXML2_VER}/"
+script_runner = "@shell"
+script = """
+  if [ -f Makefile ]; then
+    make clean
+  fi
+
+  never_unset="AFL_USE_ASAN AFL_USE_UBSAN AFL_USE_CFISAN"
+  for var in $(env | grep -e "^AFL_"); do
+    var=$(echo $var | cut -d= -f1)
+    skip=0
+    for item in $never_unset; do
+      if [ "$var" = "$item" ]; then
+        skip=1
+        break
+      fi
+    done
+    if [ $skip -eq 0 ]; then
+      unset $var
+    fi
+  done
+
+  autoreconf -fvi
+  ./configure --disable-shared --prefix="$(pwd)/install" --without-ftp --without-http --without-legacy --without-python
+  make -j$(nproc)
+  make install
+  mv install/bin/xmllint ../xmllint_san_${LIBXML2_VER}
+"""
+
+[tasks.build_libxml2_sanitized.env]
+CC = "afl-clang-fast"
+AFL_USE_ASAN = "1"
+AFL_USE_UBSAN = "1"
+AFL_USE_CFISAN = "1"
+AFL_HARDEN = "1"
+
+[tasks.build_libxml2_cmplog]
+description = "Build libxml2 with cmplog AFL++ instrumentation"
+condition = { files_not_exist = ["../xmllint_cmplog_${LIBXML2_VER}"] }
+dependencies = ["get_libxml2"]
+cwd = "libxml2-${LIBXML2_VER}/"
+script_runner = "@shell"
+script = """
+  if [ -f Makefile ]; then
+    make clean
+  fi
+
+  never_unset="AFL_LLVM_CMPLOG AFL_HARDEN"
+  for var in $(env | grep -e "^AFL_"); do
+    var=$(echo $var | cut -d= -f1)
+    skip=0
+    for item in $never_unset; do
+      if [ "$var" = "$item" ]; then
+        skip=1
+        break
+      fi
+    done
+    if [ $skip -eq 0 ]; then
+      unset $var
+    fi
+  done
+
+  autoreconf -fvi
+  ./configure --disable-shared --prefix="$(pwd)/install" --without-ftp --without-http --without-legacy --without-python
+  make -j$(nproc)
+  make install
+  mv install/bin/xmllint ../xmllint_cmplog_${LIBXML2_VER}
+"""
+
+[tasks.build_libxml2_cmplog.env]
+CC = "afl-clang-fast"
+AFL_LLVM_CMPLOG = "1"
+AFL_HARDEN = "1"
+
+[tasks.build_libxml2_cmpcov]
+description = "Build libxml2 with cmpcov AFL++ instrumentation"
+condition = { files_not_exist = ["../xmllint_cmpcov_${LIBXML2_VER}"] }
+dependencies = ["get_libxml2"]
+cwd = "libxml2-${LIBXML2_VER}/"
+script_runner = "@shell"
+script = """
+  if [ -f Makefile ]; then
+    make clean
+  fi
+
+  never_unset="AFL_LLVM_LAF_ALL AFL_HARDEN"
+  for var in $(env | grep -e "^AFL_"); do
+    var=$(echo $var | cut -d= -f1)
+    skip=0
+    for item in $never_unset; do
+      if [ "$var" = "$item" ]; then
+        skip=1
+        break
+      fi
+    done
+    if [ $skip -eq 0 ]; then
+      unset $var
+    fi
+  done
+
+  autoreconf -fvi
+  ./configure --disable-shared --prefix="$(pwd)/install" --without-ftp --without-http --without-legacy --without-python
+  make -j$(nproc)
+  make install
+  mv install/bin/xmllint ../xmllint_cmpcov_${LIBXML2_VER}
+"""
+
+[tasks.build_libxml2_cmpcov.env]
+CC = "afl-clang-fast"
+AFL_LLVM_LAF_ALL = "1"
+AFL_HARDEN = "1"
+
+
+# ----------------- RUN CAMPAIGN -----------------
+
+[tasks.run]
+dependencies = ["build_aflr", "build_libxml2", "get_corpus", "get_dict"]
+description = "Run aflr with the optimizal settings"
+script_runner = "@shell"
+script = """
+echo "y\ny\n" | ../target/release/aflr run --config aflr_config.toml
+"""
+
+[tasks.dry_run]
+dependencies = ["build_aflr", "build_libxml2", "get_corpus", "get_dict"]
+description = "Run aflr with the optimizal settings"
+script_runner = "@shell"
+script = """
+../target/release/aflr run --config aflr_config.toml --dry-run
+"""
+
+[tasks.explain]
+description = "Explain the AFLR campaign"
+script_runner = "@shell"
+script = """
+echo ""
+echo 'AFLR dynamically generated the above 16 commands to run the campaign...'
+echo ""
+sleep 6s
+"""
+
+[tasks.demo]
+dependencies = ["dry_run", "explain", "run"]
+description = "Run the AFLR demo campaign"

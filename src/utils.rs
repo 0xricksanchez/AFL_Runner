@@ -1,21 +1,22 @@
-use std::fs;
 use std::hash::{DefaultHasher, Hasher};
 use std::io::{stdin, Read};
 use std::path::Path;
 use std::path::PathBuf;
 use std::{char, env};
+use std::{fs, time::Duration};
 use sysinfo::{Pid, System};
 
 use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
 
-use crate::afl_cmd_gen::AFLCmdGenerator;
 use crate::cli::Config;
 use crate::cli::GenArgs;
 use crate::cli::RunArgs;
 use crate::cli::AFL_CORPUS;
 use crate::harness::Harness;
+
+pub static DEFAULT_AFL_CONFIG: &str = "aflr_cfg.toml";
 
 /// Creates a new `Harness` instance based on the provided `GenArgs`.
 ///
@@ -35,31 +36,7 @@ pub fn create_harness(args: &GenArgs) -> Result<Harness> {
     ))
 }
 
-/// Creates a new `AFLCmdGenerator` instance based on the provided `GenArgs` and `Harness`.
-///
-/// If the input directory is not specified, it defaults to `AFL_CORPUS`.
-/// If the output directory is not specified, it defaults to `/tmp/afl_output`.
-pub fn create_afl_runner(
-    args: &GenArgs,
-    harness: Harness,
-    raw_afl_flags: Option<String>,
-) -> AFLCmdGenerator {
-    AFLCmdGenerator::new(
-        harness,
-        args.runners.unwrap_or(1),
-        args.input_dir
-            .clone()
-            .unwrap_or_else(|| PathBuf::from(AFL_CORPUS)),
-        args.output_dir
-            .clone()
-            .unwrap_or_else(|| PathBuf::from("/tmp/afl_output")),
-        args.dictionary.clone(),
-        raw_afl_flags,
-        args.afl_binary.clone(),
-    )
-}
-
-/// Generates a unique tmux session name based on the provided `RunArgs` and `target_args`.
+/// Generates a unique session name based on the provided `RunArgs` and `target_args`.
 ///
 /// If the `session_name` is not specified in `RunArgs`, the function generates a unique name
 /// by combining the target binary name, input directory name, and a hash of the `target_args`.
@@ -109,7 +86,7 @@ pub fn load_config(config_path: Option<&PathBuf>) -> Result<Config> {
             .with_context(|| format!("Failed to parse config file: {}", path.display()))
     } else {
         let cwd = env::current_dir().context("Failed to get current directory")?;
-        let default_config_path = cwd.join("aflr_cfg.toml");
+        let default_config_path = cwd.join(DEFAULT_AFL_CONFIG);
         if default_config_path.exists() {
             let config_content = fs::read_to_string(&default_config_path).with_context(|| {
                 format!(
@@ -124,7 +101,7 @@ pub fn load_config(config_path: Option<&PathBuf>) -> Result<Config> {
                 )
             })
         } else {
-            Ok(Config::default())
+            bail!("No config file provided and no default configuration file in CWD found")
         }
     }
 }
@@ -179,11 +156,30 @@ pub fn mkdir_helper(dir: &Path, check_empty: bool) -> Result<()> {
 }
 
 /// Count the number of alive procsses based on a list of PIDs
-pub fn count_alive_fuzzers(fuzzer_pids: &[u32]) -> usize {
+pub fn count_alive_fuzzers(fuzzer_pids: &[u32]) -> Vec<usize> {
     let s = System::new_all();
     fuzzer_pids
         .iter()
         .filter(|&pid| *pid != 0)
         .filter(|&pid| s.process(Pid::from(*pid as usize)).is_some())
-        .count()
+        .map(|&pid| pid as usize)
+        .collect()
+}
+
+/// Formats a duration into a string based on days, hours, minutes, and seconds
+pub fn format_duration(duration: &Duration) -> String {
+    let mut secs = duration.as_secs();
+    let days = secs / 86400;
+    let hours = (secs % 86400) / 3600;
+    let mins = (secs % 3600) / 60;
+    secs %= 60;
+    if days > 0 {
+        format!("{days} days, {hours:02}:{mins:02}:{secs:02}")
+    } else if days == 0 && hours > 0 {
+        format!("{hours:02}:{mins:02}:{secs:02}")
+    } else if days == 0 && hours == 0 && mins > 0 {
+        format!("{mins:02}:{secs:02}")
+    } else {
+        format!("{secs:02}s")
+    }
 }
