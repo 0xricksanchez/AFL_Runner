@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::{fs, process::Command};
+use uuid::Uuid;
 
 use crate::afl_env::{AFLEnv, AFLFlag};
 use crate::harness::Harness;
@@ -169,6 +170,7 @@ pub struct AFLCmdGenerator {
     /// If we have a CMPCOV binary, this will contain the indices of the AFL commands that should
     /// use the CMPCOV binary
     cmpcov_idxs: Vec<usize>,
+    pub ramdisk: Option<String>,
 }
 
 impl AFLCmdGenerator {
@@ -181,6 +183,7 @@ impl AFLCmdGenerator {
         dictionary: Option<PathBuf>,
         raw_afl_flags: Option<String>,
         afl_binary: Option<String>,
+        is_ramdisk: bool,
     ) -> Self {
         let dict = dictionary.and_then(|d| {
             if d.exists() && d.is_file() {
@@ -189,6 +192,19 @@ impl AFLCmdGenerator {
                 None
             }
         });
+        let rdisk = if is_ramdisk {
+            println!("[*] Attempting to create RAMDisk. Needing elevated privileges.");
+            let r = AFLCmdGenerator::create_ramdisk();
+            if let Ok(tmpfs) = r {
+                println!("[+] Using RAMDisk: {}", tmpfs);
+                Some(tmpfs)
+            } else {
+                println!("[!] Failed to create RAMDisk: {}...", r.err().unwrap());
+                None
+            }
+        } else {
+            None
+        };
 
         Self {
             harness,
@@ -199,7 +215,24 @@ impl AFLCmdGenerator {
             raw_afl_flags,
             afl_binary,
             cmpcov_idxs: Vec::new(),
+            ramdisk: rdisk,
         }
+    }
+
+    fn create_ramdisk() -> Result<String> {
+        let uuid = Uuid::new_v4().to_string();
+        let folder = format!("/tmp/tmpfs/{}", uuid);
+        let _ = fs::create_dir_all(&folder)?;
+        let _ = Command::new("sudo")
+            .arg("mount")
+            .arg("-o")
+            .arg("size=4G")
+            .arg("-t")
+            .arg("tmpfs")
+            .arg("none")
+            .arg(&folder)
+            .output()?;
+        Ok(folder)
     }
 
     /// Retrieves AFL environment variables
@@ -312,7 +345,7 @@ impl AFLCmdGenerator {
             .iter()
             .map(|config| {
                 let mut cmd = AflCmd::new(afl_binary.clone(), target_binary.clone());
-                cmd.extend_env(config.generate_afl_env_cmd(), false);
+                cmd.extend_env(config.generate_afl_env_cmd(self.ramdisk.clone()), false);
                 if let Some(raw_afl_flags) = &self.raw_afl_flags {
                     cmd.set_misc_afl_flags(
                         raw_afl_flags
@@ -378,7 +411,7 @@ impl AFLCmdGenerator {
 
         for (i, cmd) in cmds[1..].iter_mut().enumerate() {
             let suffix = if cmd.misc_afl_flags.iter().any(|f| f.contains("-c")) {
-                format!("_{target_fname}_cmplog")
+                format!("_{target_fname}_cl")
             } else {
                 format!("_{target_fname}")
             };
@@ -391,9 +424,9 @@ impl AFLCmdGenerator {
                     .to_str()
                     .unwrap()
                     .replace('.', "_");
-                format!("-S sub_{i}_{cmpcov_fname}")
+                format!("-S s_{i}_{cmpcov_fname}")
             } else {
-                format!("-S sub_{i}{suffix}")
+                format!("-S s_{i}{suffix}")
             };
 
             cmd.misc_afl_flags.push(s_flag);

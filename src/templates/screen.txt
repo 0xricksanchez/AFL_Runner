@@ -30,12 +30,12 @@ for i in "${!COMMANDS[@]}"; do
 	COMMAND_ESCAPED=$(echo "${COMMANDS[$i]}" | sed 's/"/\\"/g')
 	if [ $i -eq 0 ]; then
 		# For the first command, send it to the first window and rename it
-		screen -S $SESSION_NAME -p 0 -X stuff $' { '"$COMMAND_ESCAPED"' & echo $! > '"$TEMP_PID_FILE"'; clear; fg }\n'
+		screen -S $SESSION_NAME -p 0 -X stuff $' { '"$COMMAND_ESCAPED"' & echo $! > '"$TEMP_PID_FILE"'; clear; fg; }\n'
 		screen -S $SESSION_NAME -p 0 -X title $WINDOW_NAME
 	else
 		# For subsequent commands, create new windows and rename them
 		screen -S $SESSION_NAME -X screen -t $WINDOW_NAME
-		screen -S $SESSION_NAME -p $WINDOW_NAME -X stuff $' { '"$COMMAND_ESCAPED"' & echo $! > '"$TEMP_PID_FILE"'; clear; fg }\n'
+		screen -S $SESSION_NAME -p $WINDOW_NAME -X stuff $' { '"$COMMAND_ESCAPED"' & echo $! > '"$TEMP_PID_FILE"'; clear; fg; }\n'
 	fi
 done
 
