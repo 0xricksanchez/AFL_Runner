@@ -56,3 +56,6 @@ tui = true
 
 # Start with no tui and detached from any session
 detached = false
+
+# Enable RAMDISK for the fuzzing session
+ramdisk = false

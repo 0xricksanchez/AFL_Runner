@@ -263,6 +263,12 @@ pub struct RunArgs {
         required = false
     )]
     pub detached: bool,
+    #[arg(
+        long,
+        help = "Use a RAMDisk for AFL++. Needs elevated prvileges.",
+        required = false
+    )]
+    pub is_ramdisk: bool,
 }
 
 impl RunArgs {
@@ -296,6 +302,11 @@ impl RunArgs {
                 false
             } else {
                 self.detached || config.misc.detached.unwrap_or(false)
+            },
+            is_ramdisk: if self.is_ramdisk {
+                false
+            } else {
+                self.is_ramdisk || config.misc.is_ramdisk.unwrap_or(false)
             },
         }
     }
@@ -364,6 +375,8 @@ pub struct MiscConfig {
     pub tui: Option<bool>,
     /// Enabled detached mode
     pub detached: Option<bool>,
+    /// Use a Ramdisk for AFL++ to store `.cur_input`
+    pub is_ramdisk: Option<bool>,
 }
 
 /// Arguments for the `kill` subcommand

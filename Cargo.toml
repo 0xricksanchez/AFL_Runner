@@ -23,6 +23,7 @@ serde = { version = "1.0.200", features = ["derive"] }
 ratatui = { version = "0.26.2", features = ["crossterm", "all-widgets"] }
 crossterm = "0.27.0"
 chrono = "0.4.38"
+uuid = { version = "1.8.0", features = ["v4"] }
 
 [dev-dependencies]
 cargo-make = "0.37.12"

@@ -50,3 +50,6 @@ tui = true
 
 # Start with no tui and detached from any session
 detached = false
+
+# If specified the AFLR will attempt to create a ramdisk for fuzzing
+ramdisk = false

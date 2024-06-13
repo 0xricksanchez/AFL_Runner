@@ -57,8 +57,12 @@ impl AFLEnv {
     }
 
     /// Generates an `AFLPlusPlus` environment variable string for the current settings
-    pub fn generate_afl_env_cmd(&self) -> Vec<String> {
+    pub fn generate_afl_env_cmd(&self, ramdisk: Option<String>) -> Vec<String> {
         let mut command = Vec::new();
+
+        if let Some(ramdisk) = ramdisk {
+            command.push(format!("AFL_TMPDIR={} ", ramdisk));
+        }
 
         command.push(format!(
             "AFL_AUTORESUME={} ",
