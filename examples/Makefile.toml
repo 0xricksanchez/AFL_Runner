@@ -245,7 +245,7 @@ description = "Explain the AFLR campaign"
 script_runner = "@shell"
 script = """
 echo ""
-echo 'AFLR dynamically generated the above 16 commands to run the campaign...'
+echo 'AFLR dynamically generated the above 6 commands to run the campaign...'
 echo ""
 sleep 6s
 """
