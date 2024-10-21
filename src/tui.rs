@@ -128,10 +128,10 @@ impl Tui {
     /// Draws the TUI with the specified session data
     fn draw(&mut self, session_data: &CampaignData) -> io::Result<()> {
         self.terminal.draw(|f| {
-            let show_crashes = f.size().height >= 16;
-            let show_hangs = f.size().height >= 30;
+            let show_crashes = f.area().height >= 16;
+            let show_hangs = f.area().height >= 30;
 
-            let chunks = Self::create_layout(f.size(), show_crashes, show_hangs);
+            let chunks = Self::create_layout(f.area(), show_crashes, show_hangs);
 
             Self::render_title(f, session_data, chunks[0]);
 

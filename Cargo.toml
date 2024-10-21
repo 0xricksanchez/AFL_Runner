@@ -13,20 +13,20 @@ name = "aflr"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.83"
-clap = { version = "4.5.4", features = ["wrap_help", "string", "derive"] }
+anyhow = "1.0.90"
+clap = { version = "4.5.20", features = ["wrap_help", "string", "derive"] }
 rand = "0.8.5"
-sysinfo = "0.30.12"
+sysinfo = "0.32.0"
 upon = "0.8.1"
-toml = "0.8.12"
-serde = { version = "1.0.200", features = ["derive"] }
-ratatui = { version = "0.26.2", features = ["crossterm", "all-widgets"] }
-crossterm = "0.27.0"
+toml = "0.8.19"
+serde = { version = "1.0.210", features = ["derive"] }
+ratatui = { version = "0.28.1", features = ["crossterm", "all-widgets"] }
+crossterm = "0.28.1"
 chrono = "0.4.38"
-uuid = { version = "1.8.0", features = ["v4"] }
+uuid = { version = "1.11.0", features = ["v4"] }
 
 [dev-dependencies]
-cargo-make = "0.37.12"
+cargo-make = "0.37.23"
 
 [workspace]
 members = ["examples"]
