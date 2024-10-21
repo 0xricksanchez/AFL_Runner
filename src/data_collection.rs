@@ -1,4 +1,5 @@
 use std::{
+    ops::Add,
     process::{Command, Stdio},
     time::Instant,
 };
@@ -255,7 +256,8 @@ impl DataFetcher {
 
     fn update_run_time(&mut self) {
         if let Some(start_time) = self.campaign_data.start_time {
-            self.campaign_data.total_run_time = start_time.elapsed();
+            // NOTE: Some buffer time is added that avoid that crashes are found in the future
+            self.campaign_data.total_run_time = start_time.elapsed().add(Duration::from_secs(5));
         }
     }
 
