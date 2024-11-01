@@ -282,7 +282,13 @@ impl AFLCmdGenerator {
         let configs = self.initialize_configs(&mut rng);
         let mut cmds = self.create_initial_cmds(&configs)?;
 
-        Self::apply_mutation_strategies(&mut cmds, &mut rng);
+        let afl_env_vars: Vec<String> = Self::get_afl_env_vars();
+        let mut is_using_custom_mutator: bool = false;
+        if afl_env_vars.iter().any(|e| e.starts_with("AFL_CUSTOM_MUTATOR_LIBRARY")){
+            is_using_custom_mutator = true;
+        }
+        
+        Self::apply_mutation_strategies(&mut cmds, &mut rng, is_using_custom_mutator);
         Self::apply_queue_selection(&mut cmds, &mut rng);
         Self::apply_power_schedules(&mut cmds);
         self.apply_directory(&mut cmds);
@@ -295,7 +301,6 @@ impl AFLCmdGenerator {
         self.apply_fuzzer_roles(&mut cmds);
 
         // Inherit global AFL environment variables that are not already set
-        let afl_env_vars: Vec<String> = Self::get_afl_env_vars();
         for cmd in &mut cmds {
             let to_apply = afl_env_vars
                 .iter()
@@ -362,12 +367,14 @@ impl AFLCmdGenerator {
     }
 
     /// Applies mutation strategies to AFL commands
-    fn apply_mutation_strategies(cmds: &mut [AflCmd], rng: &mut impl Rng) {
+    fn apply_mutation_strategies(cmds: &mut [AflCmd], rng: &mut impl Rng, is_using_custom_mutator: bool) {
         let mode_args = [("-P explore", 0.4), ("-P exploit", 0.2)];
         apply_constrained_args(cmds, &mode_args, rng);
         let format_args = [("-a binary", 0.3), ("-a text", 0.3)];
         apply_constrained_args(cmds, &format_args, rng);
-        apply_args(cmds, "-L 0", 0.1, rng);
+        if !is_using_custom_mutator {
+            apply_args(cmds, "-L 0", 0.1, rng);
+        }
     }
 
     /// Applies queue selection to AFL commands
