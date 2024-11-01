@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 /// Default corpus directory
@@ -133,6 +133,15 @@ pub struct GenArgs {
         required = false
     )]
     pub config: Option<PathBuf>,
+    /// Use AFL-Fuzz defaults
+    #[arg(
+        short = 'd',
+        long,
+        help = "Use afl-fuzz defaults power schedules, queue and mutation strategies",
+        required = false,
+        action = ArgAction::SetTrue
+    )]
+    pub use_afl_defaults: bool,
 }
 
 impl GenArgs {
@@ -218,6 +227,7 @@ impl GenArgs {
                 .afl_binary
                 .clone()
                 .or_else(|| config.afl_cfg.afl_binary.clone().filter(|b| !b.is_empty())),
+            use_afl_defaults: config.afl_cfg.use_afl_defaults.unwrap_or(self.use_afl_defaults),
             config: self.config.clone(),
         }
     }
@@ -355,6 +365,8 @@ pub struct AflConfig {
     pub dictionary: Option<String>,
     /// Additional AFL flags
     pub afl_flags: Option<String>,
+    /// Use AFL defaults
+    pub use_afl_defaults: Option<bool>,
 }
 
 /// Configuration for tmux

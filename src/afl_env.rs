@@ -63,35 +63,42 @@ impl AFLEnv {
         if let Some(ramdisk) = ramdisk {
             command.push(format!("AFL_TMPDIR={} ", ramdisk));
         }
+        if self.is_flag_enabled(&AFLFlag::AutoResume){
+            command.push(format!(
+                "AFL_AUTORESUME=1 "
+            ));
+        }
+        if self.is_flag_enabled(&AFLFlag::FinalSync){
+            command.push(format!(
+                "AFL_FINAL_SYNC=1 "
+            ));
+        }
+        if self.is_flag_enabled(&AFLFlag::DisableTrim){
+            command.push(format!(
+                "AFL_DISABLE_TRIM=1 "
+            ));
+        }
+        if self.is_flag_enabled(&AFLFlag::KeepTimeouts){
+            command.push(format!(
+                "AFL_KEEP_TIMEOUTS=1 "
+            ));
+        }
+        if self.is_flag_enabled(&AFLFlag::ExpandHavocNow){
+            command.push(format!(
+                "AFL_EXPAND_HAVOC_NOW=1 "
+            ));
+        }
+        if self.is_flag_enabled(&AFLFlag::IgnoreSeedProblems){
+            command.push(format!(
+                "AFL_IGNORE_SEED_PROBLEMS=1 "
+            ));
+        }
+        if self.is_flag_enabled(&AFLFlag::ImportFirst){
+            command.push(format!(
+                "AFL_IMPORT_FIRST=1 "
+            ));
+        }
 
-        command.push(format!(
-            "AFL_AUTORESUME={} ",
-            u8::from(self.is_flag_enabled(&AFLFlag::AutoResume))
-        ));
-        command.push(format!(
-            "AFL_FINAL_SYNC={} ",
-            u8::from(self.is_flag_enabled(&AFLFlag::FinalSync))
-        ));
-        command.push(format!(
-            "AFL_DISABLE_TRIM={} ",
-            u8::from(self.is_flag_enabled(&AFLFlag::DisableTrim))
-        ));
-        command.push(format!(
-            "AFL_KEEP_TIMEOUTS={} ",
-            u8::from(self.is_flag_enabled(&AFLFlag::KeepTimeouts))
-        ));
-        command.push(format!(
-            "AFL_EXPAND_HAVOC_NOW={} ",
-            u8::from(self.is_flag_enabled(&AFLFlag::ExpandHavocNow))
-        ));
-        command.push(format!(
-            "AFL_IGNORE_SEED_PROBLEMS={} ",
-            u8::from(self.is_flag_enabled(&AFLFlag::IgnoreSeedProblems))
-        ));
-        command.push(format!(
-            "AFL_IMPORT_FIRST={} ",
-            u8::from(self.is_flag_enabled(&AFLFlag::ImportFirst))
-        ));
         command.push(format!("AFL_TESTCACHE_SIZE={} ", self.testcache_size));
 
         command
