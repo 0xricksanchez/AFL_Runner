@@ -286,10 +286,7 @@ impl AFLCmdGenerator {
         let mut cmds = self.create_initial_cmds(&configs)?;
 
         let afl_env_vars: Vec<String> = Self::get_afl_env_vars();
-        let mut is_using_custom_mutator: bool = false;
-        if afl_env_vars.iter().any(|e| e.starts_with("AFL_CUSTOM_MUTATOR_LIBRARY")){
-            is_using_custom_mutator = true;
-        }
+        let is_using_custom_mutator = if afl_env_vars.iter().any(|e| e.starts_with("AFL_CUSTOM_MUTATOR_LIBRARY")) { true } else { false };
         if ! self.use_afl_defaults {
             Self::apply_mutation_strategies(&mut cmds, &mut rng, is_using_custom_mutator);
             Self::apply_queue_selection(&mut cmds, &mut rng);
