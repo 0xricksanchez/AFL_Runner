@@ -140,15 +140,21 @@ impl Session {
         let mut perms = temp_script.as_file().metadata()?.permissions();
         perms.set_mode(perms.mode() | 0o111);
         temp_script.as_file().set_permissions(perms)?;
-        
-        println!("Executing runner script {}", temp_script.path().display());
 
         // Run the script using bash
-        let mut cmd = Command::new("bash");
-        cmd.arg(temp_script.path())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit());
-        Self::run_command(cmd)?;
+        let output = Command::new("bash")
+        .arg(temp_script.path())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .output()?;
+
+        // Check if the command was successful or not based on the exit status
+        if ! output.status.success() {
+            let stderr = String::from_utf8(output.stderr).unwrap_or_else(|e| {
+                format!("Failed to parse stderr: {}", e)
+            });
+            anyhow::bail!("Error executing runner script {}: exit code {}, stderr: '{}'", temp_script.path().display(), output.status, stderr);
+        }
         
         Ok(())
     }
