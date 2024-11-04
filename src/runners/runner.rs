@@ -145,11 +145,11 @@ impl Session {
 
         // Run the script using bash
         let mut cmd = Command::new("bash");
-        cmd.arg("-c")
-            .arg(templ)
+        cmd.arg(temp_script.path())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());
         Self::run_command(cmd)?;
+        
         Ok(())
     }
 
