@@ -77,6 +77,7 @@ fn create_afl_runner(
         raw_afl_flags,
         gen_args.afl_binary.clone(),
         is_ramdisk,
+        gen_args.use_afl_defaults,
     ))
 }
 

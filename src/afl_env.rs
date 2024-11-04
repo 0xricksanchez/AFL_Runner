@@ -2,7 +2,7 @@
 // AFLPlusPlus flags
 // Based on: https://aflplus.plus/docs/env_variables/
 // -----------------------------------------
-use std::collections::HashSet;
+use std::{collections::HashSet, str::FromStr};
 
 /// Enum representing the different AFL environment flags
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -25,6 +25,38 @@ pub enum AFLFlag {
     /// When setting `AFL_IMPORT_FIRST`, test cases from other fuzzers in the campaign are loaded first.
     /// Note: This can slow down the start of the first fuzz by quite a lot if you have many fuzzers and/or many seeds.
     ImportFirst,
+}
+
+impl ToString for AFLFlag {
+    fn to_string(&self) -> String {
+        match self {
+            Self::AutoResume => "AFL_AUTORESUME",
+            Self::FinalSync => "AFL_FINAL_SYNC",
+            Self::DisableTrim => "AFL_DISABLE_TRIM",
+            Self::KeepTimeouts => "AFL_KEEP_TIMEOUTS",
+            Self::ExpandHavocNow => "AFL_EXPAND_HAVOC_NOW",
+            Self::IgnoreSeedProblems => "AFL_IGNORE_SEED_PROBLEMS",
+            Self::ImportFirst => "AFL_IMPORT_FIRST",
+        }
+        .to_string()
+    }
+}
+
+impl FromStr for AFLFlag {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "AFL_AUTORESUME" => Ok(Self::AutoResume),
+            "AFL_FINAL_SYNC" => Ok(Self::FinalSync),
+            "AFL_DISABLE_TRIM" => Ok(Self::DisableTrim),
+            "AFL_KEEP_TIMEOUTS" => Ok(Self::KeepTimeouts),
+            "AFL_EXPAND_HAVOC_NOW" => Ok(Self::ExpandHavocNow),
+            "AFL_IGNORE_SEED_PROBLEMS" => Ok(Self::IgnoreSeedProblems),
+            "AFL_IMPORT_FIRST" => Ok(Self::ImportFirst),
+            _ => Err(format!("Unknown AFL flag: {s}")),
+        }
+    }
 }
 
 /// Struct representing the environment variables for `AFLPlusPlus`
@@ -51,47 +83,18 @@ impl AFLEnv {
         self.flags.insert(flag);
     }
 
-    /// Checks if the specified AFL flag is enabled
-    pub fn is_flag_enabled(&self, flag: &AFLFlag) -> bool {
-        self.flags.contains(flag)
-    }
-
     /// Generates an `AFLPlusPlus` environment variable string for the current settings
     pub fn generate_afl_env_cmd(&self, ramdisk: Option<String>) -> Vec<String> {
         let mut command = Vec::new();
 
         if let Some(ramdisk) = ramdisk {
-            command.push(format!("AFL_TMPDIR={} ", ramdisk));
+            command.push(format!("AFL_TMPDIR={ramdisk} "));
         }
 
-        command.push(format!(
-            "AFL_AUTORESUME={} ",
-            u8::from(self.is_flag_enabled(&AFLFlag::AutoResume))
-        ));
-        command.push(format!(
-            "AFL_FINAL_SYNC={} ",
-            u8::from(self.is_flag_enabled(&AFLFlag::FinalSync))
-        ));
-        command.push(format!(
-            "AFL_DISABLE_TRIM={} ",
-            u8::from(self.is_flag_enabled(&AFLFlag::DisableTrim))
-        ));
-        command.push(format!(
-            "AFL_KEEP_TIMEOUTS={} ",
-            u8::from(self.is_flag_enabled(&AFLFlag::KeepTimeouts))
-        ));
-        command.push(format!(
-            "AFL_EXPAND_HAVOC_NOW={} ",
-            u8::from(self.is_flag_enabled(&AFLFlag::ExpandHavocNow))
-        ));
-        command.push(format!(
-            "AFL_IGNORE_SEED_PROBLEMS={} ",
-            u8::from(self.is_flag_enabled(&AFLFlag::IgnoreSeedProblems))
-        ));
-        command.push(format!(
-            "AFL_IMPORT_FIRST={} ",
-            u8::from(self.is_flag_enabled(&AFLFlag::ImportFirst))
-        ));
+        for flag in &self.flags {
+            command.push(format!("{}=1", flag.to_string()));
+        }
+
         command.push(format!("AFL_TESTCACHE_SIZE={} ", self.testcache_size));
 
         command
