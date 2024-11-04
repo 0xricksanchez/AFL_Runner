@@ -151,7 +151,7 @@ impl Session {
         // Check if the command was successful or not based on the exit status
         if ! output.status.success() {
             let stderr = String::from_utf8(output.stderr).unwrap_or_else(|e| {
-                format!("Failed to parse stderr: {}", e)
+                format!("Failed to parse stderr: {e}")
             });
             anyhow::bail!("Error executing runner script {}: exit code {}, stderr: '{}'", temp_script.path().display(), output.status, stderr);
         }
