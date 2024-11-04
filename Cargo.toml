@@ -24,6 +24,7 @@ ratatui = { version = "0.28.1", features = ["crossterm", "all-widgets"] }
 crossterm = "0.28.1"
 chrono = "0.4.38"
 uuid = { version = "1.11.0", features = ["v4"] }
+tempfile = "3"
 
 [dev-dependencies]
 cargo-make = "0.37.23"

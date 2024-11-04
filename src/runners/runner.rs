@@ -1,6 +1,8 @@
 use anyhow::Result;
+use tempfile::NamedTempFile;
 use std::fs;
 use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
@@ -131,12 +133,30 @@ impl Session {
             _ => unreachable!(),
         };
         let templ = self.create_bash_script(template)?;
-        let mut cmd = Command::new("bash");
-        cmd.arg("-c")
-            .arg(templ)
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit());
-        Self::run_command(cmd)?;
+
+        // Create a temporary file to store the script and make it executable
+        let mut temp_script = NamedTempFile::new()?;
+        temp_script.write_all(templ.as_bytes())?;
+        let mut perms = temp_script.as_file().metadata()?.permissions();
+        perms.set_mode(perms.mode() | 0o111);
+        temp_script.as_file().set_permissions(perms)?;
+
+        // Run the script using bash
+        let output = Command::new("bash")
+        .arg(temp_script.path())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .output()?;
+
+        // Check if the command was successful or not based on the exit status
+        if ! output.status.success() {
+            let stderr = String::from_utf8(output.stderr).unwrap_or_else(|e| {
+                format!("Failed to parse stderr: {e}")
+            });
+            let path = temp_script.into_temp_path().keep()?;
+            anyhow::bail!("Error executing runner script {}: exit code {}, stderr: '{}'", path.display(), output.status, stderr);
+        }
+        
         Ok(())
     }
 
