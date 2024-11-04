@@ -218,7 +218,7 @@ impl AFLCmdGenerator {
             afl_binary,
             cmpcov_idxs: Vec::new(),
             ramdisk: rdisk,
-            use_afl_defaults: use_afl_defaults
+            use_afl_defaults
         }
     }
 
