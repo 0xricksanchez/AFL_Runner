@@ -54,7 +54,7 @@ impl FromStr for AFLFlag {
             "AFL_EXPAND_HAVOC_NOW" => Ok(Self::ExpandHavocNow),
             "AFL_IGNORE_SEED_PROBLEMS" => Ok(Self::IgnoreSeedProblems),
             "AFL_IMPORT_FIRST" => Ok(Self::ImportFirst),
-            _ => Err(format!("Unknown AFL flag: {}", s)),
+            _ => Err(format!("Unknown AFL flag: {s}")),
         }
     }
 }
