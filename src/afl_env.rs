@@ -47,13 +47,13 @@ impl FromStr for AFLFlag {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "AFL_AUTORESUME" => Ok(AFLFlag::AutoResume),
-            "AFL_FINAL_SYNC" => Ok(AFLFlag::FinalSync),
-            "AFL_DISABLE_TRIM" => Ok(AFLFlag::DisableTrim),
-            "AFL_KEEP_TIMEOUTS" => Ok(AFLFlag::KeepTimeouts),
-            "AFL_EXPAND_HAVOC_NOW" => Ok(AFLFlag::ExpandHavocNow),
-            "AFL_IGNORE_SEED_PROBLEMS" => Ok(AFLFlag::IgnoreSeedProblems),
-            "AFL_IMPORT_FIRST" => Ok(AFLFlag::ImportFirst),
+            "AFL_AUTORESUME" => Ok(Self::AutoResume),
+            "AFL_FINAL_SYNC" => Ok(Self::FinalSync),
+            "AFL_DISABLE_TRIM" => Ok(Self::DisableTrim),
+            "AFL_KEEP_TIMEOUTS" => Ok(Self::KeepTimeouts),
+            "AFL_EXPAND_HAVOC_NOW" => Ok(Self::ExpandHavocNow),
+            "AFL_IGNORE_SEED_PROBLEMS" => Ok(Self::IgnoreSeedProblems),
+            "AFL_IMPORT_FIRST" => Ok(Self::ImportFirst),
             _ => Err(format!("Unknown AFL flag: {}", s)),
         }
     }
