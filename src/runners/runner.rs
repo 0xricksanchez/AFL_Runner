@@ -1,6 +1,8 @@
 use anyhow::Result;
+use tempfile::NamedTempFile;
 use std::fs;
 use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
@@ -131,6 +133,17 @@ impl Session {
             _ => unreachable!(),
         };
         let templ = self.create_bash_script(template)?;
+
+        // Create a temporary file to store the script and make it executable
+        let mut temp_script = NamedTempFile::new()?;
+        temp_script.write_all(templ.as_bytes())?;
+        let mut perms = temp_script.as_file().metadata()?.permissions();
+        perms.set_mode(perms.mode() | 0o111);
+        temp_script.as_file().set_permissions(perms)?;
+        
+        println!("Executing runner script {}", temp_script.path().display());
+
+        // Run the script using bash
         let mut cmd = Command::new("bash");
         cmd.arg("-c")
             .arg(templ)
