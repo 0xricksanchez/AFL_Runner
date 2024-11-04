@@ -88,7 +88,7 @@ impl AFLEnv {
         let mut command = Vec::new();
 
         if let Some(ramdisk) = ramdisk {
-            command.push(format!("AFL_TMPDIR={} ", ramdisk));
+            command.push(format!("AFL_TMPDIR={ramdisk} "));
         }
 
         for flag in &self.flags {
