@@ -153,7 +153,8 @@ impl Session {
             let stderr = String::from_utf8(output.stderr).unwrap_or_else(|e| {
                 format!("Failed to parse stderr: {e}")
             });
-            anyhow::bail!("Error executing runner script {}: exit code {}, stderr: '{}'", temp_script.path().display(), output.status, stderr);
+            let path = temp_script.into_temp_path().keep()?;
+            anyhow::bail!("Error executing runner script {}: exit code {}, stderr: '{}'", path.display(), output.status, stderr);
         }
         
         Ok(())
