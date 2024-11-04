@@ -27,9 +27,9 @@ pub enum AFLFlag {
     ImportFirst,
 }
 
-impl ToString for AFLFlag {
-    fn to_string(&self) -> String {
-        match self {
+impl std::fmt::Display for AFLFlag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let x = match self {
             Self::AutoResume => "AFL_AUTORESUME",
             Self::FinalSync => "AFL_FINAL_SYNC",
             Self::DisableTrim => "AFL_DISABLE_TRIM",
@@ -37,8 +37,8 @@ impl ToString for AFLFlag {
             Self::ExpandHavocNow => "AFL_EXPAND_HAVOC_NOW",
             Self::IgnoreSeedProblems => "AFL_IGNORE_SEED_PROBLEMS",
             Self::ImportFirst => "AFL_IMPORT_FIRST",
-        }
-        .to_string()
+        };
+        write!(f, "{}", x)
     }
 }
 

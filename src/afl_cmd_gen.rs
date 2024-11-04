@@ -196,7 +196,7 @@ impl AFLCmdGenerator {
         });
         let rdisk = if is_ramdisk {
             println!("[*] Attempting to create RAMDisk. Needing elevated privileges.");
-            let r = AFLCmdGenerator::create_ramdisk();
+            let r = Self::create_ramdisk();
             if let Ok(tmpfs) = r {
                 println!("[+] Using RAMDisk: {}", tmpfs);
                 Some(tmpfs)
@@ -218,14 +218,14 @@ impl AFLCmdGenerator {
             afl_binary,
             cmpcov_idxs: Vec::new(),
             ramdisk: rdisk,
-            use_afl_defaults
+            use_afl_defaults,
         }
     }
 
     fn create_ramdisk() -> Result<String> {
         let uuid = Uuid::new_v4().to_string();
-        let folder = format!("/tmp/tmpfs/{}", uuid);
-        let _ = fs::create_dir_all(&folder)?;
+        let folder = format!("/tmp/tmpfs/{uuid}");
+        fs::create_dir_all(&folder)?;
         let _ = Command::new("sudo")
             .arg("mount")
             .arg("-o")
@@ -286,8 +286,10 @@ impl AFLCmdGenerator {
         let mut cmds = self.create_initial_cmds(&configs)?;
 
         let afl_env_vars: Vec<String> = Self::get_afl_env_vars();
-        let is_using_custom_mutator = if afl_env_vars.iter().any(|e| e.starts_with("AFL_CUSTOM_MUTATOR_LIBRARY")) { true } else { false };
-        if ! self.use_afl_defaults {
+        let is_using_custom_mutator = afl_env_vars
+            .iter()
+            .any(|e| e.starts_with("AFL_CUSTOM_MUTATOR_LIBRARY"));
+        if !self.use_afl_defaults {
             Self::apply_mutation_strategies(&mut cmds, &mut rng, is_using_custom_mutator);
             Self::apply_queue_selection(&mut cmds, &mut rng);
             Self::apply_power_schedules(&mut cmds);
@@ -325,8 +327,8 @@ impl AFLCmdGenerator {
 
         // Enable FinalSync for the last configuration
         configs.last_mut().unwrap().enable_flag(AFLFlag::FinalSync);
-        
-        if ! self.use_afl_defaults {
+
+        if !self.use_afl_defaults {
             apply_flags(&mut configs, &AFLFlag::DisableTrim, 0.65, rng);
             apply_flags(&mut configs, &AFLFlag::KeepTimeouts, 0.5, rng);
             apply_flags(&mut configs, &AFLFlag::ExpandHavocNow, 0.4, rng);
@@ -369,7 +371,11 @@ impl AFLCmdGenerator {
     }
 
     /// Applies mutation strategies to AFL commands
-    fn apply_mutation_strategies(cmds: &mut [AflCmd], rng: &mut impl Rng, is_using_custom_mutator: bool) {
+    fn apply_mutation_strategies(
+        cmds: &mut [AflCmd],
+        rng: &mut impl Rng,
+        is_using_custom_mutator: bool,
+    ) {
         let mode_args: [(&str, f64); 2] = [("-P explore", 0.4), ("-P exploit", 0.2)];
         apply_constrained_args(cmds, &mode_args, rng);
         let format_args = [("-a binary", 0.3), ("-a text", 0.3)];
