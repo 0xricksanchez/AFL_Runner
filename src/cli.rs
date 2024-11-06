@@ -368,14 +368,7 @@ pub struct AflConfig {
     /// Use AFL defaults
     pub use_afl_defaults: Option<bool>,
     /// Partial AFL flags
-    pub flags_partial: AflFlagsPartial,
-}
-
-#[derive(Debug, Deserialize, Clone, Default)]
-pub struct AflFlagsPartial {
-    #[serde(flatten)]
-    pub global_flags: FlagGroup,
-    pub groups: Vec<FlagGroup>,
+    pub flags_partial: Vec<FlagGroup>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]

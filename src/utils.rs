@@ -111,13 +111,7 @@ pub fn load_config(config_path: Option<&PathBuf>) -> Result<Config> {
 }
 
 fn validate_config(config: &Config) -> Result<()> {
-    if !config.afl_cfg.flags_partial.global_flags.is_valid() {
-        return Err(anyhow::anyhow!(
-            "Error: partial flags has both `probability` and `count`, which are mutually exclusive"
-        ));
-    }
-
-    for (i, group) in config.afl_cfg.flags_partial.groups.iter().enumerate() {
+    for (i, group) in config.afl_cfg.flags_partial.iter().enumerate() {
         if !group.is_valid() {
             return Err(anyhow::anyhow!(
                 "Error: Group {} has both `probability` and `count`, which are mutually exclusive",
