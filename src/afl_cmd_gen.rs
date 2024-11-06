@@ -154,11 +154,10 @@ fn apply_args(cmds: &mut [AflCmd], arg: &str, percentage: f64, rng: &mut impl Rn
 
 /// Applies a list of arguments to a percentage or specific count of AFL commands
 fn apply_args_list(cmds: &mut [AflCmd], args: &[&str], percentage: Option<f64>, count: Option<usize>, rng: &mut impl Rng) {
-    let count = if let Some(percentage) = percentage {
-        (cmds.len() as f64 * percentage) as usize
-    } else {
-        count.unwrap_or(0)
-    };
+    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_precision_loss)]
+    let count = percentage.map_or_else(|| count.unwrap_or(0), |percentage| (cmds.len() as f64 * percentage) as usize);
 
     let mut indices = HashSet::new();
     while indices.len() < count {
@@ -174,11 +173,10 @@ fn apply_args_list(cmds: &mut [AflCmd], args: &[&str], percentage: Option<f64>, 
 
 /// Applies a list of env variables to a percentage or specific count of AFL command environments
 fn apply_env_vars(cmds: &mut [AflCmd], envs: &[&str], percentage: Option<f64>, count: Option<usize>, rng: &mut impl Rng) {
-    let count = if let Some(percentage) = percentage {
-        (cmds.len() as f64 * percentage) as usize
-    } else {
-        count.unwrap_or(0)
-    };
+    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_precision_loss)]
+    let count = percentage.map_or_else(|| count.unwrap_or(0), |percentage| (cmds.len() as f64 * percentage) as usize);
 
     let mut indices = HashSet::new();
     while indices.len() < count {
@@ -243,7 +241,7 @@ impl AFLCmdGenerator {
             println!("[*] Attempting to create RAMDisk. Needing elevated privileges.");
             let r = Self::create_ramdisk();
             if let Ok(tmpfs) = r {
-                println!("[+] Using RAMDisk: {}", tmpfs);
+                println!("[+] Using RAMDisk: {tmpfs}");
                 Some(tmpfs)
             } else {
                 println!("[!] Failed to create RAMDisk: {}...", r.err().unwrap());
@@ -364,8 +362,8 @@ impl AFLCmdGenerator {
                     .map(|flag| format!("{}={}", flag.0, flag.1))
                     .collect();
 
-                apply_args_list(&mut cmds, &dash_flags.iter().map(String::as_str).collect::<Vec<&str>>(), flag_group.probability.map(|p| p as f64), flag_group.count.map(|c| c as usize), &mut rng);
-                apply_env_vars(&mut cmds, &env_flags.iter().map(String::as_str).collect::<Vec<&str>>(), flag_group.probability.map(|p| p as f64), flag_group.count.map(|c| c as usize), &mut rng);
+                apply_args_list(&mut cmds, &dash_flags.iter().map(String::as_str).collect::<Vec<&str>>(), flag_group.probability.map(f64::from), flag_group.count.map(|c| c as usize), &mut rng);
+                apply_env_vars(&mut cmds, &env_flags.iter().map(String::as_str).collect::<Vec<&str>>(), flag_group.probability.map(f64::from), flag_group.count.map(|c| c as usize), &mut rng);
             }
         }
 
