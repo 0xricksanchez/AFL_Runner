@@ -82,8 +82,10 @@ pub fn load_config(config_path: Option<&PathBuf>) -> Result<Config> {
     if let Some(path) = config_path {
         let config_content = fs::read_to_string(path)
             .with_context(|| format!("Failed to read config file: {}", path.display()))?;
-        toml::from_str(&config_content)
-            .with_context(|| format!("Failed to parse config file: {}", path.display()))
+        let config: Config = toml::from_str(&config_content)
+            .with_context(|| format!("Failed to parse TOML from config file: {}", path.display()))?;
+        validate_config(&config)?;
+        Ok(config)
     } else {
         let cwd = env::current_dir().context("Failed to get current directory")?;
         let default_config_path = cwd.join(DEFAULT_AFL_CONFIG);
@@ -94,16 +96,37 @@ pub fn load_config(config_path: Option<&PathBuf>) -> Result<Config> {
                     default_config_path.display()
                 )
             })?;
-            toml::from_str(&config_content).with_context(|| {
+            let config: Config = toml::from_str(&config_content).with_context(|| {
                 format!(
                     "Failed to parse default config file: {}",
                     default_config_path.display()
                 )
-            })
+            })?;
+            validate_config(&config)?;
+            Ok(config)
         } else {
             bail!("No config file provided and no default configuration file in CWD found")
         }
     }
+}
+
+fn validate_config(config: &Config) -> Result<()> {
+    if !config.afl_cfg.flags_partial.global_flags.is_valid() {
+        return Err(anyhow::anyhow!(
+            "Error: partial flags has both `probability` and `count`, which are mutually exclusive"
+        ));
+    }
+
+    for (i, group) in config.afl_cfg.flags_partial.groups.iter().enumerate() {
+        if !group.is_valid() {
+            return Err(anyhow::anyhow!(
+                "Error: Group {} has both `probability` and `count`, which are mutually exclusive",
+                i + 1
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 /// Prints the generated commands to the console.
