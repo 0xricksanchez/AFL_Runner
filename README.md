@@ -54,7 +54,7 @@ aflr --help
 
   - [x] Corpus directory
   - [x] Output directory
-  - [x] Dictionary file
+  - [x] Dictionary file/directory
   - [x] Custom `afl-fuzz` binary path for all instances
   - [x] Supply arguments to target binary (including @@)
   - [x] Amount of runner commands to generate

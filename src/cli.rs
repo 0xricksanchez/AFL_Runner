@@ -113,7 +113,7 @@ pub struct GenArgs {
         long,
         default_value = None,
         value_name = "DICT_FILE",
-        help = "Token dictionary to use",
+        help = "Token dictionary to use (file/directory)",
         required = false
     )]
     pub dictionary: Option<PathBuf>,
@@ -227,7 +227,10 @@ impl GenArgs {
                 .afl_binary
                 .clone()
                 .or_else(|| config.afl_cfg.afl_binary.clone().filter(|b| !b.is_empty())),
-            use_afl_defaults: config.afl_cfg.use_afl_defaults.unwrap_or(self.use_afl_defaults),
+            use_afl_defaults: config
+                .afl_cfg
+                .use_afl_defaults
+                .unwrap_or(self.use_afl_defaults),
             config: self.config.clone(),
         }
     }
