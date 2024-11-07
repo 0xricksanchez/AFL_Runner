@@ -161,7 +161,7 @@ pub struct AFLCmdGenerator {
     pub output_dir: PathBuf,
     /// Number of AFL runners
     pub runners: u32,
-    /// Path to the dictionary file
+    /// Path to the dictionary file/directory
     pub dictionary: Option<String>,
     /// Raw AFL flags
     pub raw_afl_flags: Option<String>,
@@ -188,7 +188,7 @@ impl AFLCmdGenerator {
         use_afl_defaults: bool,
     ) -> Self {
         let dict = dictionary.and_then(|d| {
-            if d.exists() && d.is_file() {
+            if d.exists() {
                 d.to_str().map(String::from)
             } else {
                 None
