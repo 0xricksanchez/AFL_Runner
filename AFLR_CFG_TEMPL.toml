@@ -33,6 +33,9 @@ dictionary = "/path/to/dictionary"
 # Custom AFL flags
 afl_flags = "-T 'MyFuzzer' -s 1234 -t 1000+"
 
+# Do not apply any 'optimized' settings and use the default AFL afl_flags
+use_afl_defaults = false
+
 
 [session]
 # Spin up a custom tmux session with the fuzzers
@@ -53,3 +56,9 @@ detached = false
 
 # If specified the AFLR will attempt to create a ramdisk for fuzzing
 ramdisk = false
+
+# Provide a seed for AFLR internal PRNG to get deterministic command generation
+seed = 0xdeadb33fc0ffee
+
+# Allow feeding the seed to AFL for deterministic fuzzing campaigns
+use_seed_afl = false
