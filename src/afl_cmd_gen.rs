@@ -118,7 +118,7 @@ fn apply_flags(configs: &mut [AFLEnv], flag: &AFLFlag, percentage: f64, rng: &mu
 }
 
 /// Applies constrained arguments to a percentage of AFL commands, flags are mutually exclusive
-fn apply_constrained_args(cmds: &mut [AflCmd], args: &[(&str, f64)], rng: &mut impl Rng) {
+fn apply_constrained_args_excl(cmds: &mut [AflCmd], args: &[(&str, f64)], rng: &mut impl Rng) {
     let n = cmds.len();
 
     // First, identify commands that don't have any of these args yet
@@ -146,6 +146,29 @@ fn apply_constrained_args(cmds: &mut [AflCmd], args: &[(&str, f64)], rng: &mut i
             cmds[index].misc_afl_flags.push(arg.to_string());
         }
         current_idx = end_idx;
+    }
+}
+
+/// Applies arguments independently to a percentage of AFL commands
+/// Each command can receive multiple different flags, but never the same flag twice
+fn apply_constrained_args(cmds: &mut [AflCmd], args: &[(&str, f64)], rng: &mut impl Rng) {
+    let n = cmds.len();
+
+    for &(arg, percentage) in args {
+        #[allow(clippy::cast_possible_truncation)]
+        #[allow(clippy::cast_sign_loss)]
+        #[allow(clippy::cast_precision_loss)]
+        let count = (n as f64 * percentage) as usize;
+
+        // Only consider indices where this specific argument isn't already present
+        let mut available_indices: Vec<usize> = (0..n)
+            .filter(|i| !cmds[*i].misc_afl_flags.iter().any(|f| f == arg))
+            .collect();
+        available_indices.shuffle(rng);
+
+        for &index in available_indices.iter().take(count) {
+            cmds[index].misc_afl_flags.push(arg.to_string());
+        }
     }
 }
 
@@ -398,9 +421,9 @@ impl AFLCmdGenerator {
         is_using_custom_mutator: bool,
     ) {
         let mode_args: [(&str, f64); 2] = [("-P explore", 0.4), ("-P exploit", 0.2)];
-        apply_constrained_args(cmds, &mode_args, rng);
+        apply_constrained_args_excl(cmds, &mode_args, rng);
         let format_args = [("-a binary", 0.3), ("-a text", 0.3)];
-        apply_constrained_args(cmds, &format_args, rng);
+        apply_constrained_args_excl(cmds, &format_args, rng);
         if !is_using_custom_mutator {
             apply_args(cmds, "-L 0", 0.1, rng);
         }
@@ -540,7 +563,7 @@ impl AFLCmdGenerator {
         rng: &mut impl Rng,
     ) {
         let cmplog_args = [("-l 2", 0.7), ("-l 3", 0.1), ("-l 2AT", 0.2)];
-        apply_constrained_args(&mut cmds[1..=num_cmplog_cfgs], &cmplog_args, rng);
+        apply_constrained_args_excl(&mut cmds[1..=num_cmplog_cfgs], &cmplog_args, rng);
         for cmd in &mut cmds[1..=num_cmplog_cfgs] {
             cmd.misc_afl_flags
                 .push(format!("-c {}", cmplog_binary.display()));
@@ -585,48 +608,134 @@ mod tests {
     use rand::rngs::StdRng;
     use rand::SeedableRng;
 
-    #[test]
-    fn test_constrained_args() {
-        let mut cmds = Vec::new();
-        for i in 1..100 {
-            cmds.push(AflCmd::new(
-                PathBuf::from("/tmp/afl-fuzz"),
-                PathBuf::from(format!("/tmp/target{}", i)),
-            ));
+    /// Helper struct to hold test configuration and results
+    struct TestCase {
+        cmds: Vec<AflCmd>,
+        explore_count: usize,
+        exploit_count: usize,
+        both_flags_count: usize,
+    }
+
+    impl TestCase {
+        fn new() -> Self {
+            let mut cmds = Vec::new();
+            for i in 1..100 {
+                cmds.push(AflCmd::new(
+                    PathBuf::from("/tmp/afl-fuzz"),
+                    PathBuf::from(format!("/tmp/target{}", i)),
+                ));
+            }
+            Self {
+                cmds,
+                explore_count: 0,
+                exploit_count: 0,
+                both_flags_count: 0,
+            }
         }
-        let args = [("-P explore", 0.4), ("-P exploit", 0.2)];
-        let seed = 12345;
-        let mut rng = StdRng::seed_from_u64(seed);
 
-        apply_constrained_args(cmds.as_mut_slice(), &args, &mut rng);
+        fn analyze(&mut self) {
+            self.explore_count = self
+                .cmds
+                .iter()
+                .filter(|cmd| cmd.misc_afl_flags.iter().any(|f| f.contains("-P explore")))
+                .count();
 
-        // Verify no command has both flags
-        for cmd in &cmds {
-            let has_explore = cmd.misc_afl_flags.iter().any(|f| f.contains("-P explore"));
-            let has_exploit = cmd.misc_afl_flags.iter().any(|f| f.contains("-P exploit"));
+            self.exploit_count = self
+                .cmds
+                .iter()
+                .filter(|cmd| cmd.misc_afl_flags.iter().any(|f| f.contains("-P exploit")))
+                .count();
+
+            self.both_flags_count = self
+                .cmds
+                .iter()
+                .filter(|cmd| {
+                    cmd.misc_afl_flags.iter().any(|f| f.contains("-P explore"))
+                        && cmd.misc_afl_flags.iter().any(|f| f.contains("-P exploit"))
+                })
+                .count();
+        }
+
+        fn verify_no_duplicates(&self) {
+            for cmd in &self.cmds {
+                let explore_count = cmd
+                    .misc_afl_flags
+                    .iter()
+                    .filter(|f| f.contains("-P explore"))
+                    .count();
+                let exploit_count = cmd
+                    .misc_afl_flags
+                    .iter()
+                    .filter(|f| f.contains("-P exploit"))
+                    .count();
+
+                assert!(
+                    explore_count <= 1,
+                    "Command should not have duplicate explore flags: {:?}",
+                    cmd.misc_afl_flags
+                );
+                assert!(
+                    exploit_count <= 1,
+                    "Command should not have duplicate exploit flags: {:?}",
+                    cmd.misc_afl_flags
+                );
+            }
+        }
+
+        fn verify_distribution(&self) {
             assert!(
-                !(has_explore && has_exploit),
-                "Command should not have both explore and exploit flags"
+                self.explore_count > 30 && self.explore_count < 50,
+                "Explore count should be around 40%, got {}%",
+                (self.explore_count as f64 / self.cmds.len() as f64) * 100.0
+            );
+            assert!(
+                self.exploit_count > 15 && self.exploit_count < 25,
+                "Exploit count should be around 20%, got {}%",
+                (self.exploit_count as f64 / self.cmds.len() as f64) * 100.0
             );
         }
 
-        // Verify approximate distributions
-        let explore_count = cmds
-            .iter()
-            .filter(|cmd| cmd.misc_afl_flags.iter().any(|f| f.contains("-P explore")))
-            .count();
-        let exploit_count = cmds
-            .iter()
-            .filter(|cmd| cmd.misc_afl_flags.iter().any(|f| f.contains("-P exploit")))
-            .count();
+        fn verify_exclusivity(&self) {
+            assert_eq!(
+                self.both_flags_count, 0,
+                "Commands should not have both explore and exploit flags"
+            );
+        }
 
-        assert!(
-            explore_count > 30 && explore_count < 50,
-            "Explore count should be around 40%"
-        );
-        assert!(
-            exploit_count > 15 && exploit_count < 25,
-            "Exploit count should be around 20%"
-        );
+        fn verify_some_overlap(&self) {
+            assert!(
+                self.both_flags_count > 0,
+                "Some commands should have both flags, got {} commands with both",
+                self.both_flags_count
+            );
+        }
+    }
+
+    #[test]
+    fn test_constrained_args_exclusive() {
+        let mut test = TestCase::new();
+        let args = [("-P explore", 0.4), ("-P exploit", 0.2)];
+        let mut rng = StdRng::seed_from_u64(12345);
+
+        apply_constrained_args_excl(&mut test.cmds, &args, &mut rng);
+
+        test.analyze();
+        test.verify_no_duplicates();
+        test.verify_distribution();
+        test.verify_exclusivity();
+    }
+
+    #[test]
+    fn test_constrained_args_independent() {
+        let mut test = TestCase::new();
+        let args = [("-P explore", 0.4), ("-P exploit", 0.2)];
+        let mut rng = StdRng::seed_from_u64(12345);
+
+        apply_constrained_args(&mut test.cmds, &args, &mut rng);
+
+        test.analyze();
+        test.verify_no_duplicates();
+        test.verify_distribution();
+        test.verify_some_overlap();
     }
 }
