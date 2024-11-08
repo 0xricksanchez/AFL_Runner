@@ -38,7 +38,7 @@ impl std::fmt::Display for AFLFlag {
             Self::IgnoreSeedProblems => "AFL_IGNORE_SEED_PROBLEMS",
             Self::ImportFirst => "AFL_IMPORT_FIRST",
         };
-        write!(f, "{}", x)
+        write!(f, "{x}")
     }
 }
 
@@ -92,7 +92,7 @@ impl AFLEnv {
         }
 
         for flag in &self.flags {
-            command.push(format!("{}=1", flag.to_string()));
+            command.push(format!("{flag}=1"));
         }
 
         command.push(format!("AFL_TESTCACHE_SIZE={} ", self.testcache_size));

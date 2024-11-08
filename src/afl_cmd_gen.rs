@@ -4,6 +4,7 @@ use std::{fs, process::Command};
 use uuid::Uuid;
 
 use crate::afl_env::{AFLEnv, AFLFlag};
+use crate::cli::FlagGroup;
 use crate::harness::Harness;
 use anyhow::{Context, Result};
 use rand::seq::SliceRandom;
@@ -151,6 +152,44 @@ fn apply_args(cmds: &mut [AflCmd], arg: &str, percentage: f64, rng: &mut impl Rn
     }
 }
 
+/// Applies a list of arguments to a percentage or specific count of AFL commands
+fn apply_args_list(cmds: &mut [AflCmd], args: &[&str], percentage: Option<f64>, count: Option<usize>, rng: &mut impl Rng) {
+    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_precision_loss)]
+    let count = percentage.map_or_else(|| count.unwrap_or(0), |percentage| (cmds.len() as f64 * percentage) as usize);
+
+    let mut indices = HashSet::new();
+    while indices.len() < count {
+        indices.insert(rng.gen_range(0..cmds.len()));
+    }
+
+    for index in indices {
+        for &arg in args {
+            cmds[index].misc_afl_flags.push(arg.to_string());
+        }
+    }
+}
+
+/// Applies a list of env variables to a percentage or specific count of AFL command environments
+fn apply_env_vars(cmds: &mut [AflCmd], envs: &[&str], percentage: Option<f64>, count: Option<usize>, rng: &mut impl Rng) {
+    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_precision_loss)]
+    let count = percentage.map_or_else(|| count.unwrap_or(0), |percentage| (cmds.len() as f64 * percentage) as usize);
+
+    let mut indices = HashSet::new();
+    while indices.len() < count {
+        indices.insert(rng.gen_range(0..cmds.len()));
+    }
+
+    for index in indices {
+        for &env in envs {
+            cmds[index].env.push(env.to_string());
+        }
+    }
+}
+
 /// Generates AFL commands based on the provided configuration
 pub struct AFLCmdGenerator {
     /// The harness configuration
@@ -171,7 +210,10 @@ pub struct AFLCmdGenerator {
     /// use the CMPCOV binary
     cmpcov_idxs: Vec<usize>,
     pub ramdisk: Option<String>,
+    // Use AFL defaults (do not variate mutator, power scheduler, trimming, ...)
     pub use_afl_defaults: bool,
+    // AFL additional 
+    pub additional_flags: Option<Vec<FlagGroup>>,
 }
 
 impl AFLCmdGenerator {
@@ -186,6 +228,7 @@ impl AFLCmdGenerator {
         afl_binary: Option<String>,
         is_ramdisk: bool,
         use_afl_defaults: bool,
+        additional_flags: Option<Vec<FlagGroup>>
     ) -> Self {
         let dict = dictionary.and_then(|d| {
             if d.exists() {
@@ -198,7 +241,7 @@ impl AFLCmdGenerator {
             println!("[*] Attempting to create RAMDisk. Needing elevated privileges.");
             let r = Self::create_ramdisk();
             if let Ok(tmpfs) = r {
-                println!("[+] Using RAMDisk: {}", tmpfs);
+                println!("[+] Using RAMDisk: {tmpfs}");
                 Some(tmpfs)
             } else {
                 println!("[!] Failed to create RAMDisk: {}...", r.err().unwrap());
@@ -219,6 +262,7 @@ impl AFLCmdGenerator {
             cmpcov_idxs: Vec::new(),
             ramdisk: rdisk,
             use_afl_defaults,
+            additional_flags,
         }
     }
 
@@ -300,6 +344,29 @@ impl AFLCmdGenerator {
         self.apply_cmplog(&mut cmds, &mut rng);
         self.apply_target_args(&mut cmds);
         self.apply_cmpcov(&mut cmds, &mut rng);
+
+        if let Some(additional_flags) = &self.additional_flags {
+            for flag_group in additional_flags {
+                let (dash_flags, env_flags): (Vec<_>, Vec<_>) = flag_group
+                    .flags
+                    .iter()
+                    .partition(|flag| flag.0.starts_with('-'));
+
+                let dash_flags: Vec<String> = dash_flags
+                    .iter()
+                    .map(|flag| format!("{} {}", flag.0, flag.1))
+                    .collect();
+
+                let env_flags: Vec<String> = env_flags
+                    .iter()
+                    .map(|flag| format!("{}={}", flag.0, flag.1))
+                    .collect();
+
+                apply_args_list(&mut cmds, &dash_flags.iter().map(String::as_str).collect::<Vec<&str>>(), flag_group.probability.map(f64::from), flag_group.count.map(|c| c as usize), &mut rng);
+                apply_env_vars(&mut cmds, &env_flags.iter().map(String::as_str).collect::<Vec<&str>>(), flag_group.probability.map(f64::from), flag_group.count.map(|c| c as usize), &mut rng);
+            }
+        }
+
         // NOTE: Needs to called last as it relies on cmpcov/cmplog being already set
         self.apply_fuzzer_roles(&mut cmds);
 

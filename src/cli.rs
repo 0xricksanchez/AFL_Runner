@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 /// Default corpus directory
 pub const AFL_CORPUS: &str = "/tmp/afl_input";
@@ -370,6 +370,22 @@ pub struct AflConfig {
     pub afl_flags: Option<String>,
     /// Use AFL defaults
     pub use_afl_defaults: Option<bool>,
+    /// Partial AFL flags
+    pub flags_partial: Vec<FlagGroup>,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct FlagGroup {
+    pub probability: Option<f32>,
+    pub count: Option<u32>,
+    #[serde(flatten)]
+    pub flags: HashMap<String, toml::Value>,
+}
+
+impl FlagGroup {
+    pub const fn is_valid(&self) -> bool {
+        !(self.probability.is_some() && self.count.is_some())
+    }
 }
 
 /// Configuration for tmux

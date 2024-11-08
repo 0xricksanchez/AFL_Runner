@@ -3,7 +3,7 @@ use std::path::Path;
 use tui::Tui;
 
 use clap::Parser;
-use cli::{Cli, Commands, SessionRunner};
+use cli::{Cli, Commands, FlagGroup, SessionRunner};
 
 mod afl_cmd_gen;
 mod afl_env;
@@ -34,25 +34,25 @@ fn main() -> Result<()> {
 
 fn load_merged_gen_args_and_flags(
     gen_args: &cli::GenArgs,
-) -> Result<(cli::GenArgs, Option<String>)> {
+) -> Result<(cli::GenArgs, Option<String>, Option<Vec<FlagGroup>>)> {
     if gen_args.config.is_some() {
         let config_args = load_config(gen_args.config.as_ref())?;
         let raw_afl_flags = config_args.afl_cfg.afl_flags.clone();
-        Ok((gen_args.merge(&config_args), raw_afl_flags))
+        Ok((gen_args.merge(&config_args), raw_afl_flags, Some(config_args.afl_cfg.flags_partial)))
     } else {
-        Ok((gen_args.clone(), None))
+        Ok((gen_args.clone(), None, None))
     }
 }
 
 fn load_merged_run_args_and_flags(
     run_args: &cli::RunArgs,
-) -> Result<(cli::RunArgs, Option<String>)> {
+) -> Result<(cli::RunArgs, Option<String>, Option<Vec<FlagGroup>>)> {
     if run_args.gen_args.config.is_some() {
         let config_args = load_config(run_args.gen_args.config.as_ref())?;
         let raw_afl_flags = config_args.afl_cfg.afl_flags.clone();
-        Ok((run_args.merge(&config_args), raw_afl_flags))
+        Ok((run_args.merge(&config_args), raw_afl_flags, Some(config_args.afl_cfg.flags_partial)))
     } else {
-        Ok((run_args.clone(), None))
+        Ok((run_args.clone(), None, None))
     }
 }
 
@@ -60,6 +60,7 @@ fn create_afl_runner(
     gen_args: &cli::GenArgs,
     raw_afl_flags: Option<String>,
     is_ramdisk: bool,
+    additional_flags: Option<Vec<FlagGroup>>,
 ) -> Result<AFLCmdGenerator> {
     let harness = create_harness(gen_args)?;
     Ok(AFLCmdGenerator::new(
@@ -78,24 +79,25 @@ fn create_afl_runner(
         gen_args.afl_binary.clone(),
         is_ramdisk,
         gen_args.use_afl_defaults,
+        additional_flags,
     ))
 }
 
 fn handle_gen_command(gen_args: &cli::GenArgs) -> Result<()> {
-    let (merged_args, raw_afl_flags) = load_merged_gen_args_and_flags(gen_args)?;
-    let mut afl_runner = create_afl_runner(&merged_args, raw_afl_flags, false)?;
+    let (merged_args, raw_afl_flags, flags_partial) = load_merged_gen_args_and_flags(gen_args)?;
+    let mut afl_runner = create_afl_runner(&merged_args, raw_afl_flags, false, flags_partial)?;
     let cmds = afl_runner.generate_afl_commands()?;
     utils::print_generated_commands(&cmds);
     Ok(())
 }
 
 fn handle_run_command(run_args: &cli::RunArgs) -> Result<()> {
-    let (merged_args, raw_afl_flags) = load_merged_run_args_and_flags(run_args)?;
+    let (merged_args, raw_afl_flags, flags_partial) = load_merged_run_args_and_flags(run_args)?;
     if merged_args.tui && merged_args.detached {
         bail!("TUI and detached mode cannot be used together");
     }
     let mut afl_runner =
-        create_afl_runner(&merged_args.gen_args, raw_afl_flags, merged_args.is_ramdisk)?;
+        create_afl_runner(&merged_args.gen_args, raw_afl_flags, merged_args.is_ramdisk, flags_partial)?;
     let afl_cmds = afl_runner.generate_afl_commands()?;
     if merged_args.dry_run {
         utils::print_generated_commands(&afl_cmds);
