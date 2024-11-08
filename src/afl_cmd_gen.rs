@@ -178,13 +178,20 @@ fn apply_args(cmds: &mut [AflCmd], arg: &str, percentage: f64, rng: &mut impl Rn
     #[allow(clippy::cast_sign_loss)]
     #[allow(clippy::cast_precision_loss)]
     let count = (cmds.len() as f64 * percentage) as usize;
-    let mut indices = HashSet::new();
-    while indices.len() < count {
-        indices.insert(rng.gen_range(0..cmds.len()));
-    }
+    if count == 0 && percentage > 0.0 && cmds.len() > 3 {
+        // Ensure at least one command gets the flag
+        cmds[rng.gen_range(0..cmds.len())]
+            .misc_afl_flags
+            .push(arg.to_string());
+    } else {
+        let mut indices = HashSet::new();
+        while indices.len() < count {
+            indices.insert(rng.gen_range(0..cmds.len()));
+        }
 
-    for index in indices {
-        cmds[index].misc_afl_flags.push(arg.to_string());
+        for index in indices {
+            cmds[index].misc_afl_flags.push(arg.to_string());
+        }
     }
 }
 
@@ -229,6 +236,9 @@ impl AFLCmdGenerator {
         use_afl_defaults: bool,
         seed: Option<u64>,
     ) -> Self {
+        if runners > 32 {
+            println!("[!] Warning: Performance degradation may occur with more than 32 runners. Observe campaign results carefully.");
+        }
         let dict = dictionary.and_then(|d| {
             if d.exists() {
                 d.to_str().map(String::from)
@@ -373,9 +383,11 @@ impl AFLCmdGenerator {
         configs.last_mut().unwrap().enable_flag(AFLFlag::FinalSync);
 
         if !self.use_afl_defaults {
-            apply_flags(&mut configs, &AFLFlag::DisableTrim, 0.65, rng);
-            apply_flags(&mut configs, &AFLFlag::KeepTimeouts, 0.5, rng);
-            apply_flags(&mut configs, &AFLFlag::ExpandHavocNow, 0.4, rng);
+            apply_flags(&mut configs, &AFLFlag::DisableTrim, 0.60, rng);
+            if self.runners < 8 {
+                // NOTE: With many runners and/or many seeds this can delay the startup significantly
+                apply_flags(&mut configs, &AFLFlag::ImportFirst, 1.0, rng);
+            }
         }
         let free_mb = get_free_mem_in_mb();
         for c in &mut configs {
@@ -431,7 +443,7 @@ impl AFLCmdGenerator {
 
     /// Applies queue selection to AFL commands
     fn apply_queue_selection(cmds: &mut [AflCmd], rng: &mut impl Rng) {
-        apply_args(cmds, "-Z", 0.2, rng);
+        apply_args(cmds, "-Z", 0.1, rng);
     }
 
     /// Applies power schedules to AFL commands
