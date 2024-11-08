@@ -20,7 +20,7 @@ sysinfo = "0.32.0"
 upon = "0.8.1"
 toml = "0.8.19"
 serde = { version = "1.0.210", features = ["derive"] }
-ratatui = { version = "0.28.1", features = ["crossterm", "all-widgets"] }
+ratatui = { version = "0.29.0", features = ["crossterm", "all-widgets"] }
 crossterm = "0.28.1"
 chrono = "0.4.38"
 uuid = { version = "1.11.0", features = ["v4"] }

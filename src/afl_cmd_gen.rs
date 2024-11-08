@@ -5,9 +5,10 @@ use uuid::Uuid;
 
 use crate::afl_env::{AFLEnv, AFLFlag};
 use crate::harness::Harness;
+use crate::seed::Xorshift64;
 use anyhow::{Context, Result};
-use rand::seq::SliceRandom;
-use rand::Rng;
+use rand::{rngs::StdRng, Rng};
+use rand::{seq::SliceRandom, SeedableRng};
 use sysinfo::System;
 
 /// Represents an AFL command
@@ -116,22 +117,35 @@ fn apply_flags(configs: &mut [AFLEnv], flag: &AFLFlag, percentage: f64, rng: &mu
     }
 }
 
-/// Applies constrained arguments to a percentage of AFL commands
+/// Applies constrained arguments to a percentage of AFL commands, flags are mutually exclusive
 fn apply_constrained_args(cmds: &mut [AflCmd], args: &[(&str, f64)], rng: &mut impl Rng) {
     let n = cmds.len();
+
+    // First, identify commands that don't have any of these args yet
+    let mut available_indices: Vec<usize> = (0..n)
+        .filter(|i| {
+            !cmds[*i]
+                .misc_afl_flags
+                .iter()
+                .any(|f| args.iter().any(|(arg, _)| f.contains(arg)))
+        })
+        .collect();
+    available_indices.shuffle(rng);
+
+    // Calculate how many commands should get each arg
+    let mut current_idx = 0;
     for &(arg, percentage) in args {
         #[allow(clippy::cast_possible_truncation)]
         #[allow(clippy::cast_sign_loss)]
         #[allow(clippy::cast_precision_loss)]
         let count = (n as f64 * percentage) as usize;
-        let mut available_indices: Vec<usize> = (0..n)
-            .filter(|i| !cmds[*i].misc_afl_flags.iter().any(|f| f.contains(arg)))
-            .collect();
-        available_indices.shuffle(rng);
 
-        for &index in available_indices.iter().take(count) {
+        // Only take as many indices as we have available
+        let end_idx = (current_idx + count).min(available_indices.len());
+        for &index in &available_indices[current_idx..end_idx] {
             cmds[index].misc_afl_flags.push(arg.to_string());
         }
+        current_idx = end_idx;
     }
 }
 
@@ -170,8 +184,12 @@ pub struct AFLCmdGenerator {
     /// If we have a CMPCOV binary, this will contain the indices of the AFL commands that should
     /// use the CMPCOV binary
     cmpcov_idxs: Vec<usize>,
+    /// Path to the RAMDisk
     pub ramdisk: Option<String>,
+    /// If we should use AFL defaults
     pub use_afl_defaults: bool,
+    /// Seed for AFL++
+    pub seed: Option<u64>,
 }
 
 impl AFLCmdGenerator {
@@ -186,6 +204,7 @@ impl AFLCmdGenerator {
         afl_binary: Option<String>,
         is_ramdisk: bool,
         use_afl_defaults: bool,
+        seed: Option<u64>,
     ) -> Self {
         let dict = dictionary.and_then(|d| {
             if d.exists() {
@@ -219,6 +238,7 @@ impl AFLCmdGenerator {
             cmpcov_idxs: Vec::new(),
             ramdisk: rdisk,
             use_afl_defaults,
+            seed,
         }
     }
 
@@ -281,7 +301,8 @@ impl AFLCmdGenerator {
 
     /// Generates AFL commands based on the configuration
     pub fn generate_afl_commands(&mut self) -> Result<Vec<String>> {
-        let mut rng = rand::thread_rng();
+        let mangled_seed = Xorshift64::new(self.seed.unwrap_or(0)).next();
+        let mut rng = <StdRng as SeedableRng>::seed_from_u64(mangled_seed as u64);
         let configs = self.initialize_configs(&mut rng);
         let mut cmds = self.create_initial_cmds(&configs)?;
 
@@ -418,9 +439,7 @@ impl AFLCmdGenerator {
             .unwrap()
             .replace('.', "_");
 
-        cmds[0]
-            .misc_afl_flags
-            .push(format!("-M main_{target_fname}"));
+        cmds[0].misc_afl_flags.push(format!("-M m_{target_fname}"));
 
         let cmpcov_binary = self.harness.cmpcov_binary.as_ref();
 
@@ -439,9 +458,9 @@ impl AFLCmdGenerator {
                     .to_str()
                     .unwrap()
                     .replace('.', "_");
-                format!("-S s_{i}_{cmpcov_fname}")
+                format!("-S s{i}_{cmpcov_fname}")
             } else {
-                format!("-S s_{i}{suffix}")
+                format!("-S s{i}{suffix}")
             };
 
             cmd.misc_afl_flags.push(s_flag);
@@ -513,7 +532,7 @@ impl AFLCmdGenerator {
         }
     }
 
-    /// Applies CMPLOG instrumentation to >4 AFL commands
+    /// Applies CMPLOG instrumentation to >= 4 AFL commands
     fn apply_cmplog_instrumentation_many(
         cmds: &mut [AflCmd],
         num_cmplog_cfgs: usize,
@@ -557,5 +576,57 @@ impl AFLCmdGenerator {
                 cmds[i].target_binary.clone_from(cmpcov_binary);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
+
+    #[test]
+    fn test_constrained_args() {
+        let mut cmds = Vec::new();
+        for i in 1..100 {
+            cmds.push(AflCmd::new(
+                PathBuf::from("/tmp/afl-fuzz"),
+                PathBuf::from(format!("/tmp/target{}", i)),
+            ));
+        }
+        let args = [("-P explore", 0.4), ("-P exploit", 0.2)];
+        let seed = 12345;
+        let mut rng = StdRng::seed_from_u64(seed);
+
+        apply_constrained_args(cmds.as_mut_slice(), &args, &mut rng);
+
+        // Verify no command has both flags
+        for cmd in &cmds {
+            let has_explore = cmd.misc_afl_flags.iter().any(|f| f.contains("-P explore"));
+            let has_exploit = cmd.misc_afl_flags.iter().any(|f| f.contains("-P exploit"));
+            assert!(
+                !(has_explore && has_exploit),
+                "Command should not have both explore and exploit flags"
+            );
+        }
+
+        // Verify approximate distributions
+        let explore_count = cmds
+            .iter()
+            .filter(|cmd| cmd.misc_afl_flags.iter().any(|f| f.contains("-P explore")))
+            .count();
+        let exploit_count = cmds
+            .iter()
+            .filter(|cmd| cmd.misc_afl_flags.iter().any(|f| f.contains("-P exploit")))
+            .count();
+
+        assert!(
+            explore_count > 30 && explore_count < 50,
+            "Explore count should be around 40%"
+        );
+        assert!(
+            exploit_count > 15 && exploit_count < 25,
+            "Exploit count should be around 20%"
+        );
     }
 }

@@ -142,6 +142,23 @@ pub struct GenArgs {
         action = ArgAction::SetTrue
     )]
     pub use_afl_defaults: bool,
+    /// Seed to seed AFL_Runners internal PRNG
+    #[arg(
+        long,
+        help = "Use a custom seed for AFL_Runners internal PRNG for deterministic command generation",
+        value_name = "AFLR_SEED",
+        default_value = None,
+        required = false,
+    )]
+    pub seed: Option<u64>,
+    /// Toggle to relay the seed to AFL++ as well
+    #[arg(
+        long,
+        help = "Forward the given seed to AFL++ as well. If no seed is provided an AFL_Runner default will be used",
+        required = false,
+        action = ArgAction::SetTrue
+    )]
+    pub use_seed_afl: bool,
 }
 
 impl GenArgs {
@@ -231,6 +248,8 @@ impl GenArgs {
                 .afl_cfg
                 .use_afl_defaults
                 .unwrap_or(self.use_afl_defaults),
+            seed: self.seed.or(config.misc.seed),
+            use_seed_afl: config.misc.use_seed_afl.unwrap_or(self.use_seed_afl),
             config: self.config.clone(),
         }
     }
@@ -392,6 +411,10 @@ pub struct MiscConfig {
     pub detached: Option<bool>,
     /// Use a Ramdisk for AFL++ to store `.cur_input`
     pub is_ramdisk: Option<bool>,
+    /// Seed for ALFR internal PRNG
+    pub seed: Option<u64>,
+    /// Use seed for AFL++ as well
+    pub use_seed_afl: Option<bool>,
 }
 
 /// Arguments for the `kill` subcommand

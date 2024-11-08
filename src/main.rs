@@ -16,6 +16,7 @@ use crate::{afl_cmd_gen::AFLCmdGenerator, runners::runner::Runner};
 use crate::{cli::AFL_CORPUS, runners::screen::Screen};
 use crate::{runners::tmux::Tmux, session::CampaignData};
 mod log_buffer;
+mod seed;
 mod tui;
 mod utils;
 
@@ -62,6 +63,12 @@ fn create_afl_runner(
     is_ramdisk: bool,
 ) -> Result<AFLCmdGenerator> {
     let harness = create_harness(gen_args)?;
+
+    let seed = if gen_args.use_seed_afl {
+        gen_args.seed
+    } else {
+        None
+    };
     Ok(AFLCmdGenerator::new(
         harness,
         gen_args.runners.unwrap_or(1),
@@ -78,6 +85,7 @@ fn create_afl_runner(
         gen_args.afl_binary.clone(),
         is_ramdisk,
         gen_args.use_afl_defaults,
+        seed,
     ))
 }
 
