@@ -27,9 +27,10 @@ pub enum AFLFlag {
     ImportFirst,
 }
 
-impl std::fmt::Display for AFLFlag {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let x = match self {
+impl AFLFlag {
+    /// Get the environment variable name for this flag
+    const fn as_str(&self) -> &'static str {
+        match self {
             Self::AutoResume => "AFL_AUTORESUME",
             Self::FinalSync => "AFL_FINAL_SYNC",
             Self::DisableTrim => "AFL_DISABLE_TRIM",
@@ -37,8 +38,14 @@ impl std::fmt::Display for AFLFlag {
             Self::ExpandHavocNow => "AFL_EXPAND_HAVOC_NOW",
             Self::IgnoreSeedProblems => "AFL_IGNORE_SEED_PROBLEMS",
             Self::ImportFirst => "AFL_IMPORT_FIRST",
-        };
-        write!(f, "{}", x)
+        }
+    }
+}
+
+impl std::fmt::Display for AFLFlag {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -59,18 +66,21 @@ impl FromStr for AFLFlag {
     }
 }
 
-/// Struct representing the environment variables for `AFLPlusPlus`
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct AFLEnv {
-    /// Set of enabled AFL flags
-    pub flags: HashSet<AFLFlag>,
-    /// `AFL_TESTCACHE_SIZE` sets caching of test cases in MB (default: 50).
-    /// If enough RAM is available, it is recommended to target values between 50-500MB.
+    flags: HashSet<AFLFlag>,
     pub testcache_size: u32,
+}
+
+impl Default for AFLEnv {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AFLEnv {
     /// Creates a new `AFLEnv` instance with default values
+    #[inline]
     pub fn new() -> Self {
         Self {
             flags: HashSet::new(),
@@ -78,25 +88,74 @@ impl AFLEnv {
         }
     }
 
+    /// Creates a new `AFLEnv` with the specified capacity for flags
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            flags: HashSet::with_capacity(capacity),
+            testcache_size: 50,
+        }
+    }
+
     /// Enables the specified AFL flag
-    pub fn enable_flag(&mut self, flag: AFLFlag) {
+    #[inline]
+    pub fn enable_flag(&mut self, flag: AFLFlag) -> &mut Self {
         self.flags.insert(flag);
+        self
+    }
+
+    /// Sets the testcache size in MB
+    #[inline]
+    pub fn set_testcache_size(&mut self, size: u32) -> &mut Self {
+        self.testcache_size = size;
+        self
+    }
+
+    /// Returns true if the specified flag is enabled
+    #[inline]
+    pub fn has_flag(&self, flag: AFLFlag) -> bool {
+        self.flags.contains(&flag)
     }
 
     /// Generates an `AFLPlusPlus` environment variable string for the current settings
     pub fn generate_afl_env_cmd(&self, ramdisk: Option<String>) -> Vec<String> {
-        let mut command = Vec::new();
+        let mut command = Vec::with_capacity(self.flags.len() + 2);
 
         if let Some(ramdisk) = ramdisk {
-            command.push(format!("AFL_TMPDIR={ramdisk} "));
+            command.push(format!("AFL_TMPDIR={ramdisk}"));
         }
 
-        for flag in &self.flags {
-            command.push(format!("{}=1", flag.to_string()));
-        }
+        command.extend(self.flags.iter().map(|flag| format!("{}=1", flag.as_str())));
 
-        command.push(format!("AFL_TESTCACHE_SIZE={} ", self.testcache_size));
+        command.push(format!("AFL_TESTCACHE_SIZE={}", self.testcache_size));
 
         command
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_flag_parsing() {
+        assert_eq!(
+            "AFL_AUTORESUME".parse::<AFLFlag>().unwrap(),
+            AFLFlag::AutoResume
+        );
+        assert!("INVALID_FLAG".parse::<AFLFlag>().is_err());
+    }
+
+    #[test]
+    fn test_env_generation() {
+        let mut env = AFLEnv::new();
+        env.enable_flag(AFLFlag::AutoResume)
+            .enable_flag(AFLFlag::FinalSync)
+            .set_testcache_size(100);
+
+        let cmd = env.generate_afl_env_cmd(Some("ramdisk".to_string()));
+        assert!(cmd.contains(&"AFL_TMPDIR=ramdisk".to_string()));
+        assert!(cmd.contains(&"AFL_AUTORESUME=1".to_string()));
+        assert!(cmd.contains(&"AFL_FINAL_SYNC=1".to_string()));
+        assert!(cmd.contains(&"AFL_TESTCACHE_SIZE=100".to_string()));
     }
 }
