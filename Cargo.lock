@@ -17,6 +17,7 @@ dependencies = [
  "chrono",
  "clap",
  "crossterm",
+ "once_cell",
  "rand",
  "ratatui",
  "serde",

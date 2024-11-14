@@ -2,9 +2,13 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::afl_cmd::AflCmd;
+use crate::afl_strategies::{AflStrategy, CmplogMode};
 use crate::harness::Harness;
 use crate::seed::Xorshift64;
+use crate::{
+    afl_cmd::AflCmd,
+    afl_strategies::{FormatMode, MutationMode},
+};
 use crate::{
     afl_env::{AFLEnv, AFLFlag},
     system_utils,
@@ -202,24 +206,46 @@ impl AFLCmdGenerator {
         let mut rng = <StdRng as SeedableRng>::seed_from_u64(mangled_seed as u64);
         let configs = self.initialize_configs(&mut rng);
         let mut cmds = self.create_initial_cmds(&configs)?;
+        let mut cmpcov_idxs = HashSet::new();
 
         let afl_env_vars: Vec<String> = Self::get_afl_env_vars();
         let is_using_custom_mutator = afl_env_vars
             .iter()
             .any(|e| e.starts_with("AFL_CUSTOM_MUTATOR_LIBRARY"));
         if !self.use_afl_defaults {
-            Self::apply_mutation_strategies(&mut cmds, &mut rng, is_using_custom_mutator);
-            Self::apply_queue_selection(&mut cmds, &mut rng);
-            Self::apply_power_schedules(&mut cmds);
+            Self::apply_strategies(&mut cmds, &mut rng, is_using_custom_mutator);
+            //Self::apply_mutation_strategies(&mut cmds, &mut rng, is_using_custom_mutator);
+            //Self::apply_queue_selection(&mut cmds, &mut rng);
+            //Self::apply_power_schedules(&mut cmds);
         }
         self.apply_directory(&mut cmds);
         self.apply_dictionary(&mut cmds)?;
         self.apply_sanitizer_or_target_binary(&mut cmds);
-        self.apply_cmplog(&mut cmds, &mut rng);
+        if let Some(cmplog_bin) = self.harness.cmplog_bin.as_ref() {
+            let strategy = AflStrategy::new()
+                .cmplog_binary(cmplog_bin.clone())
+                .cmplog_runner_ratio(0.3)
+                .cmplog_mode(CmplogMode::Standard, 0.7)
+                .cmplog_mode(CmplogMode::Extended, 0.1)
+                .cmplog_mode(CmplogMode::Transforms, 0.2)
+                .build();
+
+            strategy.apply_cmplog(&mut cmds, &mut rng);
+        }
+        //self.apply_cmplog(&mut cmds, &mut rng);
         self.apply_target_args(&mut cmds);
-        self.apply_cmpcov(&mut cmds, &mut rng);
+        if let Some(cmpcov_binary) = self.harness.cmpcov_bin.as_ref() {
+            let mut strategy = AflStrategy::new()
+                .cmpcov_binary(cmpcov_binary.clone())
+                .build();
+
+            strategy.apply_cmpcov(&mut cmds, &mut rng);
+            cmpcov_idxs = strategy.get_cmpcov_indices().to_owned();
+        }
+        //self.apply_cmpcov(&mut cmds, &mut rng);
+
         // NOTE: Needs to called last as it relies on cmpcov/cmplog being already set
-        self.apply_fuzzer_roles(&mut cmds);
+        self.apply_fuzzer_roles(&mut cmds, &cmpcov_idxs);
 
         // Inherit global AFL environment variables that are not already set
         for cmd in &mut cmds {
@@ -290,34 +316,47 @@ impl AFLCmdGenerator {
         Ok(cmds)
     }
 
+    fn apply_strategies(cmds: &mut [AflCmd], rng: &mut impl Rng, is_using_custom_mutator: bool) {
+        let strategy = AflStrategy::new()
+            .mutation_mode(MutationMode::Explore, 0.4) // -P explore
+            .mutation_mode(MutationMode::Exploit, 0.2) // -P exploit
+            .format_mode(FormatMode::Binary, 0.3) // -a binary
+            .format_mode(FormatMode::Text, 0.3) // -a text
+            .deterministic_fuzzing(Some(0.1)) // -L 0
+            .queue_cycling(Some(0.1)) // -Z
+            .build();
+
+        strategy.apply(cmds, rng, is_using_custom_mutator);
+    }
+
     /// Applies mutation strategies to AFL commands
-    fn apply_mutation_strategies(
-        cmds: &mut [AflCmd],
-        rng: &mut impl Rng,
-        is_using_custom_mutator: bool,
-    ) {
-        let mode_args: [(&str, f64); 2] = [("-P explore", 0.4), ("-P exploit", 0.2)];
-        apply_constrained_args_excl(cmds, &mode_args, rng);
-        let format_args = [("-a binary", 0.3), ("-a text", 0.3)];
-        apply_constrained_args_excl(cmds, &format_args, rng);
-        if !is_using_custom_mutator {
-            apply_args(cmds, "-L 0", 0.1, rng);
-        }
-    }
+    //fn apply_mutation_strategies(
+    //    cmds: &mut [AflCmd],
+    //    rng: &mut impl Rng,
+    //    is_using_custom_mutator: bool,
+    //) {
+    //    let mode_args: [(&str, f64); 2] = [("-P explore", 0.4), ("-P exploit", 0.2)];
+    //    apply_constrained_args_excl(cmds, &Af, rng);
+    //    let format_args = [("-a binary", 0.3), ("-a text", 0.3)];
+    //    apply_constrained_args_excl(cmds, &format_args, rng);
+    //    if !is_using_custom_mutator {
+    //        apply_args(cmds, "-L 0", 0.1, rng);
+    //    }
+    //}
 
-    /// Applies queue selection to AFL commands
-    fn apply_queue_selection(cmds: &mut [AflCmd], rng: &mut impl Rng) {
-        apply_args(cmds, "-Z", 0.1, rng);
-    }
+    ///// Applies queue selection to AFL commands
+    //fn apply_queue_selection(cmds: &mut [AflCmd], rng: &mut impl Rng) {
+    //    apply_args(cmds, "-Z", 0.1, rng);
+    //}
 
-    /// Applies power schedules to AFL commands
-    fn apply_power_schedules(cmds: &mut [AflCmd]) {
-        let pscheds = ["fast", "explore", "coe", "lin", "quad", "exploit", "rare"];
-        cmds.iter_mut().enumerate().for_each(|(i, cmd)| {
-            cmd.misc_afl_flags
-                .push(format!("-p {}", pscheds[i % pscheds.len()]));
-        });
-    }
+    ///// Applies power schedules to AFL commands
+    //fn apply_power_schedules(cmds: &mut [AflCmd]) {
+    //    let pscheds = ["fast", "explore", "coe", "lin", "quad", "exploit", "rare"];
+    //    cmds.iter_mut().enumerate().for_each(|(i, cmd)| {
+    //        cmd.misc_afl_flags
+    //            .push(format!("-p {}", pscheds[i % pscheds.len()]));
+    //    });
+    //}
 
     /// Applies input and output directories to AFL commands
     fn apply_directory(&self, cmds: &mut [AflCmd]) {
@@ -328,7 +367,7 @@ impl AFLCmdGenerator {
     }
 
     /// Applies fuzzer roles to AFL commands
-    fn apply_fuzzer_roles(&self, cmds: &mut [AflCmd]) {
+    fn apply_fuzzer_roles(&self, cmds: &mut [AflCmd], cmpcov_idxs: &HashSet<usize>) {
         let target_fname = self
             .harness
             .target_bin
@@ -349,7 +388,7 @@ impl AFLCmdGenerator {
                 format!("_{target_fname}")
             };
 
-            let s_flag = if self.cmpcov_idxs.contains(&(i + 1)) {
+            let s_flag = if cmpcov_idxs.contains(&(i + 1)) {
                 let cmpcov_fname = cmpcov_binary
                     .unwrap()
                     .file_stem()
