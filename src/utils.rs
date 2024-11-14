@@ -1,6 +1,5 @@
 use std::hash::{DefaultHasher, Hasher};
-use std::io::{stdin, Read};
-use std::path::Path;
+use std::io::Read;
 use std::path::PathBuf;
 use std::{char, env};
 use std::{fs, time::Duration};
@@ -11,30 +10,10 @@ use anyhow::Context;
 use anyhow::Result;
 
 use crate::cli::Config;
-use crate::cli::GenArgs;
 use crate::cli::RunArgs;
 use crate::cli::AFL_CORPUS;
-use crate::harness::Harness;
 
 pub static DEFAULT_AFL_CONFIG: &str = "aflr_cfg.toml";
-
-/// Creates a new `Harness` instance based on the provided `GenArgs`.
-///
-/// # Errors
-///
-/// Returns an error if the target binary is not specified.
-pub fn create_harness(args: &GenArgs) -> Result<Harness> {
-    if args.target.is_none() {
-        bail!("Target binary is required");
-    }
-    Ok(Harness::new(
-        args.target.clone().unwrap(),
-        args.san_target.clone(),
-        args.cmpl_target.clone(),
-        args.cmpc_target.clone(),
-        args.target_args.clone().map(|args| args.join(" ")),
-    ))
-}
 
 /// Generates a unique session name based on the provided `RunArgs` and `target_args`.
 ///
@@ -130,29 +109,6 @@ pub fn get_user_input() -> char {
                 b
             }
         })
-}
-
-/// Helper function for creating directories
-pub fn mkdir_helper(dir: &Path, check_empty: bool) -> Result<()> {
-    if dir.is_file() {
-        bail!("{} is a file", dir.display());
-    }
-    if check_empty {
-        let is_empty = dir.read_dir().map_or(true, |mut i| i.next().is_none());
-        if !is_empty {
-            println!("Directory {} is not empty. Clean it [Y/n]? ", dir.display());
-            let mut input = String::new();
-            stdin().read_line(&mut input)?;
-            match input.trim().to_lowercase().chars().next().unwrap_or('y') {
-                'y' | '\n' => fs::remove_dir_all(dir)?,
-                _ => (),
-            }
-        }
-    }
-    if !dir.exists() {
-        fs::create_dir_all(dir)?;
-    }
-    Ok(())
 }
 
 /// Count the number of alive procsses based on a list of PIDs

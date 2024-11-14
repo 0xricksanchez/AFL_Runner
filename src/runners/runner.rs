@@ -1,5 +1,4 @@
 use anyhow::Result;
-use tempfile::NamedTempFile;
 use std::fs;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -7,10 +6,12 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
+use tempfile::NamedTempFile;
 
 use crate::runners::tmux::TMUX_TEMPLATE;
+use crate::system_utils::mkdir_helper;
 use crate::tui::Tui;
-use crate::utils::{get_user_input, mkdir_helper};
+use crate::utils::get_user_input;
 use crate::{runners::screen::SCREEN_TEMPLATE, session::CampaignData};
 
 #[allow(unused)]
@@ -143,20 +144,24 @@ impl Session {
 
         // Run the script using bash
         let output = Command::new("bash")
-        .arg(temp_script.path())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .output()?;
+            .arg(temp_script.path())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()?;
 
         // Check if the command was successful or not based on the exit status
-        if ! output.status.success() {
-            let stderr = String::from_utf8(output.stderr).unwrap_or_else(|e| {
-                format!("Failed to parse stderr: {e}")
-            });
+        if !output.status.success() {
+            let stderr = String::from_utf8(output.stderr)
+                .unwrap_or_else(|e| format!("Failed to parse stderr: {e}"));
             let path = temp_script.into_temp_path().keep()?;
-            anyhow::bail!("Error executing runner script {}: exit code {}, stderr: '{}'", path.display(), output.status, stderr);
+            anyhow::bail!(
+                "Error executing runner script {}: exit code {}, stderr: '{}'",
+                path.display(),
+                output.status,
+                stderr
+            );
         }
-        
+
         Ok(())
     }
 

@@ -5,22 +5,25 @@ use tui::Tui;
 use clap::Parser;
 use cli::{Cli, Commands, SessionRunner};
 
+mod afl_cmd;
 mod afl_cmd_gen;
 mod afl_env;
+mod afl_strategies;
 mod cli;
 mod data_collection;
 mod harness;
 mod runners;
 mod session;
-use crate::{afl_cmd_gen::AFLCmdGenerator, runners::runner::Runner};
+use crate::{afl_cmd_gen::AFLCmdGenerator, harness::Harness, runners::runner::Runner};
 use crate::{cli::AFL_CORPUS, runners::screen::Screen};
 use crate::{runners::tmux::Tmux, session::CampaignData};
 mod log_buffer;
 mod seed;
+mod system_utils;
 mod tui;
 mod utils;
 
-use utils::{create_harness, generate_session_name, load_config};
+use utils::{generate_session_name, load_config};
 
 fn main() -> Result<()> {
     let cli_args = Cli::parse();
@@ -62,7 +65,15 @@ fn create_afl_runner(
     raw_afl_flags: Option<String>,
     is_ramdisk: bool,
 ) -> Result<AFLCmdGenerator> {
-    let harness = create_harness(gen_args)?;
+    // TODO: Implement coverage target in gen_args
+    let harness = Harness::new(
+        gen_args.target.clone().unwrap().clone(),
+        gen_args.target_args.clone(),
+    )?
+    .with_sanitizer(gen_args.san_target.clone())?
+    .with_cmplog(gen_args.cmpl_target.clone())?
+    .with_cmpcov(gen_args.cmpc_target.clone())?
+    .with_coverage(gen_args.san_target.clone())?;
 
     let seed = if gen_args.use_seed_afl {
         gen_args.seed

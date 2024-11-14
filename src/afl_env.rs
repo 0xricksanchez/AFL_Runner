@@ -126,7 +126,7 @@ impl AFLEnv {
 
         command.extend(self.flags.iter().map(|flag| format!("{}=1", flag.as_str())));
 
-        command.push(format!("AFL_TESTCACHE_SIZE={}", self.testcache_size));
+        command.push(format!("AFL_TESTCACHE_SIZE={} ", self.testcache_size));
 
         command
     }
@@ -156,6 +156,6 @@ mod tests {
         assert!(cmd.contains(&"AFL_TMPDIR=ramdisk".to_string()));
         assert!(cmd.contains(&"AFL_AUTORESUME=1".to_string()));
         assert!(cmd.contains(&"AFL_FINAL_SYNC=1".to_string()));
-        assert!(cmd.contains(&"AFL_TESTCACHE_SIZE=100".to_string()));
+        assert!(cmd.contains(&"AFL_TESTCACHE_SIZE=100 ".to_string()));
     }
 }

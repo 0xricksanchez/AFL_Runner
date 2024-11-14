@@ -1,105 +1,19 @@
 use std::collections::HashSet;
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::{fs, process::Command};
-use uuid::Uuid;
 
-use crate::afl_env::{AFLEnv, AFLFlag};
+use crate::afl_cmd::AflCmd;
 use crate::harness::Harness;
 use crate::seed::Xorshift64;
+use crate::{
+    afl_env::{AFLEnv, AFLFlag},
+    system_utils,
+};
 use anyhow::{Context, Result};
 use rand::{rngs::StdRng, Rng};
 use rand::{seq::SliceRandom, SeedableRng};
-use sysinfo::System;
 
-/// Represents an AFL command
-#[derive(Debug)]
-pub struct AflCmd {
-    /// Path to the AFL binary
-    afl_binary: PathBuf,
-    /// Environment variables for the AFL command
-    env: Vec<String>,
-    /// Input directory for AFL
-    input_dir: PathBuf,
-    /// Output directory for AFL
-    output_dir: PathBuf,
-    /// Miscellaneous AFL flags
-    misc_afl_flags: Vec<String>,
-    /// Path to the target binary
-    target_binary: PathBuf,
-    /// Arguments for the target binary
-    target_args: Option<String>,
-}
-
-impl AflCmd {
-    /// Creates a new `AflCmd` instance
-    pub fn new(afl_binary: PathBuf, target_binary: PathBuf) -> Self {
-        Self {
-            afl_binary,
-            env: Vec::new(),
-            input_dir: PathBuf::new(),
-            output_dir: PathBuf::new(),
-            misc_afl_flags: Vec::new(),
-            target_binary,
-            target_args: None,
-        }
-    }
-
-    /// Sets the environment variables for the AFL command
-    pub fn extend_env(&mut self, env: Vec<String>, is_prepend: bool) {
-        if is_prepend {
-            env.iter().for_each(|e| self.env.insert(0, e.clone()));
-        } else {
-            self.env.extend(env);
-        }
-    }
-
-    /// Sets the input directory for AFL
-    pub fn set_input_dir(&mut self, input_dir: PathBuf) {
-        self.input_dir = input_dir;
-    }
-
-    /// Sets the output directory for AFL
-    pub fn set_output_dir(&mut self, output_dir: PathBuf) {
-        self.output_dir = output_dir;
-    }
-
-    /// Sets the miscellaneous AFL flags
-    pub fn set_misc_afl_flags(&mut self, misc_afl_flags: Vec<String>) {
-        self.misc_afl_flags = misc_afl_flags;
-    }
-
-    /// Sets the arguments for the target binary
-    pub fn set_target_args(&mut self, target_args: Option<String>) {
-        self.target_args = target_args;
-    }
-
-    /// Assembles the AFL command into a string
-    pub fn assemble(&self) -> String {
-        let mut cmd_parts = Vec::new();
-
-        cmd_parts.extend(self.env.iter().cloned());
-        cmd_parts.push(self.afl_binary.display().to_string());
-        cmd_parts.push(format!("-i {}", self.input_dir.display()));
-        cmd_parts.push(format!("-o {}", self.output_dir.display()));
-        cmd_parts.extend(self.misc_afl_flags.iter().cloned());
-        cmd_parts.push(format!("-- {}", self.target_binary.display()));
-
-        if let Some(target_args) = &self.target_args {
-            cmd_parts.push(target_args.clone());
-        }
-
-        cmd_parts.join(" ").trim().replace("  ", " ")
-    }
-}
-
-/// Retrieves the amount of free memory in the system in MB
-/// This function is used to determine the `AFL_TESTCACHE_SIZE` value
-///
-/// NOTE: This function will likely break on Windows
-fn get_free_mem_in_mb() -> u64 {
-    let s = System::new_all();
-    s.free_memory() / 1024 / 1024
-}
+use system_utils::{create_ramdisk, find_binary_in_path, get_free_mem_in_mb};
 
 /// Applies a flag to a percentage of AFL configurations
 fn apply_flags(configs: &mut [AFLEnv], flag: &AFLFlag, percentage: f64, rng: &mut impl Rng) {
@@ -247,8 +161,7 @@ impl AFLCmdGenerator {
             }
         });
         let rdisk = if is_ramdisk {
-            println!("[*] Attempting to create RAMDisk. Needing elevated privileges.");
-            let r = Self::create_ramdisk();
+            let r = create_ramdisk();
             if let Ok(tmpfs) = r {
                 println!("[+] Using RAMDisk: {}", tmpfs);
                 Some(tmpfs)
@@ -275,61 +188,12 @@ impl AFLCmdGenerator {
         }
     }
 
-    fn create_ramdisk() -> Result<String> {
-        let uuid = Uuid::new_v4().to_string();
-        let folder = format!("/tmp/tmpfs/{uuid}");
-        fs::create_dir_all(&folder)?;
-        let _ = Command::new("sudo")
-            .arg("mount")
-            .arg("-o")
-            .arg("size=4G")
-            .arg("-t")
-            .arg("tmpfs")
-            .arg("none")
-            .arg(&folder)
-            .output()?;
-        Ok(folder)
-    }
-
     /// Retrieves AFL environment variables
     fn get_afl_env_vars() -> Vec<String> {
         std::env::vars()
             .filter(|(k, _)| k.starts_with("AFL_"))
             .map(|(k, v)| format!("{k}={v}"))
             .collect::<Vec<String>>()
-    }
-
-    /// Retrieves the path to the AFL binary
-    fn get_afl_fuzz(&self) -> Result<PathBuf> {
-        self.afl_binary
-            .as_ref()
-            .map(PathBuf::from)
-            .or_else(|| std::env::var("AFL_PATH").map(PathBuf::from).ok())
-            .or_else(|| {
-                let output = Command::new("which")
-                    .arg("afl-fuzz")
-                    .output()
-                    .context("Failed to execute 'which'")
-                    .ok()?;
-                if output.status.success() {
-                    let afl_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                    if afl_path.is_empty() {
-                        None
-                    } else {
-                        Some(PathBuf::from(afl_path))
-                    }
-                } else {
-                    None
-                }
-            })
-            .and_then(|path| {
-                if path.exists() && path.is_file() && path.ends_with("afl-fuzz") {
-                    Some(path)
-                } else {
-                    None
-                }
-            })
-            .context("Could not find afl-fuzz binary")
     }
 
     /// Generates AFL commands based on the configuration
@@ -368,7 +232,7 @@ impl AFLCmdGenerator {
                 })
                 .cloned()
                 .collect::<Vec<String>>();
-            cmd.extend_env(to_apply, true);
+            cmd.with_env(to_apply, true);
         }
 
         let cmd_strings = cmds.into_iter().map(|cmd| cmd.assemble()).collect();
@@ -403,16 +267,16 @@ impl AFLCmdGenerator {
 
     /// Creates initial AFL commands
     fn create_initial_cmds(&self, configs: &[AFLEnv]) -> Result<Vec<AflCmd>> {
-        let afl_binary = self.get_afl_fuzz()?;
-        let target_binary = self.harness.target_binary.clone();
+        let afl_binary = find_binary_in_path(self.afl_binary.clone())?;
+        let target_binary = self.harness.target_bin.clone();
 
         let cmds = configs
             .iter()
             .map(|config| {
                 let mut cmd = AflCmd::new(afl_binary.clone(), target_binary.clone());
-                cmd.extend_env(config.generate_afl_env_cmd(self.ramdisk.clone()), false);
+                cmd.with_env(config.generate_afl_env_cmd(self.ramdisk.clone()), false);
                 if let Some(raw_afl_flags) = &self.raw_afl_flags {
-                    cmd.set_misc_afl_flags(
+                    cmd.with_misc_flags(
                         raw_afl_flags
                             .split_whitespace()
                             .map(str::to_string)
@@ -458,8 +322,8 @@ impl AFLCmdGenerator {
     /// Applies input and output directories to AFL commands
     fn apply_directory(&self, cmds: &mut [AflCmd]) {
         for cmd in cmds {
-            cmd.set_input_dir(self.input_dir.clone());
-            cmd.set_output_dir(self.output_dir.clone());
+            cmd.with_input_dir(self.input_dir.clone())
+                .with_output_dir(self.output_dir.clone());
         }
     }
 
@@ -467,7 +331,7 @@ impl AFLCmdGenerator {
     fn apply_fuzzer_roles(&self, cmds: &mut [AflCmd]) {
         let target_fname = self
             .harness
-            .target_binary
+            .target_bin
             .file_stem()
             .unwrap()
             .to_str()
@@ -476,7 +340,7 @@ impl AFLCmdGenerator {
 
         cmds[0].misc_afl_flags.push(format!("-M m_{target_fname}"));
 
-        let cmpcov_binary = self.harness.cmpcov_binary.as_ref();
+        let cmpcov_binary = self.harness.cmpcov_bin.as_ref();
 
         for (i, cmd) in cmds[1..].iter_mut().enumerate() {
             let suffix = if cmd.misc_afl_flags.iter().any(|f| f.contains("-c")) {
@@ -518,15 +382,15 @@ impl AFLCmdGenerator {
     fn apply_sanitizer_or_target_binary(&self, cmds: &mut [AflCmd]) {
         let binary = self
             .harness
-            .sanitizer_binary
+            .sanitizer_bin
             .as_ref()
-            .unwrap_or(&self.harness.target_binary);
+            .unwrap_or(&self.harness.target_bin);
         cmds[0].target_binary.clone_from(binary);
     }
 
     /// Applies CMPLOG instrumentation to AFL commands
     fn apply_cmplog(&self, cmds: &mut [AflCmd], rng: &mut impl Rng) {
-        if let Some(cmplog_binary) = self.harness.cmplog_binary.as_ref() {
+        if let Some(cmplog_binary) = self.harness.cmplog_bin.as_ref() {
             #[allow(clippy::cast_possible_truncation)]
             #[allow(clippy::cast_sign_loss)]
             #[allow(clippy::cast_precision_loss)]
@@ -586,14 +450,14 @@ impl AFLCmdGenerator {
     fn apply_target_args(&self, cmds: &mut [AflCmd]) {
         if let Some(target_args) = self.harness.target_args.as_ref() {
             for cmd in cmds {
-                cmd.set_target_args(Some(target_args.clone()));
+                cmd.with_target_args(Some(target_args.clone()));
             }
         }
     }
 
     /// Applies CMPCOV instrumentation to AFL commands
     fn apply_cmpcov(&mut self, cmds: &mut [AflCmd], rng: &mut impl Rng) {
-        if let Some(cmpcov_binary) = self.harness.cmpcov_binary.as_ref() {
+        if let Some(cmpcov_binary) = self.harness.cmpcov_bin.as_ref() {
             let max_cmpcov_instances = match self.runners {
                 0..=2 => 0,
                 3..=7 => 1,
