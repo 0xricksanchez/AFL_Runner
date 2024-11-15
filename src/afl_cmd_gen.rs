@@ -92,7 +92,7 @@ impl AFLCmdGenerator {
     }
 
     /// Generates AFL commands based on the configuration
-    pub fn generate(&mut self) -> Result<Vec<String>> {
+    pub fn run(&self) -> Result<Vec<AflCmd>> {
         let mut rng = StdRng::seed_from_u64(Xorshift64::new(self.seed.unwrap_or(0)).next());
 
         let afl_envs = AFLEnv::new(self.runners as usize, self.use_afl_defaults, &mut rng);
@@ -134,7 +134,8 @@ impl AFLCmdGenerator {
         self.apply_fuzzer_roles(&mut cmds, &cmpcov_idxs);
         Self::apply_global_env_vars(&mut cmds, &afl_env_vars);
 
-        Ok(cmds.into_iter().map(|cmd| cmd.assemble()).collect())
+        Ok(cmds)
+        //Ok(cmds.into_iter().map(|cmd| cmd.as_string()).collect())
     }
 
     // Inherit global AFL environment variables that are not already set
@@ -335,7 +336,7 @@ mod tests {
         let dict_path = temp_dir.path().join("dict.txt");
         fs::write(&dict_path, "test:test").unwrap();
 
-        let mut generator = AFLCmdGenerator::new(
+        let generator = AFLCmdGenerator::new(
             create_test_harness(),
             2,
             PathBuf::from("/input"),
@@ -350,8 +351,8 @@ mod tests {
 
         assert!(generator.dictionary.is_some());
 
-        let cmds = generator.generate().unwrap();
-        assert!(cmds.iter().all(|cmd| cmd.contains("-x")));
+        let cmds = generator.run().unwrap();
+        assert!(cmds.iter().all(|cmd| cmd.to_string().contains("-x")));
     }
 
     #[test]
@@ -413,7 +414,7 @@ mod tests {
         let mut harness = create_test_harness();
         harness.cmpcov_bin = Some(PathBuf::from("/bin/cmpcov-binary"));
 
-        let mut generator = AFLCmdGenerator::new(
+        let generator = AFLCmdGenerator::new(
             harness,
             4,
             PathBuf::from("/input"),
@@ -426,12 +427,14 @@ mod tests {
             Some(42),
         );
 
-        let result = generator.generate();
+        let result = generator.run();
         assert!(result.is_ok());
 
         let cmds = result.unwrap();
         assert!(!cmds.is_empty());
-        assert!(cmds.iter().any(|cmd| cmd.contains("cmpcov-binary")));
+        assert!(cmds
+            .iter()
+            .any(|cmd| cmd.to_string().contains("cmpcov-binary")));
     }
 
     #[test]
@@ -439,7 +442,7 @@ mod tests {
         let mut harness = create_test_harness();
         harness.cmplog_bin = Some(PathBuf::from("/bin/cmplog-binary"));
 
-        let mut generator = AFLCmdGenerator::new(
+        let generator = AFLCmdGenerator::new(
             harness,
             4,
             PathBuf::from("/input"),
@@ -452,12 +455,12 @@ mod tests {
             Some(42),
         );
 
-        let result = generator.generate();
+        let result = generator.run();
         assert!(result.is_ok());
 
         let cmds = result.unwrap();
         assert!(!cmds.is_empty());
-        assert!(cmds.iter().any(|cmd| cmd.contains("-c")));
+        assert!(cmds.iter().any(|cmd| cmd.to_string().contains("-c")));
     }
 
     #[test]
@@ -501,30 +504,30 @@ mod tests {
 
     #[test]
     fn test_complete_generation() {
-        let (_temp, mut generator) = setup_test_generator();
-        let result = generator.generate();
+        let (_temp, generator) = setup_test_generator();
+        let result = generator.run();
         assert!(result.is_ok());
 
         let cmds = result.unwrap();
         assert_eq!(cmds.len(), 2); // Should match number of runners
 
         // Verify master and secondary setup
-        assert!(cmds[0].contains("-M"));
-        assert!(cmds[1].contains("-S"));
+        assert!(cmds[0].to_string().contains("-M"));
+        assert!(cmds[1].to_string().contains("-S"));
 
         // Verify input/output directories
         for cmd in &cmds {
-            assert!(cmd.contains("-i"));
-            assert!(cmd.contains("-o"));
+            assert!(cmd.to_string().contains("-i"));
+            assert!(cmd.to_string().contains("-o"));
         }
     }
 
     #[test]
     fn test_afl_defaults() {
-        let (_temp_dir, mut generator) = setup_test_generator();
-        let cmds_no_defaults = generator.generate().unwrap();
+        let (_temp_dir, generator) = setup_test_generator();
+        let cmds_no_defaults = generator.run().unwrap();
 
-        let mut generator_with_defaults = AFLCmdGenerator::new(
+        let generator_with_defaults = AFLCmdGenerator::new(
             create_test_harness(),
             2,
             generator.input_dir.clone(),
@@ -537,9 +540,9 @@ mod tests {
             Some(42),
         );
 
-        let cmds_with_defaults = generator_with_defaults.generate().unwrap();
+        let cmds_with_defaults = generator_with_defaults.run().unwrap();
 
         // Commands with defaults should be simpler
-        assert!(cmds_with_defaults[0].len() < cmds_no_defaults[0].len());
+        assert!(cmds_with_defaults[0].to_string().len() < cmds_no_defaults[0].to_string().len());
     }
 }

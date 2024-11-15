@@ -5,8 +5,8 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
+use crate::data_collection::DataFetcher;
 use crate::session::{CampaignData, CrashInfoDetails};
-use crate::{data_collection::DataFetcher, utils::format_duration};
 use anyhow::bail;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
@@ -39,6 +39,24 @@ impl Tui {
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
         Ok(Self { terminal })
+    }
+
+    /// Formats a duration into a string based on days, hours, minutes, and seconds
+    pub fn format_duration(duration: &Duration) -> String {
+        let mut secs = duration.as_secs();
+        let days = secs / 86400;
+        let hours = (secs % 86400) / 3600;
+        let mins = (secs % 3600) / 60;
+        secs %= 60;
+        if days > 0 {
+            format!("{days} days, {hours:02}:{mins:02}:{secs:02}")
+        } else if days == 0 && hours > 0 {
+            format!("{hours:02}:{mins:02}:{secs:02}")
+        } else if days == 0 && hours == 0 && mins > 0 {
+            format!("{mins:02}:{secs:02}")
+        } else {
+            format!("{secs:02}s")
+        }
     }
 
     /// Runs the TUI standalone with the specified output directory
@@ -269,7 +287,7 @@ impl Tui {
             ]),
             Line::from(format!(
                 "Total run time: {}",
-                format_duration(&session_data.total_run_time)
+                Self::format_duration(&session_data.total_run_time)
             )),
             Line::from(format!(
                 "Time without finds: {}s ({}s/{}s)",
@@ -522,7 +540,7 @@ Cycles without finds: {} ({}/{})",
                 let event_time = (*total_run_time).checked_sub(Duration::from_millis(event.time));
                 event_time.map_or_else(
                     || "N/A".to_string(),
-                    |duration: std::time::Duration| format_duration(&duration),
+                    |duration: std::time::Duration| Self::format_duration(&duration),
                 )
             },
         )

@@ -87,4 +87,44 @@ impl AflCmd {
 
         cmd_parts.join(" ").trim().replace("  ", " ")
     }
+
+    pub fn print(&self) {
+        println!("{}", self.assemble());
+    }
+}
+
+impl std::fmt::Display for AflCmd {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.assemble())
+    }
+}
+
+pub trait Printable {
+    fn print(&self);
+}
+
+impl Printable for AflCmd {
+    fn print(&self) {
+        println!("{self}");
+    }
+}
+
+impl Printable for Vec<AflCmd> {
+    fn print(&self) {
+        println!("Generated commands:");
+        for (i, cmd) in self.iter().enumerate() {
+            print!("  {i:3}. ");
+            cmd.print();
+        }
+    }
+}
+
+pub trait ToStringVec {
+    fn to_string_vec(&self) -> Vec<String>;
+}
+
+impl ToStringVec for Vec<AflCmd> {
+    fn to_string_vec(&self) -> Vec<String> {
+        self.iter().map(|cmd| cmd.to_string()).collect()
+    }
 }

@@ -133,7 +133,7 @@ impl AFLEnv {
     /// Returns true if the specified flag is enabled
     #[inline]
     pub fn has_flag(&self, flag: &AFLFlag) -> bool {
-        self.flags.contains(&flag)
+        self.flags.contains(flag)
     }
 
     /// Generates an `AFLPlusPlus` environment variable string for the current settings

@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     session::{CampaignData, CrashInfoDetails},
-    utils::count_alive_fuzzers,
+    system_utils::count_alive_fuzzers,
 };
 use std::fs;
 use std::path::{Path, PathBuf};

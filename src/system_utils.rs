@@ -1,12 +1,12 @@
 use std::{
     fs,
-    io::{self, stdin},
+    io::{self, stdin, Read},
     path::{Path, PathBuf},
     process::Command,
 };
 
 use anyhow::{bail, Context, Result};
-use sysinfo::System;
+use sysinfo::{Pid, System};
 use uuid::Uuid;
 
 /// Retrieves the amount of free memory in the system in MB
@@ -122,6 +122,35 @@ fn should_clean_directory(dir: &Path) -> io::Result<bool> {
         input.trim().to_lowercase().chars().next().unwrap_or('y'),
         'y' | '\n'
     ))
+}
+
+/// Count the number of alive procsses based on a list of PIDs
+pub fn count_alive_fuzzers(fuzzer_pids: &[u32]) -> Vec<usize> {
+    let s = System::new_all();
+    fuzzer_pids
+        .iter()
+        .filter(|&pid| *pid != 0)
+        .filter(|&pid| s.process(Pid::from(*pid as usize)).is_some())
+        .map(|&pid| pid as usize)
+        .collect()
+}
+
+/// Gets user input from stdin
+pub fn get_user_input() -> char {
+    std::io::stdin()
+        .bytes()
+        .next()
+        .and_then(std::result::Result::ok)
+        .map_or('y', |byte| {
+            let b = byte as char;
+            if b.is_ascii_alphabetic() {
+                b.to_lowercase().next().unwrap()
+            } else if b == '\n' {
+                'y'
+            } else {
+                b
+            }
+        })
 }
 
 #[cfg(test)]

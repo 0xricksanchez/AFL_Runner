@@ -6,7 +6,7 @@ use std::{fmt, path::PathBuf};
 
 /// These structs contain the AFL strategies and their probabilities of being applied in the command generation.
 /// The values and probabilities are loosely based on the following AFL documentation:
-/// https://github.com/AFLplusplus/AFLplusplus/blob/stable/docs/fuzzing_in_depth.md#c-using-multiple-cores
+/// `https://github.com/AFLplusplus/AFLplusplus/blob/stable/docs/fuzzing_in_depth.md#c-using-multiple-cores`
 /// Static empty set for default case
 pub static EMPTY_INDICES: Lazy<HashSet<usize>> = Lazy::new(HashSet::new);
 
@@ -837,7 +837,7 @@ mod tests {
 
         #[test]
         fn test_cmpcov_max_instances() {
-            let config = CmpcovConfig::new(PathBuf::from("/bin/cmpcov"));
+            let _config = CmpcovConfig::new(PathBuf::from("/bin/cmpcov"));
 
             assert_eq!(CmpcovConfig::calculate_max_instances(2), 0);
             assert_eq!(CmpcovConfig::calculate_max_instances(5), 1);

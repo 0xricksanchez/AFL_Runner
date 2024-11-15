@@ -9,9 +9,8 @@ use std::time::Duration;
 use tempfile::NamedTempFile;
 
 use crate::runners::tmux::TMUX_TEMPLATE;
-use crate::system_utils::mkdir_helper;
+use crate::system_utils::{get_user_input, mkdir_helper};
 use crate::tui::Tui;
-use crate::utils::get_user_input;
 use crate::{runners::screen::SCREEN_TEMPLATE, session::CampaignData};
 
 #[allow(unused)]
