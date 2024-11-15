@@ -1,24 +1,27 @@
 name: Rust
-env:
-  AFL_PATH: /bin/ls
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
+  AFL_PATH: $HOME/.local/bin/afl-fuzz
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+      - uses: actions/checkout@v4
+      - name: Add fake afl-fuzz into path
+        run: |
+          mkdir -p $HOME/.local/bin
+          cp /bin/ls $HOME/.local/bin/afl-fuzz
+
+      - name: Build
+        run: cargo build --verbose
+      - name: Run tests
+        run: cargo test --verbose
