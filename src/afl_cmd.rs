@@ -71,11 +71,6 @@ impl AflCmd {
         self.misc_afl_flags.push(flag);
     }
 
-    /// Checks if a flag is present in the miscellaneous AFL flags
-    pub fn has_flag(&self, flag: &str) -> bool {
-        self.misc_afl_flags.iter().any(|f| f.contains(flag))
-    }
-
     /// Assembles the AFL command into a string
     pub fn assemble(&self) -> String {
         let mut cmd_parts = Vec::new();

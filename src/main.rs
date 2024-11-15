@@ -103,7 +103,7 @@ fn create_afl_runner(
 fn handle_gen_command(gen_args: &cli::GenArgs) -> Result<()> {
     let (merged_args, raw_afl_flags) = load_merged_gen_args_and_flags(gen_args)?;
     let mut afl_runner = create_afl_runner(&merged_args, raw_afl_flags, false)?;
-    let cmds = afl_runner.generate_afl_commands()?;
+    let cmds = afl_runner.generate()?;
     utils::print_generated_commands(&cmds);
     Ok(())
 }
@@ -115,7 +115,7 @@ fn handle_run_command(run_args: &cli::RunArgs) -> Result<()> {
     }
     let mut afl_runner =
         create_afl_runner(&merged_args.gen_args, raw_afl_flags, merged_args.is_ramdisk)?;
-    let afl_cmds = afl_runner.generate_afl_commands()?;
+    let afl_cmds = afl_runner.generate()?;
     if merged_args.dry_run {
         utils::print_generated_commands(&afl_cmds);
         return Ok(());

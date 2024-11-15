@@ -75,37 +75,6 @@ impl Harness {
         })
     }
 
-    // Added getters for all fields
-    #[inline]
-    pub fn target_bin(&self) -> &Path {
-        &self.target_bin
-    }
-
-    #[inline]
-    pub fn sanitizer_bin(&self) -> Option<&Path> {
-        self.sanitizer_bin.as_deref()
-    }
-
-    #[inline]
-    pub fn cmplog_bin(&self) -> Option<&Path> {
-        self.cmplog_bin.as_deref()
-    }
-
-    #[inline]
-    pub fn cmpcov_bin(&self) -> Option<&Path> {
-        self.cmpcov_bin.as_deref()
-    }
-
-    #[inline]
-    pub fn cov_bin(&self) -> Option<&Path> {
-        self.cov_bin.as_deref()
-    }
-
-    #[inline]
-    pub fn target_args(&self) -> Option<&str> {
-        self.target_args.as_deref()
-    }
-
     /// Helper method to process optional binary paths
     fn process_optional_binary<P>(binary: Option<P>) -> Result<Option<PathBuf>, HarnessError>
     where
@@ -196,8 +165,8 @@ mod tests {
         let target_args = vec!["--arg1".to_string(), "--arg2".to_string()];
 
         let harness = Harness::new(&bin_path, Some(target_args)).unwrap();
-        assert_eq!(harness.target_bin(), fs::canonicalize(&bin_path).unwrap());
-        assert_eq!(harness.target_args(), Some("--arg1 --arg2"));
+        assert_eq!(harness.target_bin, fs::canonicalize(&bin_path).unwrap());
+        assert_eq!(harness.target_args, Some(("--arg1 --arg2").to_string()));
     }
 
     #[test]
@@ -217,8 +186,8 @@ mod tests {
 
         let harness = Harness::new(&main_bin, None)?.with_sanitizer(Some(san_bin))?;
 
-        assert!(harness.sanitizer_bin().is_some());
-        assert!(harness.cmplog_bin().is_none());
+        assert!(harness.sanitizer_bin.is_some());
+        assert!(harness.cmplog_bin.is_none());
         Ok(())
     }
 
