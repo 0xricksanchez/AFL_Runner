@@ -142,7 +142,7 @@ pub struct GenArgs {
         action = ArgAction::SetTrue
     )]
     pub use_afl_defaults: bool,
-    /// Seed to seed AFL_Runners internal PRNG
+    /// Seed to seed `AFL_Runners` internal PRNG
     #[arg(
         long,
         help = "Use a custom seed for AFL_Runners internal PRNG for deterministic command generation",

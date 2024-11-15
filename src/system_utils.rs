@@ -32,7 +32,7 @@ pub fn create_ramdisk() -> Result<String> {
 
 /// Validates if a path points to the AFL binary
 #[inline]
-fn is_valid_afl_binary(path: &PathBuf) -> bool {
+fn is_valid_afl_binary(path: &Path) -> bool {
     path.exists() && path.is_file() && path.ends_with("afl-fuzz")
 }
 
@@ -42,7 +42,10 @@ where
     P: Into<PathBuf>,
 {
     // Check custom path
-    if let Some(path) = custom_path.map(Into::into).filter(is_valid_afl_binary) {
+    if let Some(path) = custom_path
+        .map(Into::into)
+        .filter(|p: &PathBuf| is_valid_afl_binary(p))
+    {
         return Ok(path);
     }
 
@@ -50,7 +53,7 @@ where
     if let Some(path) = std::env::var("AFL_PATH")
         .map(PathBuf::from)
         .ok()
-        .filter(is_valid_afl_binary)
+        .filter(|p: &PathBuf| is_valid_afl_binary(p))
     {
         return Ok(path);
     }

@@ -7,7 +7,6 @@ use std::{fmt, path::PathBuf};
 /// These structs contain the AFL strategies and their probabilities of being applied in the command generation.
 /// The values and probabilities are loosely based on the following AFL documentation:
 /// https://github.com/AFLplusplus/AFLplusplus/blob/stable/docs/fuzzing_in_depth.md#c-using-multiple-cores
-
 /// Static empty set for default case
 pub static EMPTY_INDICES: Lazy<HashSet<usize>> = Lazy::new(HashSet::new);
 
@@ -39,7 +38,7 @@ impl CmpcovConfig {
     }
 
     /// Calculate maximum CMPCOV instances based on number of runners
-    pub fn calculate_max_instances(&self, runner_count: usize) -> usize {
+    pub fn calculate_max_instances(runner_count: usize) -> usize {
         match runner_count {
             0..=2 => 0,
             3..=7 => 1,
@@ -166,7 +165,7 @@ impl fmt::Display for PowerSchedule {
 }
 
 /// Represents how multiple flags of the same type should be applied
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApplicationMode {
     /// Only one flag of this type can be applied to each command
     Exclusive,
@@ -177,7 +176,7 @@ pub enum ApplicationMode {
 /// Configuration for optional AFL features
 #[derive(Debug, Clone)]
 pub struct MiscFeatures {
-    /// Probability of enabling deterministic fuzzing (AFL_DISABLE_DETERMINISTIC)
+    /// Probability of enabling deterministic fuzzing (`AFL_DISABLE_DETERMINISTIC`)
     /// -L 0 flag
     pub deterministic_fuzzing: Option<f64>,
     /// Probability of enabling sequential queue cycling (-Z)
@@ -249,7 +248,7 @@ impl AflStrategy {
     ) {
         // Apply mutation modes (exclusively)
         if !self.mutation_modes.is_empty() {
-            self.apply_exclusive_args(
+            Self::apply_exclusive_args(
                 cmds,
                 &self
                     .mutation_modes
@@ -262,7 +261,7 @@ impl AflStrategy {
 
         // Apply format modes (exclusively)
         if !self.format_modes.is_empty() {
-            self.apply_exclusive_args(
+            Self::apply_exclusive_args(
                 cmds,
                 &self
                     .format_modes
@@ -284,7 +283,6 @@ impl AflStrategy {
 
     /// Applies mutually exclusive arguments to commands
     fn apply_exclusive_args<R: rand::Rng>(
-        &self,
         cmds: &mut [AflCmd],
         args: &[(String, f64)],
         rng: &mut R,
@@ -342,7 +340,7 @@ impl AflStrategy {
 
         // Apply according to mode
         match mode {
-            ApplicationMode::Exclusive => self.apply_exclusive_args(cmds, &optional_args, rng),
+            ApplicationMode::Exclusive => Self::apply_exclusive_args(cmds, &optional_args, rng),
             ApplicationMode::Multiple => {
                 for cmd in cmds {
                     for (arg, prob) in &optional_args {
@@ -374,14 +372,14 @@ impl AflStrategy {
 
         match num_cmplog_cfgs {
             0 => {}
-            1 => self.apply_single_cmplog(cmds, config),
-            2 => self.apply_double_cmplog(cmds, config),
-            3 => self.apply_triple_cmplog(cmds, config),
+            1 => Self::apply_single_cmplog(cmds, config),
+            2 => Self::apply_double_cmplog(cmds, config),
+            3 => Self::apply_triple_cmplog(cmds, config),
             _ => self.apply_many_cmplog(cmds, num_cmplog_cfgs, config, rng),
         }
     }
 
-    fn apply_single_cmplog(&self, cmds: &mut [AflCmd], config: &CmplogConfig) {
+    fn apply_single_cmplog(cmds: &mut [AflCmd], config: &CmplogConfig) {
         if let Some(cmd) = cmds.get_mut(1) {
             cmd.misc_afl_flags.push(format!(
                 "{} -c {}",
@@ -391,7 +389,7 @@ impl AflStrategy {
         }
     }
 
-    fn apply_double_cmplog(&self, cmds: &mut [AflCmd], config: &CmplogConfig) {
+    fn apply_double_cmplog(cmds: &mut [AflCmd], config: &CmplogConfig) {
         if let Some(cmd) = cmds.get_mut(1) {
             cmd.misc_afl_flags.push(format!(
                 "{} -c {}",
@@ -408,7 +406,7 @@ impl AflStrategy {
         }
     }
 
-    fn apply_triple_cmplog(&self, cmds: &mut [AflCmd], config: &CmplogConfig) {
+    fn apply_triple_cmplog(cmds: &mut [AflCmd], config: &CmplogConfig) {
         if let Some(cmd) = cmds.get_mut(1) {
             cmd.misc_afl_flags.push(format!(
                 "{} -c {}",
@@ -451,7 +449,7 @@ impl AflStrategy {
             .collect();
 
         // Apply modes exclusively to the selected range
-        self.apply_exclusive_args(&mut cmds[1..=num_cmplog_cfgs], &mode_args, rng);
+        Self::apply_exclusive_args(&mut cmds[1..=num_cmplog_cfgs], &mode_args, rng);
 
         // Add the binary path to all CMPLOG-enabled commands
         for cmd in &mut cmds[1..=num_cmplog_cfgs] {
@@ -467,7 +465,7 @@ impl AflStrategy {
         }
         let config = self.cmpcov_config.as_mut().unwrap();
 
-        let max_instances = config.calculate_max_instances(cmds.len());
+        let max_instances = CmpcovConfig::calculate_max_instances(cmds.len());
         if max_instances == 0 {
             return;
         }
@@ -485,7 +483,7 @@ impl AflStrategy {
 
         // Apply CMPCOV to selected indices
         for &idx in available_indices.iter().take(max_instances) {
-            cmds[idx].target_binary = config.binary.clone();
+            cmds[idx].target_binary.clone_from(&config.binary);
             config.applied_indices.insert(idx);
         }
     }
@@ -498,7 +496,7 @@ impl AflStrategy {
     }
 }
 
-/// Builder for AflStrategy
+/// Builder for `AflStrategy`
 #[derive(Default)]
 pub struct AflStrategyBuilder {
     mutation_modes: Vec<(MutationMode, f64)>,
@@ -841,10 +839,10 @@ mod tests {
         fn test_cmpcov_max_instances() {
             let config = CmpcovConfig::new(PathBuf::from("/bin/cmpcov"));
 
-            assert_eq!(config.calculate_max_instances(2), 0);
-            assert_eq!(config.calculate_max_instances(5), 1);
-            assert_eq!(config.calculate_max_instances(10), 2);
-            assert_eq!(config.calculate_max_instances(20), 3);
+            assert_eq!(CmpcovConfig::calculate_max_instances(2), 0);
+            assert_eq!(CmpcovConfig::calculate_max_instances(5), 1);
+            assert_eq!(CmpcovConfig::calculate_max_instances(10), 2);
+            assert_eq!(CmpcovConfig::calculate_max_instances(20), 3);
         }
 
         #[test]

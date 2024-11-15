@@ -67,7 +67,7 @@ fn create_afl_runner(
 ) -> Result<AFLCmdGenerator> {
     // TODO: Implement coverage target in gen_args
     let harness = Harness::new(
-        gen_args.target.clone().unwrap().clone(),
+        gen_args.target.clone().unwrap(),
         gen_args.target_args.clone(),
     )?
     .with_sanitizer(gen_args.san_target.clone())?

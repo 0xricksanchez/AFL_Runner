@@ -31,7 +31,7 @@ pub struct AFLCmdGenerator {
     pub raw_afl_flags: Option<String>,
     /// Path to the AFL binary
     pub afl_binary: Option<String>,
-    /// Path to the RAMDisk
+    /// Path to the `RAMDisk`
     pub ramdisk: Option<String>,
     /// If we should use AFL defaults
     pub use_afl_defaults: bool,
@@ -93,7 +93,7 @@ impl AFLCmdGenerator {
 
     /// Generates AFL commands based on the configuration
     pub fn generate(&mut self) -> Result<Vec<String>> {
-        let mut rng = StdRng::seed_from_u64(Xorshift64::new(self.seed.unwrap_or(0)).next() as u64);
+        let mut rng = StdRng::seed_from_u64(Xorshift64::new(self.seed.unwrap_or(0)).next());
 
         let afl_envs = AFLEnv::new(self.runners as usize, self.use_afl_defaults, &mut rng);
         let mut cmds = self.create_initial_cmds(&afl_envs)?;
@@ -105,7 +105,7 @@ impl AFLCmdGenerator {
             .any(|e| e.starts_with("AFL_CUSTOM_MUTATOR_LIBRARY"));
 
         if !self.use_afl_defaults {
-            self.apply_strategies(&mut cmds, &mut rng, is_using_custom_mutator);
+            Self::apply_strategies(&mut cmds, &mut rng, is_using_custom_mutator);
         }
 
         self.apply_directory(&mut cmds);
@@ -127,18 +127,18 @@ impl AFLCmdGenerator {
                 .with_cmpcov(CmpcovConfig::new(cmpcov_binary.clone()))
                 .build();
             strategy.apply_cmpcov(&mut cmds, &mut rng);
-            cmpcov_idxs = strategy.get_cmpcov_indices().clone();
+            cmpcov_idxs.clone_from(strategy.get_cmpcov_indices());
         }
 
         // NOTE: Needs to called last as it relies on cmpcov/cmplog being already set
         self.apply_fuzzer_roles(&mut cmds, &cmpcov_idxs);
-        self.apply_global_env_vars(&mut cmds, &afl_env_vars);
+        Self::apply_global_env_vars(&mut cmds, &afl_env_vars);
 
         Ok(cmds.into_iter().map(|cmd| cmd.assemble()).collect())
     }
 
     // Inherit global AFL environment variables that are not already set
-    fn apply_global_env_vars(&self, cmds: &mut [AflCmd], afl_env_vars: &[String]) {
+    fn apply_global_env_vars(cmds: &mut [AflCmd], afl_env_vars: &[String]) {
         for cmd in cmds {
             let to_apply: Vec<_> = afl_env_vars
                 .iter()
@@ -172,12 +172,7 @@ impl AFLCmdGenerator {
             .collect())
     }
 
-    fn apply_strategies(
-        &mut self,
-        cmds: &mut [AflCmd],
-        rng: &mut impl Rng,
-        is_using_custom_mutator: bool,
-    ) {
+    fn apply_strategies(cmds: &mut [AflCmd], rng: &mut impl Rng, is_using_custom_mutator: bool) {
         let strategy = AflStrategy::new()
             .with_mutation_modes()
             .with_test_case_format()
@@ -254,7 +249,7 @@ impl AFLCmdGenerator {
                 .sanitizer_bin
                 .as_ref()
                 .unwrap_or(&self.harness.target_bin);
-            cmd.target_binary = binary.clone();
+            cmd.target_binary.clone_from(binary);
         }
     }
 
