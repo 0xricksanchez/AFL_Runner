@@ -1,4 +1,6 @@
 name: Rust
+env:
+  AFL_PATH: /bin/ls
 
 on:
   push:
