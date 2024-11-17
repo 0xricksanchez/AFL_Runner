@@ -165,7 +165,7 @@ fn execute_kill_command(args: &KillArgs) -> Result<()> {
     }
 
     if !terminated {
-        println!("[-] No session found with the name: {}", session_name);
+        println!("[-] No session found with the name: {session_name}");
     }
 
     Ok(())
@@ -211,11 +211,10 @@ impl ConfigManager {
     }
 
     pub fn merge_gen_args(&self, args: &GenArgs) -> Result<(GenArgs, Option<String>)> {
-        let merged = if let Some(config) = &self.config {
-            args.merge_with_config(config)
-        } else {
-            args.clone()
-        };
+        let merged = self
+            .config
+            .as_ref()
+            .map_or_else(|| args.clone(), |config| args.merge_with_config(config));
 
         let raw_afl_flags = self
             .config
@@ -226,11 +225,10 @@ impl ConfigManager {
     }
 
     pub fn merge_run_args(&self, args: &RunArgs) -> Result<(RunArgs, Option<String>)> {
-        let merged = if let Some(config) = &self.config {
-            args.merge_with_config(config)
-        } else {
-            args.clone()
-        };
+        let merged = self
+            .config
+            .as_ref()
+            .map_or_else(|| args.clone(), |config| args.merge_with_config(config));
 
         let raw_afl_flags = self
             .config
@@ -304,16 +302,16 @@ impl CommandExecutor for RunCommandExecutor<'_> {
         let afl_commands = afl_generator.run().context("Failed to run AFL generator")?;
 
         if merged_args.dry_run {
-            println!("{:?}", afl_commands);
+            println!("{afl_commands:?}");
             return Ok(());
         }
 
-        self.execute_session(&merged_args, &afl_commands.to_string_vec())
+        Self::execute_session(&merged_args, &afl_commands.to_string_vec())
     }
 }
 
 impl RunCommandExecutor<'_> {
-    fn execute_session(&self, merged_args: &RunArgs, afl_commands: &[String]) -> Result<()> {
+    fn execute_session(merged_args: &RunArgs, afl_commands: &[String]) -> Result<()> {
         let target_args = merged_args
             .gen_args
             .target_args

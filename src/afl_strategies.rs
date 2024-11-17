@@ -375,7 +375,7 @@ impl AflStrategy {
             1 => Self::apply_single_cmplog(cmds, config),
             2 => Self::apply_double_cmplog(cmds, config),
             3 => Self::apply_triple_cmplog(cmds, config),
-            _ => self.apply_many_cmplog(cmds, num_cmplog_cfgs, config, rng),
+            _ => Self::apply_many_cmplog(cmds, num_cmplog_cfgs, config, rng),
         }
     }
 
@@ -431,7 +431,6 @@ impl AflStrategy {
     }
 
     fn apply_many_cmplog<R: rand::Rng>(
-        &self,
         cmds: &mut [AflCmd],
         num_cmplog_cfgs: usize,
         config: &CmplogConfig,

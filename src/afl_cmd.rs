@@ -125,6 +125,6 @@ pub trait ToStringVec {
 
 impl ToStringVec for Vec<AflCmd> {
     fn to_string_vec(&self) -> Vec<String> {
-        self.iter().map(|cmd| cmd.to_string()).collect()
+        self.iter().map(std::string::ToString::to_string).collect()
     }
 }

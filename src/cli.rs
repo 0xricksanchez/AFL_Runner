@@ -112,7 +112,7 @@ pub struct GenArgs {
     pub use_seed_afl: bool,
 }
 
-impl ConfigMerge<GenArgs> for GenArgs {
+impl ConfigMerge<Self> for GenArgs {
     fn merge_with_config(&self, config: &Config) -> Self {
         let merge_path = |opt: Option<PathBuf>, cfg_str: Option<String>| {
             opt.or_else(|| cfg_str.filter(|p| !p.is_empty()).map(PathBuf::from))
@@ -161,9 +161,9 @@ pub enum SessionRunner {
 impl From<&str> for SessionRunner {
     fn from(s: &str) -> Self {
         match s {
-            "tmux" => SessionRunner::Tmux,
-            "screen" => SessionRunner::Screen,
-            _ => SessionRunner::Tmux,
+            "tmux" => Self::Tmux,
+            "screen" => Self::Screen,
+            _ => Self::Tmux,
         }
     }
 }
@@ -190,20 +190,19 @@ pub struct RunArgs {
     /// Start detached from any session (not compatible with TUI)
     #[arg(long, help = "Start detached from session")]
     pub detached: bool,
-    /// Use RAMDisk for AFL++
+    /// Use `RAMDisk` for AFL++
     #[arg(long, help = "Use RAMDisk for AFL++")]
     pub is_ramdisk: bool,
 }
 
-impl ConfigMerge<RunArgs> for RunArgs {
+impl ConfigMerge<Self> for RunArgs {
     fn merge_with_config(&self, config: &Config) -> Self {
         let gen_args = self.gen_args.merge_with_config(config);
         let session_runner = config
             .session
             .runner
             .as_deref()
-            .map(SessionRunner::from)
-            .unwrap_or_else(|| self.session_runner.clone());
+            .map_or_else(|| self.session_runner.clone(), SessionRunner::from);
 
         Self {
             gen_args,
