@@ -1,6 +1,5 @@
-use serde::Deserialize;
-
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
+use serde::Deserialize;
 use std::path::PathBuf;
 
 /// Default corpus directory
@@ -32,6 +31,11 @@ pub enum Commands {
     Kill(KillArgs),
 }
 
+// Common trait for config merging behavior
+pub trait ConfigMerge<T> {
+    fn merge_with_config(&self, config: &Config) -> T;
+}
+
 /// Arguments for the `tui` subcommand
 #[derive(Args, Clone, Debug, Default)]
 pub struct TuiArgs {
@@ -44,202 +48,91 @@ pub struct TuiArgs {
 }
 
 /// Arguments for the `gen` subcommand
-#[derive(Args, Clone, Debug)]
+#[derive(Args, Clone, Debug, Default)]
 pub struct GenArgs {
     /// Target binary to fuzz
     #[arg(short, long, help = "Instrumented target binary to fuzz")]
     pub target: Option<PathBuf>,
     /// Sanitizer binary to use
-    #[arg(
-        short = 's',
-        long,
-        help = "Instrumented with *SAN binary to use",
-        required = false
-    )]
+    #[arg(short = 's', long, help = "Instrumented with *SAN binary to use")]
     pub san_target: Option<PathBuf>,
     /// CMPLOG binary to use
-    #[arg(
-        short = 'c',
-        long,
-        help = "Instrumented with CMPLOG binary to use",
-        required = false
-    )]
+    #[arg(short = 'c', long, help = "Instrumented with CMPLOG binary to use")]
     pub cmpl_target: Option<PathBuf>,
     /// Laf-Intel/CMPCOV binary to use
     #[arg(
         short = 'l',
         long,
-        help = "Instrumented with Laf-intel/CMPCOV binary to use",
-        required = false
+        help = "Instrumented with Laf-intel/CMPCOV binary to use"
     )]
     pub cmpc_target: Option<PathBuf>,
     /// Target binary arguments
-    #[arg(
-        help = "Target binary arguments, including @@ if needed. Example: `<...> -- -foo --bar baz @@`",
-        raw = true,
-        required = false
-    )]
+    #[arg(help = "Target binary arguments, including @@ if needed", raw = true)]
     pub target_args: Option<Vec<String>>,
     /// Amount of processes to spin up
     #[arg(
         short = 'n',
         long,
-        default_value = None,
         value_name = "NUM_PROCS",
         help = "Amount of processes to spin up"
     )]
     pub runners: Option<u32>,
     /// Corpus directory
-    #[arg(
-        short = 'i',
-        long,
-        default_value = None,
-        help = "Seed corpus directory",
-        required = false
-    )]
+    #[arg(short = 'i', long, help = "Seed corpus directory")]
     pub input_dir: Option<PathBuf>,
     /// Output directory
-    #[arg(
-        short = 'o',
-        long,
-        default_value = None,
-        help = "Solution/Crash output directory",
-        required = false
-    )]
+    #[arg(short = 'o', long, help = "Solution/Crash output directory")]
     pub output_dir: Option<PathBuf>,
     /// Path to dictionary
     #[arg(
         short = 'x',
         long,
-        default_value = None,
         value_name = "DICT_FILE",
-        help = "Token dictionary to use (file/directory)",
-        required = false
+        help = "Token dictionary to use"
     )]
     pub dictionary: Option<PathBuf>,
     /// AFL-Fuzz binary
-    #[arg(
-        short = 'b',
-        long,
-        default_value = None,
-        help = "Custom path to 'afl-fuzz' binary. If not specified and 'afl-fuzz' is not in $PATH, the program will try to use $AFL_PATH",
-        required = false
-    )]
+    #[arg(short = 'b', long, help = "Custom path to 'afl-fuzz' binary")]
     pub afl_binary: Option<String>,
     /// Path to a TOML config file
-    #[arg(
-        long,
-        help = "Spin up a custom tmux session with the fuzzers",
-        required = false
-    )]
+    #[arg(long, help = "Path to TOML config file")]
     pub config: Option<PathBuf>,
     /// Use AFL-Fuzz defaults
-    #[arg(
-        short = 'd',
-        long,
-        help = "Use afl-fuzz defaults power schedules, queue and mutation strategies",
-        required = false,
-        action = ArgAction::SetTrue
-    )]
+    #[arg(short = 'd', long, help = "Use afl-fuzz defaults", action = ArgAction::SetTrue)]
     pub use_afl_defaults: bool,
     /// Seed to seed `AFL_Runners` internal PRNG
     #[arg(
         long,
-        help = "Use a custom seed for AFL_Runners internal PRNG for deterministic command generation",
-        value_name = "AFLR_SEED",
-        default_value = None,
-        required = false,
+        help = "Seed for AFL_Runners PRNG for deterministic command generation",
+        value_name = "AFLR_SEED"
     )]
     pub seed: Option<u64>,
     /// Toggle to relay the seed to AFL++ as well
-    #[arg(
-        long,
-        help = "Forward the given seed to AFL++ as well. If no seed is provided an AFL_Runner default will be used",
-        required = false,
-        action = ArgAction::SetTrue
-    )]
+    #[arg(long, help = "Forward AFLR seed to AFL++", action = ArgAction::SetTrue)]
     pub use_seed_afl: bool,
 }
 
-impl GenArgs {
-    /// Merge the command-line arguments with the configuration
-    pub fn merge(&self, config: &Config) -> Self {
+impl ConfigMerge<GenArgs> for GenArgs {
+    fn merge_with_config(&self, config: &Config) -> Self {
+        let merge_path = |opt: Option<PathBuf>, cfg_str: Option<String>| {
+            opt.or_else(|| cfg_str.filter(|p| !p.is_empty()).map(PathBuf::from))
+        };
+
         Self {
-            target: self.target.clone().or_else(|| {
-                config
-                    .target
-                    .path
-                    .clone()
-                    .filter(|p| !p.is_empty())
-                    .map(PathBuf::from)
-            }),
-            san_target: self.san_target.clone().or_else(|| {
-                config
-                    .target
-                    .san_path
-                    .clone()
-                    .filter(|p| !p.is_empty())
-                    .map(PathBuf::from)
-            }),
-            cmpl_target: self.cmpl_target.clone().or_else(|| {
-                config
-                    .target
-                    .cmpl_path
-                    .clone()
-                    .filter(|p| !p.is_empty())
-                    .map(PathBuf::from)
-            }),
-            cmpc_target: self.cmpc_target.clone().or_else(|| {
-                config
-                    .target
-                    .cmpc_path
-                    .clone()
-                    .filter(|p| !p.is_empty())
-                    .map(PathBuf::from)
-            }),
+            target: merge_path(self.target.clone(), config.target.path.clone()),
+            san_target: merge_path(self.san_target.clone(), config.target.san_path.clone()),
+            cmpl_target: merge_path(self.cmpl_target.clone(), config.target.cmpl_path.clone()),
+            cmpc_target: merge_path(self.cmpc_target.clone(), config.target.cmpc_path.clone()),
             target_args: self
                 .target_args
                 .clone()
                 .or_else(|| config.target.args.clone().filter(|args| !args.is_empty())),
             runners: Some(self.runners.or(config.afl_cfg.runners).unwrap_or(1)),
-            input_dir: self
-                .input_dir
-                .clone()
-                .or_else(|| {
-                    config
-                        .afl_cfg
-                        .seed_dir
-                        .clone()
-                        .filter(|d| !d.is_empty())
-                        .map(PathBuf::from)
-                })
-                .or_else(|| {
-                    // Provide a default path here
-                    Some(PathBuf::from(AFL_CORPUS))
-                }),
-            output_dir: self
-                .output_dir
-                .clone()
-                .or_else(|| {
-                    config
-                        .afl_cfg
-                        .solution_dir
-                        .clone()
-                        .filter(|d| !d.is_empty())
-                        .map(PathBuf::from)
-                })
-                .or_else(|| {
-                    // Provide a default path here
-                    Some(PathBuf::from(AFL_OUTPUT))
-                }),
-            dictionary: self.dictionary.clone().or_else(|| {
-                config
-                    .afl_cfg
-                    .dictionary
-                    .clone()
-                    .filter(|d| !d.is_empty())
-                    .map(PathBuf::from)
-            }),
+            input_dir: merge_path(self.input_dir.clone(), config.afl_cfg.seed_dir.clone())
+                .or_else(|| Some(PathBuf::from(AFL_CORPUS))),
+            output_dir: merge_path(self.output_dir.clone(), config.afl_cfg.solution_dir.clone())
+                .or_else(|| Some(PathBuf::from(AFL_OUTPUT))),
+            dictionary: merge_path(self.dictionary.clone(), config.afl_cfg.dictionary.clone()),
             afl_binary: self
                 .afl_binary
                 .clone()
@@ -255,68 +148,63 @@ impl GenArgs {
     }
 }
 
-#[derive(ValueEnum, Clone, Debug)]
+/// Session runner types
+#[derive(ValueEnum, Clone, Debug, Default)]
 pub enum SessionRunner {
+    /// Use tmux as the session runner
+    #[default]
     Tmux,
+    /// Use screen as the session runner
     Screen,
 }
 
+impl From<&str> for SessionRunner {
+    fn from(s: &str) -> Self {
+        match s {
+            "tmux" => SessionRunner::Tmux,
+            "screen" => SessionRunner::Screen,
+            _ => SessionRunner::Tmux,
+        }
+    }
+}
+
 /// Arguments for the `run` subcommand
-#[derive(Args, Clone, Debug)]
+#[derive(Args, Clone, Debug, Default)]
 pub struct RunArgs {
     /// Arguments for generating the commands
     #[command(flatten)]
     pub gen_args: GenArgs,
     /// Only show the generated commands, don't run them
-    #[arg(
-        long,
-        help = "Output the generated commands w/o executing them",
-        required = false
-    )]
+    #[arg(long, help = "Output commands without executing")]
     pub dry_run: bool,
     /// Runner backend to use
     #[clap(value_enum)]
-    #[arg(long = "session-runner", help = "Session runner to use", required = false, default_value_t = SessionRunner::Tmux)]
+    #[arg(long = "session-runner", help = "Session runner to use", default_value_t = SessionRunner::Tmux)]
     pub session_runner: SessionRunner,
     /// Custom tmux session name
-    #[arg(
-        long = "session-name",
-        help = "Custom runner session name",
-        required = false
-    )]
+    #[arg(long = "session-name", help = "Custom runner session name")]
     pub session_name: Option<String>,
     /// Enable tui mode
-    #[arg(long, help = "Enable TUI mode", required = false)]
+    #[arg(long, help = "Enable TUI mode")]
     pub tui: bool,
     /// Start detached from any session (not compatible with TUI)
-    #[arg(
-        long,
-        help = "Started detached from TMUX/screen session",
-        required = false
-    )]
+    #[arg(long, help = "Start detached from session")]
     pub detached: bool,
-    #[arg(
-        long,
-        help = "Use a RAMDisk for AFL++. Needs elevated prvileges.",
-        required = false
-    )]
+    /// Use RAMDisk for AFL++
+    #[arg(long, help = "Use RAMDisk for AFL++")]
     pub is_ramdisk: bool,
 }
 
-impl RunArgs {
-    /// Merge the command-line arguments with the configuration
-    pub fn merge(&self, config: &Config) -> Self {
-        let gen_args = self.gen_args.merge(config);
+impl ConfigMerge<RunArgs> for RunArgs {
+    fn merge_with_config(&self, config: &Config) -> Self {
+        let gen_args = self.gen_args.merge_with_config(config);
         let session_runner = config
             .session
             .runner
-            .as_ref()
-            .and_then(|s| match s.as_str() {
-                "tmux" => Some(SessionRunner::Tmux),
-                "screen" => Some(SessionRunner::Screen),
-                _ => None,
-            })
+            .as_deref()
+            .map(SessionRunner::from)
             .unwrap_or_else(|| self.session_runner.clone());
+
         Self {
             gen_args,
             dry_run: self.dry_run || config.session.dry_run.unwrap_or(false),
@@ -391,14 +279,14 @@ pub struct AflConfig {
     pub use_afl_defaults: Option<bool>,
 }
 
-/// Configuration for tmux
+/// Configuration for tmux/screen sessions
 #[derive(Deserialize, Default, Debug, Clone)]
 pub struct SessionConfig {
     /// Dry run mode
     pub dry_run: Option<bool>,
-    /// session name
+    /// Session name
     pub name: Option<String>,
-    /// session runner
+    /// Session runner
     pub runner: Option<String>,
 }
 
@@ -422,4 +310,71 @@ pub struct MiscConfig {
 pub struct KillArgs {
     /// Session name to kill
     pub session_name: Option<String>,
+}
+
+// Add tests module
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_session_runner_from_str() {
+        assert!(matches!(SessionRunner::from("tmux"), SessionRunner::Tmux));
+        assert!(matches!(
+            SessionRunner::from("screen"),
+            SessionRunner::Screen
+        ));
+        assert!(matches!(
+            SessionRunner::from("invalid"),
+            SessionRunner::Tmux
+        ));
+    }
+
+    #[test]
+    fn test_gen_args_merge() {
+        let args = GenArgs {
+            target: Some(PathBuf::from("/custom/path")),
+            runners: Some(4),
+            ..GenArgs::default()
+        };
+
+        let config = Config {
+            target: TargetConfig {
+                path: Some("/default/path".into()),
+                ..TargetConfig::default()
+            },
+            afl_cfg: AflConfig {
+                runners: Some(2),
+                ..AflConfig::default()
+            },
+            ..Config::default()
+        };
+
+        let merged = args.merge_with_config(&config);
+        assert_eq!(merged.target.unwrap(), PathBuf::from("/custom/path"));
+        assert_eq!(merged.runners, Some(4));
+    }
+
+    #[test]
+    fn test_run_args_merge() {
+        let gen_args = GenArgs::default();
+        let args = RunArgs {
+            gen_args,
+            dry_run: true,
+            session_runner: SessionRunner::Tmux,
+            ..RunArgs::default()
+        };
+
+        let config = Config {
+            session: SessionConfig {
+                runner: Some("screen".into()),
+                ..SessionConfig::default()
+            },
+            ..Config::default()
+        };
+
+        let merged = args.merge_with_config(&config);
+        assert!(merged.dry_run);
+        assert!(matches!(merged.session_runner, SessionRunner::Screen));
+    }
 }

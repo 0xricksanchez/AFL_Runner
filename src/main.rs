@@ -7,7 +7,7 @@ use std::{
 use tui::Tui;
 
 use clap::Parser;
-use cli::{Cli, Commands, SessionRunner};
+use cli::{Cli, Commands, ConfigMerge, SessionRunner};
 
 mod afl_cmd;
 mod afl_cmd_gen;
@@ -212,7 +212,7 @@ impl ConfigManager {
 
     pub fn merge_gen_args(&self, args: &GenArgs) -> Result<(GenArgs, Option<String>)> {
         let merged = if let Some(config) = &self.config {
-            args.merge(config)
+            args.merge_with_config(config)
         } else {
             args.clone()
         };
@@ -227,7 +227,7 @@ impl ConfigManager {
 
     pub fn merge_run_args(&self, args: &RunArgs) -> Result<(RunArgs, Option<String>)> {
         let merged = if let Some(config) = &self.config {
-            args.merge(config)
+            args.merge_with_config(config)
         } else {
             args.clone()
         };
@@ -363,6 +363,3 @@ fn main() -> Result<()> {
         Commands::Kill(args) => execute_kill_command(args),
     }
 }
-
-
-
