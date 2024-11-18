@@ -149,10 +149,7 @@ fn execute_kill_command(args: &KillArgs) -> Result<()> {
     // Try Tmux session
     if let Ok(tmux) = TmuxSession::new(session_name, &[], Path::new("/tmp/aflr_foobar_1337")) {
         if tmux.is_present() {
-            println!(
-                "[+] Found TMUX session: {}. Terminating it...",
-                session_name
-            );
+            println!("[+] Found TMUX session: {session_name}. Terminating it...");
             tmux.kill_session().context("Failed to kill TMUX session")?;
             terminated = true;
         }
@@ -161,10 +158,7 @@ fn execute_kill_command(args: &KillArgs) -> Result<()> {
     // Try Screen session
     if let Ok(screen) = ScreenSession::new(session_name, &[], Path::new("/tmp/aflr_foobar_1337")) {
         if screen.is_present() {
-            println!(
-                "[+] Found SCREEN session: {}. Terminating it...",
-                session_name
-            );
+            println!("[+] Found SCREEN session: {session_name}. Terminating it...",);
             screen
                 .kill_session()
                 .context("Failed to kill SCREEN session")?;

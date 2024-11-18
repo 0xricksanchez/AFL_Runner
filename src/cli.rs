@@ -161,7 +161,6 @@ pub enum SessionRunner {
 impl From<&str> for SessionRunner {
     fn from(s: &str) -> Self {
         match s {
-            "tmux" => Self::Tmux,
             "screen" => Self::Screen,
             _ => Self::Tmux,
         }

@@ -150,7 +150,7 @@ impl<T: SessionManager> Session<T> {
     pub fn run(&self) -> Result<()> {
         self.setup_directories()?;
         self.confirm_start()?;
-        self.check_manager_installation()?;
+        Self::check_manager_installation()?;
         self.execute_session_script()
     }
 
@@ -183,7 +183,7 @@ impl<T: SessionManager> Session<T> {
         Ok(())
     }
 
-    fn check_manager_installation(&self) -> Result<()> {
+    fn check_manager_installation() -> Result<()> {
         let status = Command::new(T::manager_name())
             .arg(T::version_flag())
             .stdout(Stdio::null())
@@ -227,7 +227,7 @@ impl<T: SessionManager> Session<T> {
     }
 
     pub fn run_with_tui(&self, out_dir: &Path) -> Result<()> {
-        let mut cdata = CampaignData::default();
+        let mut cdata = CampaignData::new();
         self.run()?;
 
         thread::sleep(Duration::from_secs(1));

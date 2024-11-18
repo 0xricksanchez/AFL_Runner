@@ -165,6 +165,7 @@ impl fmt::Display for PowerSchedule {
 }
 
 /// Represents how multiple flags of the same type should be applied
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApplicationMode {
     /// Only one flag of this type can be applied to each command

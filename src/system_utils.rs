@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use sysinfo::{Pid, System};
+use sysinfo::System;
 use uuid::Uuid;
 
 /// Retrieves the amount of free memory in the system in MB
@@ -122,17 +122,6 @@ fn should_clean_directory(dir: &Path) -> io::Result<bool> {
         input.trim().to_lowercase().chars().next().unwrap_or('y'),
         'y' | '\n'
     ))
-}
-
-/// Count the number of alive procsses based on a list of PIDs
-pub fn count_alive_fuzzers(fuzzer_pids: &[u32]) -> Vec<usize> {
-    let s = System::new_all();
-    fuzzer_pids
-        .iter()
-        .filter(|&pid| *pid != 0)
-        .filter(|&pid| s.process(Pid::from(*pid as usize)).is_some())
-        .map(|&pid| pid as usize)
-        .collect()
 }
 
 /// Gets user input from stdin

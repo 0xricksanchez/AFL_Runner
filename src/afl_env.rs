@@ -130,12 +130,6 @@ impl AFLEnv {
         self.testcache_size = size;
     }
 
-    /// Returns true if the specified flag is enabled
-    #[inline]
-    pub fn has_flag(&self, flag: &AFLFlag) -> bool {
-        self.flags.contains(flag)
-    }
-
     /// Generates an `AFLPlusPlus` environment variable string for the current settings
     pub fn generate(&self, ramdisk: Option<String>) -> Vec<String> {
         let mut command = Vec::with_capacity(self.flags.len() + 2);
@@ -254,8 +248,8 @@ mod tests {
     fn test_enable_flag() {
         let mut env = AFLEnv::default();
         env.enable_flag(AFLFlag::AutoResume);
-        assert!(env.has_flag(&AFLFlag::AutoResume));
-        assert!(!env.has_flag(&AFLFlag::FinalSync));
+        assert!(env.flags.contains(&AFLFlag::AutoResume));
+        assert!(!env.flags.contains(&AFLFlag::FinalSync));
     }
 
     #[test]
@@ -299,20 +293,22 @@ mod tests {
         assert_eq!(envs.len(), 4);
 
         // Test FinalSync on last environment
-        assert!(!envs[0].has_flag(&AFLFlag::FinalSync));
-        assert!(!envs[1].has_flag(&AFLFlag::FinalSync));
-        assert!(!envs[2].has_flag(&AFLFlag::FinalSync));
-        assert!(envs[3].has_flag(&AFLFlag::FinalSync));
+        assert!(!envs[0].flags.contains(&AFLFlag::FinalSync));
+        assert!(!envs[1].flags.contains(&AFLFlag::FinalSync));
+        assert!(!envs[2].flags.contains(&AFLFlag::FinalSync));
+        assert!(envs[3].flags.contains(&AFLFlag::FinalSync));
 
         // Test DisableTrim distribution (with fixed RNG seed)
         let disable_trim_count = envs
             .iter()
-            .filter(|env| env.has_flag(&AFLFlag::DisableTrim))
+            .filter(|env| env.flags.contains(&AFLFlag::DisableTrim))
             .count();
         assert_eq!(disable_trim_count, 2); // 60% of 4 rounded down = 2
 
         // Test ImportFirst (should be applied to all since runners < 8)
-        assert!(envs.iter().all(|env| env.has_flag(&AFLFlag::ImportFirst)));
+        assert!(envs
+            .iter()
+            .all(|env| env.flags.contains(&AFLFlag::ImportFirst)));
     }
 
     #[test]
@@ -323,7 +319,7 @@ mod tests {
         // Only FinalSync should be set when using AFL defaults
         assert!(envs.iter().take(3).all(|env| env.flags.len() == 0));
         assert_eq!(envs.last().unwrap().flags.len(), 1);
-        assert!(envs.last().unwrap().has_flag(&AFLFlag::FinalSync));
+        assert!(envs.last().unwrap().flags.contains(&AFLFlag::FinalSync));
     }
 
     #[test]
@@ -332,7 +328,9 @@ mod tests {
         let envs = AFLEnv::new(10, false, &mut rng);
 
         // Test that ImportFirst is not applied when runners >= 8
-        assert!(!envs.iter().any(|env| env.has_flag(&AFLFlag::ImportFirst)));
+        assert!(!envs
+            .iter()
+            .any(|env| env.flags.contains(&AFLFlag::ImportFirst)));
     }
 
     #[test]
@@ -344,7 +342,7 @@ mod tests {
 
         let count = envs
             .iter()
-            .filter(|env| env.has_flag(&AFLFlag::DisableTrim))
+            .filter(|env| env.flags.contains(&AFLFlag::DisableTrim))
             .count();
         assert_eq!(count, 6); // 60% of 10 = 6
     }
