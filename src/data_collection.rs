@@ -617,11 +617,9 @@ mod tests {
         fetcher.process_fuzzer_directories();
         fetcher.calculate_averages();
 
-        // Test cumulative stats
         assert_eq!(fetcher.campaign_data.executions.count.cum, 3000000);
         assert!((fetcher.campaign_data.executions.per_sec.cum - 833.31).abs() < 0.01);
 
-        // Test stability tracking
         assert!((fetcher.campaign_data.stability.max - 100.0).abs() < f64::EPSILON);
         assert!((fetcher.campaign_data.stability.min - 98.50).abs() < f64::EPSILON);
         assert!((fetcher.campaign_data.stability.avg - 99.25).abs() < 0.01);
@@ -666,5 +664,31 @@ mod tests {
         assert_eq!(fetcher.campaign_data.executions.count.cum, 0);
         assert_eq!(fetcher.campaign_data.executions.per_sec.cum, 0.0);
         assert_eq!(fetcher.campaign_data.crashes.cum, 0);
+    }
+
+    #[test]
+    fn test_time_without_finds_direct_usage() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut campaign_data = CampaignData::new();
+
+        let stats_content = r#"
+        fuzzer_pid : 1234
+        time_wo_finds : 341
+        last_find : 1730983297
+    "#;
+
+        let stats_dir = temp_dir.path().join("fuzzer01");
+        fs::create_dir(&stats_dir).unwrap();
+        File::create(stats_dir.join("fuzzer_stats"))
+            .unwrap()
+            .write_all(stats_content.as_bytes())
+            .unwrap();
+
+        let mut fetcher = DataFetcher::new(temp_dir.path(), None, &mut campaign_data);
+        fetcher.campaign_data.fuzzers_alive = vec![1234];
+        fetcher.process_fuzzer_directories();
+
+        assert_eq!(fetcher.campaign_data.time_without_finds.max, 341);
+        assert_eq!(fetcher.campaign_data.time_without_finds.min, 341);
     }
 }
