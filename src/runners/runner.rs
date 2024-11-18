@@ -1,5 +1,4 @@
-use anyhow::Result;
-use tempfile::NamedTempFile;
+use anyhow::{Context, Result};
 use std::fs;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -7,174 +6,245 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
+use tempfile::NamedTempFile;
 
-use crate::runners::tmux::TMUX_TEMPLATE;
+use crate::session::CampaignData;
+use crate::system_utils::{get_user_input, mkdir_helper};
 use crate::tui::Tui;
-use crate::utils::{get_user_input, mkdir_helper};
-use crate::{runners::screen::SCREEN_TEMPLATE, session::CampaignData};
 
-#[allow(unused)]
-pub trait Runner {
-    fn new(session_name: &str, commands: &[String], pid_file: &Path) -> Self
-    where
-        Self: Sized;
-    fn create_bash_script(&self) -> Result<String, anyhow::Error>;
-    fn is_present(&self) -> bool;
-    fn kill_session(&self) -> Result<(), anyhow::Error>;
-    fn attach(&self) -> Result<(), anyhow::Error>;
-    fn run(&self) -> Result<(), anyhow::Error>;
-    fn run_with_tui(&self, out_dir: &Path) -> Result<()>;
+/// Template files for different session managers
+pub mod templates {
+    pub const TMUX: &str = include_str!("../templates/tmux.txt");
+    pub const SCREEN: &str = include_str!("../templates/screen.txt");
 }
 
-pub struct Session {
-    pub name: String,
-    pub commands: Vec<String>,
-    pub log_file: PathBuf,
-    pub runner_name: &'static str,
-    pub pid_file: PathBuf,
+/// Represents a command to be executed in a session
+#[derive(Debug, Clone)]
+pub struct SessionCommand {
+    raw: String,
+    input_dir: PathBuf,
+    output_dir: PathBuf,
 }
 
-impl Session {
-    pub fn new(
-        session_name: &str,
-        commands: &[String],
-        runner_name: &'static str,
-        pid_file: &Path,
-    ) -> Self {
+impl SessionCommand {
+    pub fn new(cmd: &str) -> Result<Self> {
+        let parts: Vec<_> = cmd.split_whitespace().collect();
+        let input_dir = parts
+            .iter()
+            .position(|&x| x == "-i")
+            .and_then(|i| parts.get(i + 1))
+            .map(PathBuf::from)
+            .context("Failed to find input directory in command")?;
+
+        let output_dir = parts
+            .iter()
+            .position(|&x| x == "-o")
+            .and_then(|i| parts.get(i + 1))
+            .map(PathBuf::from)
+            .context("Failed to find output directory in command")?;
+
+        Ok(Self {
+            raw: cmd.to_string(),
+            input_dir,
+            output_dir,
+        })
+    }
+}
+
+/// Common functionality for session management
+pub trait SessionManager: Sized {
+    /// Name of the session manager (e.g., "tmux" or "screen")
+    fn manager_name() -> &'static str;
+
+    /// Template to use for creating the session
+    fn template() -> &'static str;
+
+    /// Version flag for checking installation
+    fn version_flag() -> &'static str;
+
+    /// Command to check if a session exists
+    fn build_session_check_command(session_name: &str) -> Command;
+
+    /// Command to kill a session
+    fn build_kill_command(session_name: &str) -> Command;
+
+    /// Command to attach to a session
+    fn build_attach_command(session_name: &str) -> Command;
+
+    /// Optional post-attachment setup (e.g., finding window ID in tmux)
+    fn post_attach_setup(_session_name: &str) -> Result<()> {
+        Ok(())
+    }
+}
+
+/// Base session implementation
+#[derive(Debug)]
+pub struct Session<T: SessionManager> {
+    name: String,
+    commands: Vec<SessionCommand>,
+    log_file: PathBuf,
+    pid_file: PathBuf,
+    _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T: SessionManager> Session<T> {
+    pub fn new(session_name: &str, commands: &[String], pid_file: &Path) -> Result<Self> {
         let commands = commands
             .iter()
-            .map(|c| c.replace('"', "\\\""))
-            .collect::<Vec<String>>();
-        let log_file = PathBuf::from(format!("/tmp/{runner_name}_{session_name}.log"));
+            .map(|c| SessionCommand::new(&c.replace('"', "\\\"")))
+            .collect::<Result<Vec<_>>>()?;
+
+        let log_file = PathBuf::from(format!("/tmp/{}_{}.log", T::manager_name(), session_name));
         if log_file.exists() {
-            std::fs::remove_file(&log_file).unwrap();
+            fs::remove_file(&log_file)?;
         }
-        Self {
+
+        Ok(Self {
             name: session_name.to_string(),
             commands,
             log_file,
-            runner_name,
             pid_file: pid_file.to_path_buf(),
-        }
+            _phantom: std::marker::PhantomData,
+        })
     }
 
-    pub fn create_bash_script(&self, template: &str) -> Result<String> {
+    pub fn is_present(&self) -> bool {
+        T::build_session_check_command(&self.name)
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false)
+    }
+
+    pub fn kill_session(&self) -> Result<()> {
+        Self::run_command(T::build_kill_command(&self.name))
+    }
+
+    pub fn attach(&self) -> Result<()> {
+        T::post_attach_setup(&self.name)?;
+        Self::run_command(T::build_attach_command(&self.name))
+    }
+
+    pub fn create_bash_script(&self) -> Result<String> {
         let mut engine = upon::Engine::new();
-        engine.add_template("afl_fuzz", template)?;
+        engine.add_template("session", T::template())?;
+
         engine
-            .template("afl_fuzz")
+            .template("session")
             .render(upon::value! {
-                session_name :self.name.clone(),
-                commands : self.commands.clone(),
-                log_file : self.log_file.to_str().unwrap().to_string(),
+                session_name: self.name.clone(),
+                commands: self.commands.iter().map(|c| c.raw.clone()).collect::<Vec<_>>(),
+                log_file: self.log_file.to_str().unwrap().to_string(),
                 pid_file: self.pid_file.to_str().unwrap().to_string(),
             })
             .to_string()
-            .map_err(|e| anyhow::anyhow!("Error creating bash script: {}", e))
+            .context("Failed to create bash script")
     }
 
-    pub fn run_command(mut cmd: Command) -> Result<()> {
+    fn run_command(mut cmd: Command) -> Result<()> {
+        cmd.stdout(Stdio::null()).stderr(Stdio::null());
         let mut child = cmd.spawn()?;
         let _ = child.wait()?;
         Ok(())
     }
 
     pub fn run(&self) -> Result<()> {
-        let indir = PathBuf::from(
-            self.commands[0]
-                .split_whitespace()
-                .skip_while(|&x| x != "-i")
-                .nth(1)
-                .unwrap(),
-        );
-        let outdir = PathBuf::from(
-            self.commands[0]
-                .split_whitespace()
-                .skip_while(|&x| x != "-o")
-                .nth(1)
-                .unwrap(),
-        );
+        self.setup_directories()?;
+        self.confirm_start()?;
+        Self::check_manager_installation()?;
+        self.execute_session_script()
+    }
 
-        mkdir_helper(&indir, false)?;
-        if indir.read_dir()?.next().is_none() {
-            fs::write(indir.join("1"), "fuzz")?;
+    fn setup_directories(&self) -> Result<()> {
+        // NOTE: We only need to look at the first command since all commands
+        // will use the same directories
+        let first_cmd = &self.commands[0];
+
+        mkdir_helper(&first_cmd.input_dir, false)?;
+        if first_cmd.input_dir.read_dir()?.next().is_none() {
+            fs::write(first_cmd.input_dir.join("1"), "fuzz")?;
         }
-        mkdir_helper(&outdir, true)?;
+        mkdir_helper(&first_cmd.output_dir, true)?;
 
+        Ok(())
+    }
+
+    fn confirm_start(&self) -> Result<()> {
         println!(
             "Starting {} session '{}' for {} generated commands. Continue [Y/n]?",
-            self.runner_name,
+            T::manager_name(),
             self.name,
             self.commands.len()
         );
         std::io::stdout().flush()?;
+
         if get_user_input() != 'y' {
             anyhow::bail!("Aborting");
         }
+        Ok(())
+    }
 
-        let version_flag = match self.runner_name {
-            "tmux" => "-V",
-            "screen" => "-v",
-            _ => unreachable!(),
-        };
-
-        let ret = Command::new(self.runner_name)
-            .arg(version_flag)
+    fn check_manager_installation() -> Result<()> {
+        let status = Command::new(T::manager_name())
+            .arg(T::version_flag())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()?;
-        if !ret.success() {
-            anyhow::bail!("Error: {} not found or not executable", self.runner_name);
+
+        if !status.success() {
+            anyhow::bail!("Error: {} not found or not executable", T::manager_name());
         }
+        Ok(())
+    }
 
-        let template = match self.runner_name {
-            "tmux" => TMUX_TEMPLATE,
-            "screen" => SCREEN_TEMPLATE,
-            _ => unreachable!(),
-        };
-        let templ = self.create_bash_script(template)?;
-
-        // Create a temporary file to store the script and make it executable
+    fn execute_session_script(&self) -> Result<()> {
+        let script_content = self.create_bash_script()?;
         let mut temp_script = NamedTempFile::new()?;
-        temp_script.write_all(templ.as_bytes())?;
+
+        temp_script.write_all(script_content.as_bytes())?;
         let mut perms = temp_script.as_file().metadata()?.permissions();
         perms.set_mode(perms.mode() | 0o111);
         temp_script.as_file().set_permissions(perms)?;
 
-        // Run the script using bash
         let output = Command::new("bash")
-        .arg(temp_script.path())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .output()?;
+            .arg(temp_script.path())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()?;
 
-        // Check if the command was successful or not based on the exit status
-        if ! output.status.success() {
-            let stderr = String::from_utf8(output.stderr).unwrap_or_else(|e| {
-                format!("Failed to parse stderr: {e}")
-            });
+        if !output.status.success() {
+            let stderr = String::from_utf8(output.stderr)
+                .unwrap_or_else(|e| format!("Failed to parse stderr: {e}"));
             let path = temp_script.into_temp_path().keep()?;
-            anyhow::bail!("Error executing runner script {}: exit code {}, stderr: '{}'", path.display(), output.status, stderr);
+            anyhow::bail!(
+                "Error executing runner script {}: exit code {}, stderr: '{}'",
+                path.display(),
+                output.status,
+                stderr
+            );
         }
-        
+
         Ok(())
     }
 
     pub fn run_with_tui(&self, out_dir: &Path) -> Result<()> {
-        let mut cdata = CampaignData::default();
-        if let Err(e) = self.run_detached() {
-            eprintln!("Error running TUI: '{e}'");
-            return Err(e);
-        }
+        let mut cdata = CampaignData::new();
+        self.run()?;
 
         thread::sleep(Duration::from_secs(1));
         Tui::run(out_dir, Some(&self.pid_file), &mut cdata)?;
         Ok(())
     }
+}
 
-    pub fn run_detached(&self) -> Result<()> {
-        self.run()?;
-        println!("Session {} started in detached mode", self.name);
-        Ok(())
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_session_command_parsing() {
+        let cmd = "afl-fuzz -i /tmp/input -o /tmp/output @@";
+        let parsed = SessionCommand::new(cmd).unwrap();
+        assert_eq!(parsed.input_dir, PathBuf::from("/tmp/input"));
+        assert_eq!(parsed.output_dir, PathBuf::from("/tmp/output"));
     }
 }

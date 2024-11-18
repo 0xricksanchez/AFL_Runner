@@ -1,506 +1,386 @@
 use std::{
+    collections::HashMap,
+    fs,
     ops::Add,
-    process::{Command, Stdio},
-    time::Instant,
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
 };
 
-use crate::{
-    session::{CampaignData, CrashInfoDetails},
-    utils::count_alive_fuzzers,
-};
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::time::Duration;
+use sysinfo::{Pid, System};
 
-/// Data fetcher that collects session data based on the `AFLPlusPlus` `fuzzer_stats` file
-#[derive(Debug, Clone)]
+use crate::session::{CampaignData, CrashInfoDetails};
+
+#[derive(Debug)]
+struct FuzzerMetrics {
+    pid: Option<u32>,
+    metrics: HashMap<String, String>,
+}
+
+impl FuzzerMetrics {
+    fn parse(content: &str) -> Self {
+        let mut metrics = HashMap::with_capacity(20);
+        let mut pid = None;
+
+        for line in content.lines() {
+            if let Some((key, value)) = line.split_once(':') {
+                let key = key.trim();
+                let value = value.trim();
+
+                if key == "fuzzer_pid" {
+                    pid = value.parse().ok();
+                }
+                metrics.insert(key.to_string(), value.to_string());
+            }
+        }
+
+        Self { pid, metrics }
+    }
+
+    fn get<T: std::str::FromStr>(&self, key: &str) -> Option<T> {
+        self.metrics
+            .get(key)
+            .and_then(|v| v.trim_end_matches('%').parse().ok())
+    }
+}
+
+#[derive(Debug)]
 pub struct DataFetcher {
-    /// Output directory of the `AFLPlusPlus` fuzzing run
     output_dir: PathBuf,
-    /// Campaign data collected from the output directory
     pub campaign_data: CampaignData,
-    update_once: bool,
-    update_never: bool,
+    system: System,
+    first_update: bool,
 }
 
 impl DataFetcher {
-    /// Create a new `DataFetcher` instance
     pub fn new(
         output_dir: &Path,
         pid_file: Option<&Path>,
         campaign_data: &mut CampaignData,
     ) -> Self {
-        let (fuzzer_pids, fuzzer_pids_dead) = pid_file.map_or_else(
-            || {
-                let mut pids_alive = Vec::new();
-                let mut pids_dead = Vec::new();
-                fs::read_dir(output_dir)
-                    .unwrap()
-                    .flatten()
-                    .for_each(|entry| {
-                        let path = entry.path();
-                        if path.is_dir() {
-                            let fuzzer_stats_path = path.join("fuzzer_stats");
-                            if fuzzer_stats_path.exists() {
-                                if let Ok(content) = fs::read_to_string(fuzzer_stats_path) {
-                                    if let Some(pid) = Self::fetch_pid_from_fuzzer_stats(&content) {
-                                        pids_alive.push(pid);
-                                    } else {
-                                        pids_dead.push(path);
-                                    }
-                                }
-                            }
-                        }
-                    });
-                (pids_alive, pids_dead)
-            },
-            |pid_file| {
-                let pids_alive = fs::read_to_string(pid_file)
-                    .unwrap_or_default()
-                    .split(':')
-                    .filter_map(|pid| pid.trim().parse::<u32>().ok())
-                    .filter(|&pid| pid != 0)
-                    .collect::<Vec<u32>>();
-                (pids_alive, Vec::new())
-            },
-        );
-        if pid_file.is_none() {
-            campaign_data.log("Attempted to fetch PIDs from fuzzer_stats files");
-        } else {
-            campaign_data.log("PIDs fetched from the PID file");
-        }
-        let fuzzers_alive = count_alive_fuzzers(&fuzzer_pids);
-        if fuzzers_alive.is_empty() {
-            campaign_data.log("No fuzzers alive");
-        } else {
-            campaign_data.log("Fuzzers alive count fetched");
-        }
+        let mut system = System::new_all();
+        system.refresh_all();
 
-        let fuzzers_started = fuzzers_alive.len() + fuzzer_pids_dead.len();
+        let (fuzzer_pids, dead_count) = Self::collect_pids(output_dir, pid_file, &system);
 
+        campaign_data.log(if pid_file.is_some() {
+            "PIDs fetched from the PID file. OK..."
+        } else {
+            "Attempted to fetch PIDs from fuzzer_stats files"
+        });
+
+        let fuzzers_alive = Self::get_alive_fuzzers(&fuzzer_pids, &system);
+        campaign_data.log(if fuzzers_alive.is_empty() {
+            "No fuzzers alive"
+        } else {
+            "Fuzzers alive count fetched. OK..."
+        });
+
+        campaign_data.fuzzers_started = fuzzers_alive.len() + dead_count;
         campaign_data.fuzzers_alive = fuzzers_alive;
-        campaign_data.fuzzers_started = fuzzers_started;
         campaign_data.fuzzer_pids = fuzzer_pids;
 
         Self {
             output_dir: output_dir.to_path_buf(),
             campaign_data: campaign_data.clone(),
-            update_once: true,
-            update_never: false,
+            system,
+            first_update: true,
         }
     }
 
-    fn fetch_pid_from_fuzzer_stats(content: &str) -> Option<u32> {
-        let pgrep_available = Command::new("which")
-            .arg("pgrep")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok();
-        if pgrep_available {
-            content
-                .lines()
-                .find(|line| line.starts_with("command_line"))
-                .and_then(|command_line| {
-                    let value = command_line.split(':').last().unwrap_or("").trim();
-                    let output = Command::new("pgrep")
-                        .arg("-f")
-                        .arg(value)
-                        .stdout(Stdio::piped())
-                        .stderr(Stdio::piped())
-                        .output()
-                        .expect("Failed to execute pgrep command");
-                    let stdout = String::from_utf8_lossy(&output.stdout);
-                    let pids: Vec<&str> = stdout.split_whitespace().collect();
-                    if pids.is_empty() {
-                        None
-                    } else {
-                        pids[0].parse::<u32>().ok()
+    fn collect_pids(
+        output_dir: &Path,
+        pid_file: Option<&Path>,
+        system: &System,
+    ) -> (Vec<u32>, usize) {
+        pid_file.map_or_else(
+            || {
+                let mut alive_pids = Vec::new();
+                let mut dead_count = 0;
+
+                if let Ok(entries) = fs::read_dir(output_dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if !path.is_dir() {
+                            continue;
+                        }
+
+                        let stats_path = path.join("fuzzer_stats");
+                        if !stats_path.exists() {
+                            continue;
+                        }
+
+                        if let Ok(content) = fs::read_to_string(&stats_path) {
+                            let metrics = FuzzerMetrics::parse(&content);
+                            if let Some(pid) = metrics.pid {
+                                if system.process(Pid::from(pid as usize)).is_some() {
+                                    alive_pids.push(pid);
+                                } else {
+                                    dead_count += 1;
+                                }
+                            }
+                        }
                     }
-                })
-        } else {
-            None
-        }
+                }
+
+                (alive_pids, dead_count)
+            },
+            |pid_file| {
+                let pids = fs::read_to_string(pid_file)
+                    .unwrap_or_default()
+                    .split(':')
+                    .filter_map(|pid| pid.trim().parse::<u32>().ok())
+                    .filter(|&pid| pid != 0)
+                    .collect();
+                (pids, 0)
+            },
+        )
     }
 
-    /// Collects session data from the specified output directory and returns the `CampaignData`.
-    /// Only 'alive' fuzzers are considered for data collection.
+    fn get_alive_fuzzers(pids: &[u32], system: &System) -> Vec<usize> {
+        pids.iter()
+            .filter(|&&pid| pid != 0 && system.process(Pid::from(pid as usize)).is_some())
+            .map(|&pid| pid as usize)
+            .collect()
+    }
+
     pub fn collect_session_data(&mut self) -> &CampaignData {
-        self.campaign_data.fuzzers_alive = count_alive_fuzzers(&self.campaign_data.fuzzer_pids);
+        self.system.refresh_all();
+        self.campaign_data.fuzzers_alive =
+            Self::get_alive_fuzzers(&self.campaign_data.fuzzer_pids, &self.system);
+
         if self.campaign_data.fuzzers_alive.is_empty() {
             self.campaign_data
                 .log("No fuzzers alive. Skipping data collection");
             return &self.campaign_data;
         }
+
         self.campaign_data.clear();
-
-        fs::read_dir(&self.output_dir)
-            .unwrap()
-            .flatten()
-            .for_each(|entry| {
-                let path = entry.path();
-                if path.is_dir() {
-                    let fuzzer_stats_path = path.join("fuzzer_stats");
-                    if fuzzer_stats_path.exists() {
-                        if let Ok(content) = fs::read_to_string(&fuzzer_stats_path) {
-                            let pid = Self::fetch_pid_from_fuzzer_stats(&content);
-                            if let Some(pid) = pid {
-                                if self.campaign_data.fuzzers_alive.contains(&(pid as usize)) {
-                                    self.process_fuzzer_stats(&content);
-                                }
-                            } else {
-                                self.campaign_data.log(&format!(
-                                    "Failed to fetch PID from fuzzer_stats: {}",
-                                    fuzzer_stats_path.display()
-                                ));
-                            }
-                        }
-                    }
-                }
-            });
-
-        self.update_once = true;
+        self.process_fuzzer_directories();
+        self.update_run_time();
         self.calculate_averages();
 
-        let (last_crashes, last_hangs) = self.collect_session_crashes_hangs(10);
-        self.campaign_data.last_crashes = last_crashes;
-        self.campaign_data.last_hangs = last_hangs;
+        let (crashes, hangs) = self.collect_crashes_and_hangs(10);
+        self.campaign_data.last_crashes = crashes;
+        self.campaign_data.last_hangs = hangs;
 
-        //self.campaign_data.append_log("Session data collected");
         &self.campaign_data
     }
 
-    fn process_fuzzer_stats(&mut self, content: &str) {
-        let mut is_alive = false;
+    fn process_fuzzer_directories(&mut self) {
+        if let Ok(entries) = fs::read_dir(&self.output_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_dir() {
+                    continue;
+                }
 
-        for line in content.lines() {
-            let parts: Vec<&str> = line.split(':').map(str::trim).collect();
+                let stats_path = path.join("fuzzer_stats");
+                if !stats_path.exists() {
+                    continue;
+                }
 
-            if parts.len() == 2 {
-                let key = parts[0];
-                let value = parts[1];
-
-                if key == "fuzzer_pid" {
-                    let pid = value.parse::<usize>().unwrap_or(0);
-                    if self.campaign_data.fuzzers_alive.contains(&pid) {
-                        is_alive = true;
+                if let Ok(content) = fs::read_to_string(&stats_path) {
+                    let metrics = FuzzerMetrics::parse(&content);
+                    if let Some(pid) = metrics.pid {
+                        if self.campaign_data.fuzzers_alive.contains(&(pid as usize)) {
+                            self.process_metrics(&metrics);
+                        }
                     }
                 }
             }
         }
-
-        if !is_alive {
-            return;
-        }
-
-        if self.update_once {
-            self.update_run_time();
-        }
-
-        for line in content.lines() {
-            let parts: Vec<&str> = line.split(':').map(str::trim).collect();
-
-            if parts.len() == 2 {
-                let key = parts[0];
-                let value = parts[1];
-
-                match key {
-                    "run_time" => {
-                        if self.update_once {
-                            self.process_run_time(value);
-                        }
-                    }
-                    "time_wo_finds" => self.process_time_wo_finds(value),
-                    "execs_per_sec" => self.process_execs_per_sec(value),
-                    "execs_done" => self.process_execs_done(value),
-                    "pending_favs" => self.process_pending_favs(value),
-                    "pending_total" => self.process_pending_total(value),
-                    "stability" => self.process_stability(value),
-                    "corpus_count" => self.process_corpus_count(value),
-                    "bitmap_cvg" => self.process_bitmap_cvg(value),
-                    "max_depth" => self.process_max_depth(value),
-                    "saved_crashes" => self.process_saved_crashes(value),
-                    "saved_hangs" => self.process_saved_hangs(value),
-                    "afl_banner" => {
-                        if !self.update_never {
-                            self.campaign_data.misc.afl_banner = value.to_string();
-                        }
-                    }
-                    "afl_version" => {
-                        if !self.update_never {
-                            self.campaign_data.misc.afl_version = value.to_string();
-                        }
-                    }
-                    "cycles_done" => self.process_cycles_done(value),
-                    "cycles_wo_finds" => self.process_cycles_wo_finds(value),
-                    _ => {}
-                }
-            }
-        }
-        self.update_once = false;
-        self.update_never = true;
     }
 
-    fn process_time_wo_finds(&mut self, value: &str) {
-        let twof = value.parse::<usize>().unwrap_or(0);
-        self.campaign_data.time_without_finds.max =
-            self.campaign_data.time_without_finds.max.max(twof);
+    fn process_metrics(&mut self, metrics: &FuzzerMetrics) {
+        if self.first_update {
+            if let Some(run_time) = metrics.get::<u64>("run_time") {
+                self.update_start_time(run_time);
+            }
+        }
 
-        if self.campaign_data.time_without_finds.min == 0 {
-            self.campaign_data.time_without_finds.min = twof;
-        } else {
-            self.campaign_data.time_without_finds.min =
-                self.campaign_data.time_without_finds.min.min(twof);
+        self.update_stats(metrics);
+        self.update_misc_info(metrics);
+
+        self.first_update = false;
+    }
+
+    fn update_stats(&mut self, metrics: &FuzzerMetrics) {
+        if self.first_update {
+            if let Some(run_time) = metrics.get::<u64>("run_time") {
+                self.update_start_time(run_time);
+            }
+        }
+
+        macro_rules! update_stat {
+            // Special case for floating point numbers
+            ($field:expr, $key:expr, f64) => {
+                if let Some(value) = metrics.get::<f64>($key) {
+                    $field.max = $field.max.max(value);
+                    if $field.min == 0.0 {
+                        $field.min = value;
+                    } else {
+                        $field.min = $field.min.min(value);
+                    }
+                    $field.cum += value;
+                }
+            };
+            // Case for integer types (usize)
+            ($field:expr, $key:expr, usize) => {
+                if let Some(value) = metrics.get::<usize>($key) {
+                    $field.max = $field.max.max(value);
+                    if $field.min == 0 {
+                        $field.min = value;
+                    } else {
+                        $field.min = $field.min.min(value);
+                    }
+                    $field.cum += value;
+                }
+            };
+        }
+
+        update_stat!(
+            self.campaign_data.time_without_finds,
+            "time_wo_finds",
+            usize
+        );
+        update_stat!(self.campaign_data.executions.per_sec, "execs_per_sec", f64);
+        update_stat!(self.campaign_data.executions.count, "execs_done", usize);
+        update_stat!(self.campaign_data.pending.favorites, "pending_favs", usize);
+        update_stat!(self.campaign_data.pending.total, "pending_total", usize);
+        update_stat!(self.campaign_data.corpus, "corpus_count", usize);
+        update_stat!(self.campaign_data.crashes, "saved_crashes", usize);
+        update_stat!(self.campaign_data.hangs, "saved_hangs", usize);
+        update_stat!(self.campaign_data.levels, "max_depth", usize);
+        update_stat!(self.campaign_data.cycles.wo_finds, "cycles_wo_finds", usize);
+
+        // Handle special cases that need custom initialization
+        if let Some(stability) = metrics.get::<f64>("stability") {
+            self.campaign_data.stability.max = self.campaign_data.stability.max.max(stability);
+            // Initialize min with the first non-zero value we see
+            if self.campaign_data.stability.min == 0.0
+                || stability < self.campaign_data.stability.min
+            {
+                self.campaign_data.stability.min = stability;
+            }
+        }
+
+        if let Some(coverage) = metrics.get::<f64>("bitmap_cvg") {
+            self.campaign_data.coverage.max = self.campaign_data.coverage.max.max(coverage);
+            if self.campaign_data.coverage.min == 0.0 || coverage < self.campaign_data.coverage.min
+            {
+                self.campaign_data.coverage.min = coverage;
+            }
+        }
+
+        self.update_misc_info(metrics);
+        self.first_update = false;
+    }
+
+    fn update_misc_info(&mut self, metrics: &FuzzerMetrics) {
+        if self.first_update {
+            if let Some(banner) = metrics.metrics.get("afl_banner") {
+                self.campaign_data.misc.afl_banner = banner.clone();
+            }
+            if let Some(version) = metrics.metrics.get("afl_version") {
+                self.campaign_data.misc.afl_version = version.clone();
+            }
+        }
+    }
+
+    fn update_start_time(&mut self, run_time: u64) {
+        if self.campaign_data.start_time.is_none() {
+            // Add 75 seconds buffer as per AFL++ stats file update frequency
+            let duration = Duration::from_secs(run_time + 75);
+            let start_time = Instant::now()
+                .checked_sub(duration)
+                .unwrap_or_else(Instant::now);
+            self.campaign_data.start_time = Some(start_time);
+            self.campaign_data.total_run_time = duration;
         }
     }
 
     fn update_run_time(&mut self) {
         if let Some(start_time) = self.campaign_data.start_time {
-            // NOTE: Some buffer time is added that avoid that crashes are found in the future
+            // Add 5 second buffer to avoid future-dated crashes
             self.campaign_data.total_run_time = start_time.elapsed().add(Duration::from_secs(5));
         }
     }
 
-    fn process_run_time(&mut self, value: &str) {
-        let run_time = value.parse::<u64>().unwrap_or(0);
-
-        if run_time > 0 {
-            // If run_time is greater than 0, set start_time and total_run_time based on the run_time value
-            if self.campaign_data.start_time.is_none() {
-                // BUG: We add 75 seconds as we don't know when the `fuzzer_stats` file was last
-                // written, it's written roughly every minute
-                // https://github.com/AFLplusplus/AFLplusplus/blob/ad0d0c77fb313e6edfee111fecf2bcd16d8f915e/src/afl-fuzz-stats.c#L745
-                let duration = Duration::from_secs(run_time + 75);
-                let start_time = Instant::now().checked_sub(duration).unwrap();
-                self.campaign_data.start_time = Some(start_time);
-                self.campaign_data.total_run_time = duration;
-            }
-        } else {
-            // If run_time is 0, start the internal counter if not already started
-            if self.campaign_data.start_time.is_none() {
-                // BUG: This will still cause issues if we start a fuzzing run detached and attach
-                // separately if `run_time` has not yet been written to `fuzzer_stats`
-                self.campaign_data.start_time = Some(Instant::now());
-                self.campaign_data.total_run_time = Duration::from_secs(0);
-            }
-        }
-    }
-
-    fn process_execs_per_sec(&mut self, value: &str) {
-        let exec_ps = value.parse::<f64>().unwrap_or(0.0);
-
-        self.campaign_data.executions.ps_max = self.campaign_data.executions.ps_max.max(exec_ps);
-
-        if self.campaign_data.executions.ps_min == 0.0 {
-            self.campaign_data.executions.ps_min = exec_ps;
-        } else {
-            self.campaign_data.executions.ps_min =
-                self.campaign_data.executions.ps_min.min(exec_ps);
-        }
-
-        self.campaign_data.executions.ps_cum += exec_ps;
-    }
-
-    fn process_execs_done(&mut self, value: &str) {
-        let execs_done = value.parse::<usize>().unwrap_or(0);
-        self.campaign_data.executions.max = self.campaign_data.executions.max.max(execs_done);
-        if self.campaign_data.executions.min == 0 {
-            self.campaign_data.executions.min = execs_done;
-        } else {
-            self.campaign_data.executions.min = self.campaign_data.executions.min.min(execs_done);
-        }
-        self.campaign_data.executions.cum += execs_done;
-    }
-
-    fn process_pending_favs(&mut self, value: &str) {
-        let pending_favs = value.parse::<usize>().unwrap_or(0);
-        self.campaign_data.pending.favorites_max =
-            self.campaign_data.pending.favorites_max.max(pending_favs);
-        if self.campaign_data.pending.favorites_min == 0 {
-            self.campaign_data.pending.favorites_min = pending_favs;
-        } else {
-            self.campaign_data.pending.favorites_min =
-                self.campaign_data.pending.favorites_min.min(pending_favs);
-        }
-        self.campaign_data.pending.favorites_cum += pending_favs;
-    }
-
-    fn process_pending_total(&mut self, value: &str) {
-        let pending_total = value.parse::<usize>().unwrap_or(0);
-        self.campaign_data.pending.total_max =
-            self.campaign_data.pending.total_max.max(pending_total);
-        if self.campaign_data.pending.total_min == 0 {
-            self.campaign_data.pending.total_min = pending_total;
-        } else {
-            self.campaign_data.pending.total_min =
-                self.campaign_data.pending.total_min.min(pending_total);
-        }
-        self.campaign_data.pending.total_cum += pending_total;
-    }
-
-    fn process_stability(&mut self, value: &str) {
-        let stability = value.trim_end_matches('%').parse::<f64>().unwrap_or(0.0);
-        self.campaign_data.stability.max = self.campaign_data.stability.max.max(stability);
-        if self.campaign_data.stability.min == 0.0 {
-            self.campaign_data.stability.min = stability;
-        } else {
-            self.campaign_data.stability.min = self.campaign_data.stability.min.min(stability);
-        }
-    }
-
-    fn process_corpus_count(&mut self, value: &str) {
-        let corpus_count = value.parse::<usize>().unwrap_or(0);
-        self.campaign_data.corpus.max = self.campaign_data.corpus.max.max(corpus_count);
-        if self.campaign_data.corpus.min == 0 {
-            self.campaign_data.corpus.min = corpus_count;
-        } else {
-            self.campaign_data.corpus.min = self.campaign_data.corpus.min.min(corpus_count);
-        }
-        self.campaign_data.corpus.cum += corpus_count;
-    }
-
-    fn process_max_depth(&mut self, value: &str) {
-        let levels = value.parse::<usize>().unwrap_or(0);
-        self.campaign_data.levels.max = self.campaign_data.levels.max.max(levels);
-        if self.campaign_data.levels.min == 0 {
-            self.campaign_data.levels.min = levels;
-        } else {
-            self.campaign_data.levels.min = self.campaign_data.levels.min.min(levels);
-        }
-    }
-
-    fn process_bitmap_cvg(&mut self, value: &str) {
-        let cvg = value.trim_end_matches('%').parse::<f64>().unwrap_or(0.0);
-        if self.campaign_data.coverage.min == 0.0 {
-            self.campaign_data.coverage.min = cvg;
-        } else {
-            self.campaign_data.coverage.min = self.campaign_data.coverage.min.min(cvg);
-        }
-        self.campaign_data.coverage.max = self.campaign_data.coverage.max.max(cvg);
-    }
-
-    fn process_saved_crashes(&mut self, value: &str) {
-        let saved_crashes = value.parse::<usize>().unwrap_or(0);
-        self.campaign_data.crashes.max = self.campaign_data.crashes.max.max(saved_crashes);
-        if self.campaign_data.crashes.min == 0 {
-            self.campaign_data.crashes.min = saved_crashes;
-        } else {
-            self.campaign_data.crashes.min = self.campaign_data.crashes.min.min(saved_crashes);
-        }
-        self.campaign_data.crashes.cum += saved_crashes;
-    }
-
-    fn process_saved_hangs(&mut self, value: &str) {
-        let saved_hangs = value.parse::<usize>().unwrap_or(0);
-        self.campaign_data.hangs.max = self.campaign_data.hangs.max.max(saved_hangs);
-        if self.campaign_data.hangs.min == 0 {
-            self.campaign_data.hangs.min = saved_hangs;
-        } else {
-            self.campaign_data.hangs.min = self.campaign_data.hangs.min.min(saved_hangs);
-        }
-        self.campaign_data.hangs.cum += saved_hangs;
-    }
-
-    fn process_cycles_done(&mut self, value: &str) {
-        let cycles_done = value.parse::<usize>().unwrap_or(0);
-        self.campaign_data.cycles.done_max = self.campaign_data.cycles.done_max.max(cycles_done);
-        self.campaign_data.cycles.done_min =
-            self.campaign_data.cycles.done_min.min(cycles_done).max(0);
-    }
-
-    fn process_cycles_wo_finds(&mut self, value: &str) {
-        let cycles_wo_finds = value.parse::<usize>().unwrap_or(0);
-        self.campaign_data.cycles.wo_finds_max =
-            self.campaign_data.cycles.wo_finds_max.max(cycles_wo_finds);
-        self.campaign_data.cycles.wo_finds_min = self
-            .campaign_data
-            .cycles
-            .wo_finds_min
-            .min(cycles_wo_finds)
-            .max(0);
-    }
-
     fn calculate_averages(&mut self) {
-        let is_fuzzers_alive = !self.campaign_data.fuzzers_alive.is_empty();
+        let fuzzer_count = self.campaign_data.fuzzers_alive.len();
+        if fuzzer_count == 0 {
+            return;
+        }
 
-        // FIXME: Change once https://github.com/rust-lang/rust/issues/15701 is resolved
-        #[allow(clippy::cast_possible_truncation)]
-        #[allow(clippy::cast_sign_loss)]
-        #[allow(clippy::cast_precision_loss)]
-        let fuzzers_alive_f64 = self.campaign_data.fuzzers_alive.len() as f64;
-        self.campaign_data.executions.ps_avg = if is_fuzzers_alive {
-            self.campaign_data.executions.ps_cum / fuzzers_alive_f64
-        } else {
-            0.0
-        };
+        let fuzzer_count_f64 = fuzzer_count as f64;
 
-        let cumulative_avg = |cum: usize| {
-            if is_fuzzers_alive {
-                cum / self.campaign_data.fuzzers_alive.len()
-            } else {
-                0
-            }
-        };
+        // Helper macro to calculate averages
+        macro_rules! calc_avg {
+            // Case for integer averages
+            ($field:expr) => {
+                $field.avg = $field.cum / fuzzer_count;
+            };
+            // Case for floating point averages using fuzzer count
+            ($field:expr, f64) => {
+                $field.avg = $field.cum / fuzzer_count_f64;
+            };
+            // Case for min-max floating point averages
+            ($field:expr, minmax_f64) => {
+                $field.avg = ($field.min + $field.max) / 2.0;
+            };
+            // Case for min-max integer averages
+            ($field:expr, minmax) => {
+                $field.avg = ($field.min + $field.max) / 2;
+            };
+        }
 
-        self.campaign_data.executions.avg = cumulative_avg(self.campaign_data.executions.cum);
-        self.campaign_data.pending.favorites_avg =
-            cumulative_avg(self.campaign_data.pending.favorites_cum);
-        self.campaign_data.pending.total_avg = cumulative_avg(self.campaign_data.pending.total_cum);
-        self.campaign_data.corpus.avg = cumulative_avg(self.campaign_data.corpus.cum);
-        self.campaign_data.crashes.avg = cumulative_avg(self.campaign_data.crashes.cum);
-        self.campaign_data.hangs.avg = cumulative_avg(self.campaign_data.hangs.cum);
+        // Calculate all averages using the macro
+        calc_avg!(self.campaign_data.executions.count);
+        calc_avg!(self.campaign_data.executions.per_sec, f64);
+        calc_avg!(self.campaign_data.pending.favorites);
+        calc_avg!(self.campaign_data.pending.total);
+        calc_avg!(self.campaign_data.corpus);
+        calc_avg!(self.campaign_data.crashes);
+        calc_avg!(self.campaign_data.hangs);
 
-        self.campaign_data.coverage.avg =
-            (self.campaign_data.coverage.min + self.campaign_data.coverage.max) / 2.0;
-        self.campaign_data.stability.avg =
-            (self.campaign_data.stability.min + self.campaign_data.stability.max) / 2.0;
-        self.campaign_data.cycles.done_avg =
-            (self.campaign_data.cycles.done_min + self.campaign_data.cycles.done_max) / 2;
-        self.campaign_data.cycles.wo_finds_avg =
-            (self.campaign_data.cycles.wo_finds_min + self.campaign_data.cycles.wo_finds_max) / 2;
-        self.campaign_data.levels.avg =
-            (self.campaign_data.levels.min + self.campaign_data.levels.max) / 2;
-
-        self.campaign_data.time_without_finds.avg = (self.campaign_data.time_without_finds.min
-            + self.campaign_data.time_without_finds.max)
-            / 2;
+        // Min-max based averages
+        calc_avg!(self.campaign_data.coverage, minmax_f64);
+        calc_avg!(self.campaign_data.stability, minmax_f64);
+        calc_avg!(self.campaign_data.cycles.done, minmax);
+        calc_avg!(self.campaign_data.cycles.wo_finds, minmax);
+        calc_avg!(self.campaign_data.levels, minmax);
+        calc_avg!(self.campaign_data.time_without_finds, minmax);
     }
 
-    /// Collects information about the latest crashes and hangs from the output directory
-    fn collect_session_crashes_hangs(
+    fn collect_crashes_and_hangs(
         &self,
         num_latest: usize,
     ) -> (Vec<CrashInfoDetails>, Vec<CrashInfoDetails>) {
-        let out_dir_str = self
-            .output_dir
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap();
-        let mut crashes = Vec::new();
-        let mut hangs = Vec::new();
+        // Pre-allocate vectors with expected capacity
+        let mut crashes = Vec::with_capacity(num_latest);
+        let mut hangs = Vec::with_capacity(num_latest);
 
-        for entry in fs::read_dir(out_dir_str).unwrap() {
-            let entry = entry.unwrap();
-            let subdir = entry.path();
-
-            if subdir.is_dir() {
-                let fuzzer_name = subdir.file_name().unwrap().to_str().unwrap().to_string();
-
-                let crashes_dir = subdir.join("crashes");
-                if crashes_dir.is_dir() {
-                    Self::process_files(&crashes_dir, &fuzzer_name, &mut crashes);
+        if let Ok(entries) = fs::read_dir(&self.output_dir) {
+            for entry in entries.flatten() {
+                let subdir = entry.path();
+                if !subdir.is_dir() {
+                    continue;
                 }
 
-                let hangs_dir = subdir.join("hangs");
-                if hangs_dir.is_dir() {
-                    Self::process_files(&hangs_dir, &fuzzer_name, &mut hangs);
-                }
+                let fuzzer_name = subdir
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(String::from)
+                    .unwrap_or_default();
+
+                self.collect_solution_files(&subdir, &fuzzer_name, "crashes", &mut crashes);
+                self.collect_solution_files(&subdir, &fuzzer_name, "hangs", &mut hangs);
             }
         }
 
-        crashes.sort_by(|a, b| b.time.cmp(&a.time));
-        hangs.sort_by(|a, b| b.time.cmp(&a.time));
+        // Sort by time and take latest n items
+        crashes.sort_unstable_by(|a, b| b.time.cmp(&a.time));
+        hangs.sort_unstable_by(|a, b| b.time.cmp(&a.time));
 
         (
             crashes.into_iter().take(num_latest).collect(),
@@ -508,50 +388,307 @@ impl DataFetcher {
         )
     }
 
-    /// Processes files in a directory and extracts crash/hang information
-    fn process_files(dir: &PathBuf, fuzzer_name: &str, file_infos: &mut Vec<CrashInfoDetails>) {
-        fs::read_dir(dir).unwrap().flatten().for_each(|file_entry| {
-            let file = file_entry.path();
-            if file.is_file() {
-                let filename = file.file_name().unwrap().to_str().unwrap();
-                if let Some(mut file_info) = Self::parse_filename(filename) {
-                    file_info.fuzzer_name = fuzzer_name.to_string();
-                    file_info.file_path = file;
-                    file_infos.push(file_info);
+    fn collect_solution_files(
+        &self,
+        subdir: &Path,
+        fuzzer_name: &str,
+        dir_name: &str,
+        solutions: &mut Vec<CrashInfoDetails>,
+    ) {
+        let dir = subdir.join(dir_name);
+        if !dir.is_dir() {
+            return;
+        }
+
+        if let Ok(entries) = fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_file() {
+                    continue;
+                }
+
+                if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+                    if let Some(mut info) = Self::parse_solution_filename(filename) {
+                        info.fuzzer_name = fuzzer_name.to_string();
+                        info.file_path = path;
+                        solutions.push(info);
+                    }
                 }
             }
-        });
+        }
     }
 
-    /// Parses a filename and extracts crash/hang information
-    fn parse_filename(filename: &str) -> Option<CrashInfoDetails> {
+    fn parse_solution_filename(filename: &str) -> Option<CrashInfoDetails> {
         let parts: Vec<&str> = filename.split(',').collect();
-        if parts.len() == 6 || parts.len() == 7 {
-            let id = parts[0].split(':').nth(1)?.to_string();
-            let sig = if parts.len() == 7 {
-                Some(parts[1].split(':').nth(1)?.to_string())
-            } else {
-                None
-            };
-            let src_index = if sig.is_some() { 2 } else { 1 };
-            let src = parts[src_index].split(':').nth(1)?.to_string();
-            let time = parts[src_index + 1].split(':').nth(1)?.parse().ok()?;
-            let execs = parts[src_index + 2].split(':').nth(1)?.parse().ok()?;
-            let op = parts[src_index + 3].split(':').nth(1)?.to_string();
-            let rep = parts[src_index + 4].split(':').nth(1)?.parse().ok()?;
-            Some(CrashInfoDetails {
-                fuzzer_name: String::new(),
-                file_path: PathBuf::new(),
-                id,
-                sig,
-                src,
-                time,
-                execs,
-                op,
-                rep,
-            })
-        } else {
-            None
+        if parts.len() != 6 && parts.len() != 7 {
+            return None;
         }
+
+        let mut details = CrashInfoDetails {
+            fuzzer_name: String::new(),
+            file_path: PathBuf::new(),
+            id: String::new(),
+            sig: None,
+            src: String::new(),
+            time: 0,
+            execs: 0,
+            op: String::new(),
+            rep: 0,
+        };
+
+        let mut current_part = 0;
+
+        // Parse ID
+        if let Some(id) = parts[current_part].split(':').nth(1) {
+            details.id = id.to_string();
+            current_part += 1;
+        } else {
+            return None;
+        }
+
+        // Check for signature (optional)
+        if parts.len() == 7 {
+            if let Some(sig) = parts[current_part].split(':').nth(1) {
+                details.sig = Some(sig.to_string());
+                current_part += 1;
+            }
+        }
+
+        // Get value after colon and ensure it's not empty
+        let get_value = |part: &str| -> Option<String> {
+            part.split(':')
+                .nth(1)
+                .filter(|value| !value.is_empty())
+                .map(std::string::ToString::to_string)
+        };
+
+        // Source
+        details.src = get_value(parts[current_part])?;
+        current_part += 1;
+
+        // Time
+        details.time = get_value(parts[current_part])?.parse().ok()?;
+        current_part += 1;
+
+        // Executions
+        details.execs = get_value(parts[current_part])?.parse().ok()?;
+        current_part += 1;
+
+        // Operation
+        details.op = get_value(parts[current_part])?;
+        current_part += 1;
+
+        // Repetition
+        details.rep = get_value(parts[current_part])?.parse().ok()?;
+
+        Some(details)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile::TempDir;
+
+    const MOCK_STATS_CONTENT: &str = r#"
+        fuzzer_pid : 1234
+        execs_done : 1000000
+        execs_per_sec : 277.77
+        pending_favs : 100
+        pending_total : 500
+        stability : 100.00%
+        bitmap_cvg : 45.5%
+        afl_banner : test_fuzzer
+        afl_version : 4.05c
+    "#;
+
+    #[test]
+    fn test_fuzzer_metrics_parsing() {
+        let metrics = FuzzerMetrics::parse(MOCK_STATS_CONTENT);
+
+        assert_eq!(metrics.pid, Some(1234));
+        assert_eq!(metrics.get::<usize>("execs_done"), Some(1000000));
+        assert_eq!(metrics.get::<f64>("execs_per_sec"), Some(277.77));
+        assert_eq!(metrics.get::<usize>("pending_favs"), Some(100));
+        assert_eq!(metrics.get::<f64>("stability"), Some(100.00));
+        assert_eq!(metrics.get::<f64>("bitmap_cvg"), Some(45.5));
+        assert_eq!(
+            metrics.metrics.get("afl_banner").map(String::as_str),
+            Some("test_fuzzer")
+        );
+
+        assert_eq!(metrics.get::<usize>("nonexistent"), None);
+
+        let invalid_content = "fuzzer_pid : invalid";
+        let invalid_metrics = FuzzerMetrics::parse(invalid_content);
+        assert_eq!(invalid_metrics.pid, None);
+    }
+
+    #[test]
+    fn test_parse_solution_filename() {
+        let test_cases = vec![
+            // (filename, expected_result)
+            (
+                "id:000000,sig:06,src:000000,time:1234,execs:5678,op:havoc,rep:2",
+                Some(CrashInfoDetails {
+                    fuzzer_name: String::new(),
+                    file_path: PathBuf::new(),
+                    id: "000000".to_string(),
+                    sig: Some("06".to_string()),
+                    src: "000000".to_string(),
+                    time: 1234,
+                    execs: 5678,
+                    op: "havoc".to_string(),
+                    rep: 2,
+                }),
+            ),
+            (
+                "id:000001,src:000000,time:1234,execs:5678,op:havoc,rep:2",
+                Some(CrashInfoDetails {
+                    fuzzer_name: String::new(),
+                    file_path: PathBuf::new(),
+                    id: "000001".to_string(),
+                    sig: None,
+                    src: "000000".to_string(),
+                    time: 1234,
+                    execs: 5678,
+                    op: "havoc".to_string(),
+                    rep: 2,
+                }),
+            ),
+            ("invalid", None),
+            ("id:123", None),
+            ("id:123,sig:06,src:000", None),
+        ];
+
+        for (filename, expected) in test_cases {
+            let result = DataFetcher::parse_solution_filename(filename);
+            assert_eq!(result.is_some(), expected.is_some());
+            if let Some(expected) = expected {
+                let result = result.unwrap();
+                assert_eq!(result.id, expected.id);
+                assert_eq!(result.sig, expected.sig);
+                assert_eq!(result.src, expected.src);
+                assert_eq!(result.time, expected.time);
+                assert_eq!(result.execs, expected.execs);
+                assert_eq!(result.op, expected.op);
+                assert_eq!(result.rep, expected.rep);
+            }
+        }
+    }
+
+    #[test]
+    fn test_stats_calculation_and_stability() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut campaign_data = CampaignData::new();
+
+        let fuzzer_stats = vec![
+            ("fuzzer01", "100.00"),
+            ("fuzzer02", "98.50"),
+            ("fuzzer03", "99.75"),
+        ];
+
+        for (fuzzer_name, stability) in &fuzzer_stats {
+            let stats_dir = temp_dir.path().join(fuzzer_name);
+            fs::create_dir(&stats_dir).unwrap();
+            let stats_content = format!(
+                r#"
+                fuzzer_pid : 1234
+                execs_done : 1000000
+                execs_per_sec : 277.77
+                pending_favs : 100
+                pending_total : 500
+                stability : {}%
+                bitmap_cvg : 45.5%
+                "#,
+                stability
+            );
+            let stats_file = stats_dir.join("fuzzer_stats");
+            File::create(&stats_file)
+                .unwrap()
+                .write_all(stats_content.as_bytes())
+                .unwrap();
+        }
+
+        let mut fetcher = DataFetcher::new(temp_dir.path(), None, &mut campaign_data);
+        fetcher.campaign_data.fuzzers_alive = vec![1234];
+        fetcher.process_fuzzer_directories();
+        fetcher.calculate_averages();
+
+        assert_eq!(fetcher.campaign_data.executions.count.cum, 3000000);
+        assert!((fetcher.campaign_data.executions.per_sec.cum - 833.31).abs() < 0.01);
+
+        assert!((fetcher.campaign_data.stability.max - 100.0).abs() < f64::EPSILON);
+        assert!((fetcher.campaign_data.stability.min - 98.50).abs() < f64::EPSILON);
+        assert!((fetcher.campaign_data.stability.avg - 99.25).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_campaign_data_lifecycle() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut campaign_data = CampaignData::new();
+
+        let stats_content = r#"
+            fuzzer_pid : 1234
+            execs_done : 1000000
+            execs_per_sec : 277.77
+            pending_favs : 100
+            pending_total : 500
+            stability : 100.00%
+            bitmap_cvg : 45.5%
+            afl_banner : test_fuzzer
+            afl_version : 4.05c
+            run_time : 3600
+        "#;
+
+        let stats_dir = temp_dir.path().join("fuzzer01");
+        fs::create_dir(&stats_dir).unwrap();
+        File::create(stats_dir.join("fuzzer_stats"))
+            .unwrap()
+            .write_all(stats_content.as_bytes())
+            .unwrap();
+
+        let mut fetcher = DataFetcher::new(temp_dir.path(), None, &mut campaign_data);
+
+        assert!(fetcher.campaign_data.start_time.is_none());
+        assert!(fetcher.campaign_data.total_run_time < Duration::from_secs(5));
+
+        fetcher.campaign_data.fuzzers_alive = vec![1234];
+        fetcher.process_fuzzer_directories();
+
+        assert!(fetcher.campaign_data.start_time.is_some());
+
+        fetcher.campaign_data.clear();
+        assert_eq!(fetcher.campaign_data.executions.count.cum, 0);
+        assert_eq!(fetcher.campaign_data.executions.per_sec.cum, 0.0);
+        assert_eq!(fetcher.campaign_data.crashes.cum, 0);
+    }
+
+    #[test]
+    fn test_time_without_finds_direct_usage() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut campaign_data = CampaignData::new();
+
+        let stats_content = r#"
+        fuzzer_pid : 1234
+        time_wo_finds : 341
+        last_find : 1730983297
+    "#;
+
+        let stats_dir = temp_dir.path().join("fuzzer01");
+        fs::create_dir(&stats_dir).unwrap();
+        File::create(stats_dir.join("fuzzer_stats"))
+            .unwrap()
+            .write_all(stats_content.as_bytes())
+            .unwrap();
+
+        let mut fetcher = DataFetcher::new(temp_dir.path(), None, &mut campaign_data);
+        fetcher.campaign_data.fuzzers_alive = vec![1234];
+        fetcher.process_fuzzer_directories();
+
+        assert_eq!(fetcher.campaign_data.time_without_finds.max, 341);
+        assert_eq!(fetcher.campaign_data.time_without_finds.min, 341);
     }
 }

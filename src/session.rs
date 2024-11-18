@@ -1,8 +1,40 @@
-use crate::log_buffer::LogRingBuffer;
 use chrono::{DateTime, Local};
-use std::time::Duration;
-use std::time::SystemTime;
-use std::{path::PathBuf, time::Instant};
+use std::path::PathBuf;
+use std::time::{Duration, Instant, SystemTime};
+
+use crate::log_buffer::LogRingBuffer;
+
+#[derive(Default, Debug, Clone)]
+pub struct Stats<T> {
+    pub avg: T,
+    pub min: T,
+    pub max: T,
+    pub cum: T,
+}
+
+impl<T: Default> Stats<T> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct ExtendedStats {
+    pub favorites: Stats<usize>,
+    pub total: Stats<usize>,
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct CycleStats {
+    pub done: Stats<usize>,
+    pub wo_finds: Stats<usize>,
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct ExecutionStats {
+    pub count: Stats<usize>,
+    pub per_sec: Stats<f64>,
+}
 
 #[allow(dead_code)]
 #[derive(Default, Debug, Clone)]
@@ -18,22 +50,28 @@ pub struct CrashInfoDetails {
     pub rep: u64,
 }
 
+#[derive(Default, Debug, Clone)]
+pub struct Misc {
+    pub afl_version: String,
+    pub afl_banner: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct CampaignData {
     pub fuzzers_alive: Vec<usize>,
     pub fuzzers_started: usize,
     pub fuzzer_pids: Vec<u32>,
     pub total_run_time: Duration,
-    pub executions: ExecutionsInfo,
-    pub pending: PendingInfo,
-    pub corpus: CorpusInfo,
-    pub coverage: CoverageInfo,
-    pub cycles: Cycles,
-    pub stability: StabilityInfo,
-    pub crashes: Solutions,
-    pub hangs: Solutions,
-    pub levels: Levels,
-    pub time_without_finds: TimeWOFinds,
+    pub executions: ExecutionStats,
+    pub pending: ExtendedStats,
+    pub corpus: Stats<usize>,
+    pub coverage: Stats<f64>,
+    pub cycles: CycleStats,
+    pub stability: Stats<f64>,
+    pub crashes: Stats<usize>,
+    pub hangs: Stats<usize>,
+    pub levels: Stats<usize>,
+    pub time_without_finds: Stats<usize>,
     pub last_crashes: Vec<CrashInfoDetails>,
     pub last_hangs: Vec<CrashInfoDetails>,
     pub misc: Misc,
@@ -48,16 +86,16 @@ impl Default for CampaignData {
             fuzzers_started: 0,
             fuzzer_pids: Vec::new(),
             total_run_time: Duration::from_secs(0),
-            executions: ExecutionsInfo::default(),
-            pending: PendingInfo::default(),
-            corpus: CorpusInfo::default(),
-            coverage: CoverageInfo::default(),
-            cycles: Cycles::default(),
-            stability: StabilityInfo::default(),
-            crashes: Solutions::default(),
-            hangs: Solutions::default(),
-            levels: Levels::default(),
-            time_without_finds: TimeWOFinds::default(),
+            executions: ExecutionStats::default(),
+            pending: ExtendedStats::default(),
+            corpus: Stats::new(),
+            coverage: Stats::new(),
+            cycles: CycleStats::default(),
+            stability: Stats::new(),
+            crashes: Stats::new(),
+            hangs: Stats::new(),
+            levels: Stats::new(),
+            time_without_finds: Stats::new(),
             last_crashes: Vec::with_capacity(10),
             last_hangs: Vec::with_capacity(10),
             misc: Misc::default(),
@@ -68,111 +106,32 @@ impl Default for CampaignData {
 }
 
 impl CampaignData {
-    /// Clear all the data in the `CampaignData` struct
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn clear(&mut self) {
-        self.executions = ExecutionsInfo::default();
-        self.pending = PendingInfo::default();
-        self.corpus = CorpusInfo::default();
-        self.coverage = CoverageInfo::default();
-        self.cycles = Cycles::default();
-        self.stability = StabilityInfo::default();
-        self.crashes = Solutions::default();
-        self.hangs = Solutions::default();
-        self.levels = Levels::default();
-        self.time_without_finds = TimeWOFinds::default();
-        self.last_crashes.clear();
-        self.last_hangs.clear();
+        let pids = self.fuzzer_pids.clone();
+        let fuzzers_alive = self.fuzzers_alive.clone();
+        let fuzzers_started = self.fuzzers_started;
+        let total_runtime = self.total_run_time;
+        let misc = self.misc.clone();
+        let start_time = self.start_time;
+        let logs = self.logs.clone();
+        *self = Self::new();
+        self.fuzzer_pids = pids;
+        self.fuzzers_alive = fuzzers_alive;
+        self.fuzzers_started = fuzzers_started;
+        self.total_run_time = total_runtime;
+        self.misc = misc;
+        self.start_time = start_time;
+        self.logs = logs;
     }
 
-    /// Append a log to the logs vector with the elapsed time since the start of the campaign
-    pub fn log(&mut self, log: &str) {
-        let now = SystemTime::now();
-        let datetime: DateTime<Local> = now.into();
-        let ftime = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
-        self.logs.push(format!("[{ftime}] - {log}"));
+    pub fn log<T: AsRef<str>>(&mut self, message: T) {
+        let now: DateTime<Local> = SystemTime::now().into();
+        let timestamp = now.format("%Y-%m-%d %H:%M:%S");
+        self.logs
+            .push(format!("[{timestamp}] - {}", message.as_ref()));
     }
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct TimeWOFinds {
-    pub avg: usize,
-    pub min: usize,
-    pub max: usize,
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct Levels {
-    pub avg: usize,
-    pub min: usize,
-    pub max: usize,
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct Solutions {
-    pub cum: usize,
-    pub avg: usize,
-    pub min: usize,
-    pub max: usize,
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct StabilityInfo {
-    pub avg: f64,
-    pub min: f64,
-    pub max: f64,
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct Cycles {
-    pub done_avg: usize,
-    pub done_min: usize,
-    pub done_max: usize,
-    pub wo_finds_avg: usize,
-    pub wo_finds_min: usize,
-    pub wo_finds_max: usize,
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct ExecutionsInfo {
-    pub avg: usize,
-    pub min: usize,
-    pub max: usize,
-    pub cum: usize,
-    pub ps_avg: f64,
-    pub ps_min: f64,
-    pub ps_max: f64,
-    pub ps_cum: f64,
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct CoverageInfo {
-    pub avg: f64,
-    pub min: f64,
-    pub max: f64,
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct PendingInfo {
-    pub favorites_avg: usize,
-    pub favorites_cum: usize,
-    pub favorites_max: usize,
-    pub favorites_min: usize,
-    pub total_avg: usize,
-    pub total_cum: usize,
-    pub total_min: usize,
-    pub total_max: usize,
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct CorpusInfo {
-    pub avg: usize,
-    pub cum: usize,
-    pub min: usize,
-    pub max: usize,
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct Misc {
-    pub afl_version: String,
-    pub afl_banner: String,
 }

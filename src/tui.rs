@@ -5,8 +5,8 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
+use crate::data_collection::DataFetcher;
 use crate::session::{CampaignData, CrashInfoDetails};
-use crate::{data_collection::DataFetcher, utils::format_duration};
 use anyhow::bail;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
@@ -41,6 +41,24 @@ impl Tui {
         Ok(Self { terminal })
     }
 
+    /// Formats a duration into a string based on days, hours, minutes, and seconds
+    pub fn format_duration(duration: &Duration) -> String {
+        let mut secs = duration.as_secs();
+        let days = secs / 86400;
+        let hours = (secs % 86400) / 3600;
+        let mins = (secs % 3600) / 60;
+        secs %= 60;
+        if days > 0 {
+            format!("{days} days, {hours:02}:{mins:02}:{secs:02}")
+        } else if days == 0 && hours > 0 {
+            format!("{hours:02}:{mins:02}:{secs:02}")
+        } else if days == 0 && hours == 0 && mins > 0 {
+            format!("{mins:02}:{secs:02}")
+        } else {
+            format!("{secs:02}s")
+        }
+    }
+
     /// Runs the TUI standalone with the specified output directory
     pub fn run(output_dir: &Path, pid_file: Option<&Path>, cdata: &mut CampaignData) -> Result<()> {
         let output_dir = output_dir.to_path_buf();
@@ -59,7 +77,6 @@ impl Tui {
         if let Err(e) = Self::new().and_then(|mut tui| tui.run_internal(&session_data_rx)) {
             bail!("Error running TUI: {e}");
         }
-        //println!("Campaign data: {:?}", session_data_rx.recv().unwrap());
         Ok(())
     }
 
@@ -269,7 +286,7 @@ impl Tui {
             ]),
             Line::from(format!(
                 "Total run time: {}",
-                format_duration(&session_data.total_run_time)
+                Self::format_duration(&session_data.total_run_time)
             )),
             Line::from(format!(
                 "Time without finds: {}s ({}s/{}s)",
@@ -307,9 +324,9 @@ impl Tui {
         let content = vec![
             Line::from(format!(
                 "Cycles done: {} ({}/{})",
-                session_data.cycles.done_avg,
-                session_data.cycles.done_min,
-                session_data.cycles.done_max,
+                session_data.cycles.done.avg,
+                session_data.cycles.done.min,
+                session_data.cycles.done.max,
             )),
             Line::from(format!(
                 "Crashes saved: {} ({}->{}->{})",
@@ -359,25 +376,25 @@ impl Tui {
 
     /// Creates the stage progress paragraph
     fn create_stage_progress_paragraph(session_data: &CampaignData) -> Paragraph {
-        let ps_cum_style = if session_data.executions.ps_cum < SLOW_EXEC_PS_THRESHOLD {
+        let ps_cum_style = if session_data.executions.per_sec.cum < SLOW_EXEC_PS_THRESHOLD {
             Style::default().fg(Color::Red)
         } else {
             Style::default()
         };
 
-        let ps_min_style = if session_data.executions.ps_min < SLOW_EXEC_PS_THRESHOLD {
+        let ps_min_style = if session_data.executions.per_sec.min < SLOW_EXEC_PS_THRESHOLD {
             Style::default().fg(Color::Red)
         } else {
             Style::default()
         };
 
-        let ps_avg_style = if session_data.executions.ps_avg < SLOW_EXEC_PS_THRESHOLD {
+        let ps_avg_style = if session_data.executions.per_sec.avg < SLOW_EXEC_PS_THRESHOLD {
             Style::default().fg(Color::Red)
         } else {
             Style::default()
         };
 
-        let ps_max_style = if session_data.executions.ps_max < SLOW_EXEC_PS_THRESHOLD {
+        let ps_max_style = if session_data.executions.per_sec.max < SLOW_EXEC_PS_THRESHOLD {
             Style::default().fg(Color::Red)
         } else {
             Style::default()
@@ -386,30 +403,30 @@ impl Tui {
         let text = vec![
             Line::from(format!(
                 "Execs: {} ({}->{}<-{})",
-                Self::format_int_to_hint(session_data.executions.cum),
-                Self::format_int_to_hint(session_data.executions.min),
-                Self::format_int_to_hint(session_data.executions.avg),
-                Self::format_int_to_hint(session_data.executions.max),
+                Self::format_int_to_hint(session_data.executions.count.cum),
+                Self::format_int_to_hint(session_data.executions.count.min),
+                Self::format_int_to_hint(session_data.executions.count.avg),
+                Self::format_int_to_hint(session_data.executions.count.max),
             )),
             Line::from(vec![
                 Span::raw("Execs/s: "),
                 Span::styled(
-                    Self::format_float_to_hfloat(session_data.executions.ps_cum),
+                    Self::format_float_to_hfloat(session_data.executions.per_sec.cum),
                     ps_cum_style,
                 ),
                 Span::raw(" ("),
                 Span::styled(
-                    Self::format_float_to_hfloat(session_data.executions.ps_min),
+                    Self::format_float_to_hfloat(session_data.executions.per_sec.min),
                     ps_min_style,
                 ),
                 Span::raw("->"),
                 Span::styled(
-                    Self::format_float_to_hfloat(session_data.executions.ps_avg),
+                    Self::format_float_to_hfloat(session_data.executions.per_sec.avg),
                     ps_avg_style,
                 ),
                 Span::raw("<-"),
                 Span::styled(
-                    Self::format_float_to_hfloat(session_data.executions.ps_max),
+                    Self::format_float_to_hfloat(session_data.executions.per_sec.max),
                     ps_max_style,
                 ),
                 Span::raw(")"),
@@ -441,17 +458,17 @@ Cycles without finds: {} ({}/{})",
             session_data.levels.avg,
             session_data.levels.min,
             session_data.levels.max,
-            Self::format_int_to_hint(session_data.pending.favorites_cum),
-            Self::format_int_to_hint(session_data.pending.favorites_min),
-            Self::format_int_to_hint(session_data.pending.favorites_avg),
-            Self::format_int_to_hint(session_data.pending.favorites_max),
-            Self::format_int_to_hint(session_data.pending.total_cum),
-            Self::format_int_to_hint(session_data.pending.total_min),
-            Self::format_int_to_hint(session_data.pending.total_avg),
-            Self::format_int_to_hint(session_data.pending.total_max),
-            session_data.cycles.wo_finds_avg,
-            session_data.cycles.wo_finds_min,
-            session_data.cycles.wo_finds_max
+            Self::format_int_to_hint(session_data.pending.favorites.cum),
+            Self::format_int_to_hint(session_data.pending.favorites.min),
+            Self::format_int_to_hint(session_data.pending.favorites.avg),
+            Self::format_int_to_hint(session_data.pending.favorites.max),
+            Self::format_int_to_hint(session_data.pending.total.cum),
+            Self::format_int_to_hint(session_data.pending.total.min),
+            Self::format_int_to_hint(session_data.pending.total.avg),
+            Self::format_int_to_hint(session_data.pending.total.max),
+            session_data.cycles.wo_finds.avg,
+            session_data.cycles.wo_finds.min,
+            session_data.cycles.wo_finds.max
         );
 
         Paragraph::new(content)
@@ -522,7 +539,7 @@ Cycles without finds: {} ({}/{})",
                 let event_time = (*total_run_time).checked_sub(Duration::from_millis(event.time));
                 event_time.map_or_else(
                     || "N/A".to_string(),
-                    |duration: std::time::Duration| format_duration(&duration),
+                    |duration: std::time::Duration| Self::format_duration(&duration),
                 )
             },
         )

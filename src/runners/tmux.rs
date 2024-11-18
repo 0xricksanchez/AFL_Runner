@@ -1,72 +1,45 @@
-use crate::runners::runner::{Runner, Session};
-use anyhow::Result;
-use std::{
-    path::Path,
-    process::{Command, Stdio},
-};
+use anyhow::{Context, Result};
+use std::process::Command;
 
-pub const TMUX_TEMPLATE: &str = include_str!("../templates/tmux.txt");
+use crate::runners::runner::{templates, Session, SessionManager};
 
-pub struct Tmux {
-    inner: Session,
-}
+/// Tmux session manager implementation
+pub struct Tmux;
 
-impl Runner for Tmux {
-    fn new(session_name: &str, commands: &[String], pid_file: &Path) -> Self {
-        Self {
-            inner: Session::new(session_name, commands, "tmux", pid_file),
-        }
+impl SessionManager for Tmux {
+    fn manager_name() -> &'static str {
+        "tmux"
     }
 
-    fn create_bash_script(&self) -> Result<String> {
-        self.inner.create_bash_script(TMUX_TEMPLATE)
+    fn template() -> &'static str {
+        templates::TMUX
     }
 
-    fn is_present(&self) -> bool {
-        let output = Command::new("tmux")
-            .args(["has-session", "-t", &self.inner.name])
-            .output()
-            .unwrap();
-        output.status.success()
+    fn version_flag() -> &'static str {
+        "-V"
     }
 
-    fn kill_session(&self) -> Result<()> {
-        let mut cmd = Command::new("tmux");
-        cmd.arg("kill-session")
-            .arg("-t")
-            .arg(&self.inner.name)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        Session::run_command(cmd)
+    fn build_session_check_command(session_name: &str) -> Command {
+        let mut cmd = Command::new(Self::manager_name());
+        cmd.args(["has-session", "-t", session_name]);
+        cmd
     }
 
-    fn attach(&self) -> Result<()> {
-        let get_first_window_id = self.find_first_window_id()?;
-        let target = format!("{}:{}", &self.inner.name, get_first_window_id);
-        let mut cmd = Command::new("tmux");
-        cmd.args(["attach-session", "-t", &target])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        Session::run_command(cmd)
+    fn build_kill_command(session_name: &str) -> Command {
+        let mut cmd = Command::new(Self::manager_name());
+        cmd.args(["kill-session", "-t", session_name]);
+        cmd
     }
 
-    fn run(&self) -> Result<()> {
-        self.inner.run()
+    fn build_attach_command(session_name: &str) -> Command {
+        let mut cmd = Command::new(Self::manager_name());
+        cmd.args(["attach-session", "-t", session_name]);
+        cmd
     }
 
-    fn run_with_tui(&self, out_dir: &Path) -> Result<()> {
-        if let Err(e) = self.inner.run_with_tui(out_dir) {
-            let _ = self.kill_session();
-            return Err(e);
-        }
-        Ok(())
-    }
-}
-
-impl Tmux {
-    fn find_first_window_id(&self) -> Result<String> {
-        let output = Command::new("tmux")
-            .args(["list-windows", "-t", &self.inner.name])
+    fn post_attach_setup(session_name: &str) -> Result<()> {
+        let output = Command::new(Self::manager_name())
+            .args(["list-windows", "-t", session_name])
             .output()?;
 
         if !output.status.success() {
@@ -74,12 +47,39 @@ impl Tmux {
         }
 
         let output_str = String::from_utf8(output.stdout)?;
-        let first_window = output_str.chars().next().unwrap();
-        if first_window == '0' || first_window == '1' {
-            Ok(first_window.to_string())
-        } else {
-            self.kill_session()?;
-            anyhow::bail!("Failed to find first window id");
+        let first_window = output_str.chars().next().context("No windows found")?;
+
+        if first_window != '0' && first_window != '1' {
+            anyhow::bail!("Invalid window ID: {}", first_window);
         }
+
+        Ok(())
     }
 }
+
+/// Type alias for a Tmux session
+pub type TmuxSession = Session<Tmux>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tmux_commands() {
+        let session_name = "test_session";
+
+        let check_cmd = Tmux::build_session_check_command(session_name);
+        assert_eq!(check_cmd.get_program(), "tmux");
+        assert_eq!(
+            check_cmd.get_args().collect::<Vec<_>>(),
+            vec!["has-session", "-t", "test_session"]
+        );
+
+        let kill_cmd = Tmux::build_kill_command(session_name);
+        assert_eq!(
+            kill_cmd.get_args().collect::<Vec<_>>(),
+            vec!["kill-session", "-t", "test_session"]
+        );
+    }
+}
+
