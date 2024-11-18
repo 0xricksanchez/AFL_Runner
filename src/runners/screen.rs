@@ -1,67 +1,65 @@
-use crate::runners::runner::{Runner, Session};
-use anyhow::Result;
-use std::{
-    path::Path,
-    process::{Command, Stdio},
-};
+use std::process::Command;
 
-pub const SCREEN_TEMPLATE: &str = include_str!("../templates/screen.txt");
+use crate::runners::runner::{templates, Session, SessionManager};
 
-pub struct Screen {
-    inner: Session,
-}
+/// Screen session manager implementation
+pub struct Screen;
 
-impl Runner for Screen {
-    fn new(session_name: &str, commands: &[String], pid_file: &Path) -> Self {
-        Self {
-            inner: Session::new(session_name, commands, "screen", pid_file),
-        }
+impl SessionManager for Screen {
+    fn manager_name() -> &'static str {
+        "screen"
     }
 
-    fn is_present(&self) -> bool {
-        let output = Command::new("screen")
-            .args(["-list", &self.inner.name])
-            .output()
-            .unwrap();
-        if !output.status.success() {
-            return false;
-        }
-        String::from_utf8(output.stdout).map_or(false, |output| output.contains(&self.inner.name))
+    fn template() -> &'static str {
+        templates::SCREEN
     }
 
-    fn create_bash_script(&self) -> Result<String> {
-        self.inner.create_bash_script(SCREEN_TEMPLATE)
+    fn version_flag() -> &'static str {
+        "-v"
     }
 
-    fn kill_session(&self) -> Result<()> {
-        let mut cmd = Command::new("screen");
-        cmd.arg("-S")
-            .arg(&self.inner.name)
-            .arg("-X")
-            .arg("kill")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        Session::run_command(cmd)
+    fn build_session_check_command(session_name: &str) -> Command {
+        let mut cmd = Command::new(Self::manager_name());
+        cmd.args(["-list", session_name]);
+        cmd
     }
 
-    fn attach(&self) -> Result<()> {
-        let mut cmd = Command::new("screen");
-        cmd.arg("-r")
-            .arg(&self.inner.name)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        Session::run_command(cmd)
+    fn build_kill_command(session_name: &str) -> Command {
+        let mut cmd = Command::new(Self::manager_name());
+        cmd.args(["-S", session_name, "-X", "kill"]);
+        cmd
     }
 
-    fn run(&self) -> Result<()> {
-        self.inner.run()
-    }
-
-    fn run_with_tui(&self, out_dir: &Path) -> Result<()> {
-        if let Err(e) = self.inner.run_with_tui(out_dir) {
-            let _ = self.kill_session();
-            return Err(e);
-        }
-        Ok(())
+    fn build_attach_command(session_name: &str) -> Command {
+        let mut cmd = Command::new(Self::manager_name());
+        cmd.args(["-r", session_name]);
+        cmd
     }
 }
+
+/// Type alias for a Screen session
+pub type ScreenSession = Session<Screen>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_screen_commands() {
+        let session_name = "test_session";
+
+        let check_cmd = Screen::build_session_check_command(session_name);
+        assert_eq!(check_cmd.get_program(), "screen");
+        assert_eq!(
+            check_cmd.get_args().collect::<Vec<_>>(),
+            vec!["-list", "test_session"]
+        );
+
+        let kill_cmd = Screen::build_kill_command(session_name);
+        assert_eq!(
+            kill_cmd.get_args().collect::<Vec<_>>(),
+            vec!["-S", "test_session", "-X", "kill"]
+        );
+    }
+}
+

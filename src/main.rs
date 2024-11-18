@@ -18,15 +18,19 @@ mod data_collection;
 mod harness;
 mod runners;
 mod session;
+use crate::cli::AFL_CORPUS;
+use crate::session::CampaignData;
 use crate::{
     afl_cmd::{Printable, ToStringVec},
     afl_cmd_gen::AFLCmdGenerator,
     cli::{Config, GenArgs, KillArgs, RunArgs, TuiArgs},
     harness::Harness,
-    runners::runner::Runner,
+    runners::{
+        runner::{Session, SessionManager},
+        screen::ScreenSession,
+        tmux::TmuxSession,
+    },
 };
-use crate::{cli::AFL_CORPUS, runners::screen::Screen};
-use crate::{runners::tmux::Tmux, session::CampaignData};
 mod log_buffer;
 mod seed;
 mod system_utils;
@@ -142,26 +146,30 @@ fn execute_kill_command(args: &KillArgs) -> Result<()> {
 
     let mut terminated = false;
 
-    let tmux = Tmux::new(session_name, &[], Path::new("/tmp/aflr_foobar_1337"));
-    if tmux.is_present() {
-        println!(
-            "[+] Found TMUX session: {}. Terminating it...",
-            session_name
-        );
-        tmux.kill_session().context("Failed to kill TMUX session")?;
-        terminated = true;
+    // Try Tmux session
+    if let Ok(tmux) = TmuxSession::new(session_name, &[], Path::new("/tmp/aflr_foobar_1337")) {
+        if tmux.is_present() {
+            println!(
+                "[+] Found TMUX session: {}. Terminating it...",
+                session_name
+            );
+            tmux.kill_session().context("Failed to kill TMUX session")?;
+            terminated = true;
+        }
     }
 
-    let screen = Screen::new(session_name, &[], Path::new("/tmp/aflr_foobar_1337"));
-    if screen.is_present() {
-        println!(
-            "[+] Found SCREEN session: {}. Terminating it...",
-            session_name
-        );
-        screen
-            .kill_session()
-            .context("Failed to kill SCREEN session")?;
-        terminated = true;
+    // Try Screen session
+    if let Ok(screen) = ScreenSession::new(session_name, &[], Path::new("/tmp/aflr_foobar_1337")) {
+        if screen.is_present() {
+            println!(
+                "[+] Found SCREEN session: {}. Terminating it...",
+                session_name
+            );
+            screen
+                .kill_session()
+                .context("Failed to kill SCREEN session")?;
+            terminated = true;
+        }
     }
 
     if !terminated {
@@ -323,22 +331,40 @@ impl RunCommandExecutor<'_> {
         let pid_fn = format!("/tmp/.{}_{}.pids", &sname, std::process::id());
         let pid_fn_path = Path::new(&pid_fn);
 
-        let srunner: Box<dyn Runner> = match &merged_args.session_runner {
-            SessionRunner::Screen => Box::new(Screen::new(&sname, afl_commands, pid_fn_path)),
-            SessionRunner::Tmux => Box::new(Tmux::new(&sname, afl_commands, pid_fn_path)),
-        };
+        fn run_session<T: SessionManager>(
+            session: &Session<T>,
+            args: &RunArgs,
+            session_type: &str,
+        ) -> Result<()> {
+            if args.tui {
+                session
+                    .run_with_tui(&args.gen_args.output_dir.clone().unwrap())
+                    .with_context(|| format!("Failed to run TUI {session_type} session"))?;
+            } else {
+                session
+                    .run()
+                    .with_context(|| format!("Failed to run {session_type} session"))?;
+                if !args.detached {
+                    session
+                        .attach()
+                        .with_context(|| format!("Failed to attach to {session_type} session"))?;
+                }
+            }
+            Ok(())
+        }
 
-        if merged_args.tui {
-            srunner
-                .run_with_tui(&merged_args.gen_args.output_dir.clone().unwrap())
-                .context("Failed to run TUI session")?;
-        } else {
-            srunner.run().context("Failed to run session")?;
-            if !merged_args.detached {
-                srunner.attach().context("Failed to attach to session")?;
+        match &merged_args.session_runner {
+            SessionRunner::Screen => {
+                let screen = ScreenSession::new(&sname, afl_commands, pid_fn_path)
+                    .context("Failed to create Screen session")?;
+                run_session(&screen, merged_args, "Screen")
+            }
+            SessionRunner::Tmux => {
+                let tmux = TmuxSession::new(&sname, afl_commands, pid_fn_path)
+                    .context("Failed to create Tmux session")?;
+                run_session(&tmux, merged_args, "Tmux")
             }
         }
-        Ok(())
     }
 }
 

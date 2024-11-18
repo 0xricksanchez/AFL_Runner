@@ -22,20 +22,46 @@ tmux -2u new-session -d -s $SESSION_NAME
 # Initialize the PID list
 AFLR_PID_LIST=""
 
+# Function to wait for shell to be ready
+wait_for_shell() {
+    local window=$1
+    local max_attempts=10
+    local attempt=1
+    local marker="AFLR_SHELL_READY_$$"  # Use PID to make marker unique
+    
+    # Send echo command with our marker
+    tmux send-keys -t "$SESSION_NAME:$window" "echo '$marker'" C-m
+    
+    while [ $attempt -le $max_attempts ]; do
+        if tmux capture-pane -p -t "$SESSION_NAME:$window" | grep -q "$marker"; then
+            sleep 0.1  # Small delay to ensure shell is fully ready after marker
+            return 0
+        fi
+        sleep 0.1
+        attempt=$((attempt + 1))
+    done
+    return 1
+}
+
 # Create and rename a window for each command
 for i in "${!COMMANDS[@]}"; do
-	sleep 0.1
-	WINDOW_NAME="window-$i"
-	TEMP_PID_FILE="/tmp/aflr_pid_${i}.txt"
-	if [ $i -eq 0 ]; then
-		# For the first command, send it to the first window and rename it
-    	tmux send-keys -t $SESSION_NAME " { ${COMMANDS[$i]} & echo \$! > $TEMP_PID_FILE; clear; fg; }" C-m
-		tmux rename-window -t $SESSION_NAME $WINDOW_NAME
-	else
-		# For subsequent commands, create new windows and rename them
-		tmux new-window -t $SESSION_NAME -n $WINDOW_NAME
-    tmux send-keys -t $SESSION_NAME:$WINDOW_NAME " { ${COMMANDS[$i]} & echo \$! > $TEMP_PID_FILE; clear; fg; }" C-m
-	fi
+    WINDOW_NAME="window-$i"
+    TEMP_PID_FILE="/tmp/aflr_pid_${i}.txt"
+    
+    if [ $i -eq 0 ]; then
+        # For the first command, send it to the first window and rename it
+        tmux rename-window -t $SESSION_NAME $WINDOW_NAME
+        wait_for_shell "$WINDOW_NAME"
+        tmux send-keys -t $SESSION_NAME " { ${COMMANDS[$i]} & echo \$! > $TEMP_PID_FILE; clear; fg; }" C-m
+    else
+        # For subsequent commands, create new windows and rename them
+        tmux new-window -t $SESSION_NAME -n $WINDOW_NAME
+        wait_for_shell "$WINDOW_NAME"
+        tmux send-keys -t $SESSION_NAME:$WINDOW_NAME " { ${COMMANDS[$i]} & echo \$! > $TEMP_PID_FILE; clear; fg; }" C-m
+    fi
+    
+    # Add a small delay between windows
+    sleep 0.2
 done
 
 # Wait for all commands to start and PIDs to be written
