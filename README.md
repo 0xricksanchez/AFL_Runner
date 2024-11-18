@@ -2,6 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/afl_runner.svg)](https://crates.io/crates/afl_runner)
 [![License](https://img.shields.io/badge/license%20-%20Apache%202.0%20-%20blue)](LICENSE)
+[![Rust](https://github.com/0xricksanchez/AFL_Runner/actions/workflows/rust.yml/badge.svg)](https://github.com/0xricksanchez/AFL_Runner/actions/workflows/rust.yml)
 
 `AFL_Runner` is a modern CLI tool designed to streamline running efficient multi-core [AFLPlusPlus](https://github.com/AFLplusplus/AFLplusplus) campaigns. The default configuration is based on the section [_Using multiple cores_](https://aflplus.plus/docs/fuzzing_in_depth/#c-using-multiple-cores) of the official documentation.
 
