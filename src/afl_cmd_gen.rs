@@ -345,6 +345,7 @@ impl AFLCmdGenerator {
         self.apply_target_args(&mut cmds);
         self.apply_cmpcov(&mut cmds, &mut rng);
 
+        // Apply additional flags
         if let Some(additional_flags) = &self.additional_flags {
             for flag_group in additional_flags {
                 let (dash_flags, env_flags): (Vec<_>, Vec<_>) = flag_group
@@ -366,6 +367,9 @@ impl AFLCmdGenerator {
                 apply_env_vars(&mut cmds, &env_flags.iter().map(String::as_str).collect::<Vec<&str>>(), flag_group.probability.map(f64::from), flag_group.count.map(|c| c as usize), &mut rng);
             }
         }
+        
+        // Verify and merge AFL environment variables
+        self.verify_and_merge_env_vars(&mut cmds);
 
         // NOTE: Needs to called last as it relies on cmpcov/cmplog being already set
         self.apply_fuzzer_roles(&mut cmds);
@@ -386,6 +390,33 @@ impl AFLCmdGenerator {
 
         let cmd_strings = cmds.into_iter().map(|cmd| cmd.assemble()).collect();
         Ok(cmd_strings)
+    }
+
+    /// Verifies and merges AFL environment variables
+    fn verify_and_merge_env_vars(&self, cmds: &mut [AflCmd]) {
+        let allowed_merge_keys = ["AFL_PRELOAD", "LD_PRELOAD"];
+        let mut env_map = std::collections::HashMap::new();
+
+        for cmd in cmds {
+            for env in &cmd.env {
+                let mut split = env.splitn(2, '=');
+                if let (Some(key), Some(value)) = (split.next(), split.next()) {
+                    if allowed_merge_keys.contains(&key) {
+                        env_map.entry(key).or_insert_with(Vec::new).push(value.to_string());
+                    }
+                }
+            }
+        }
+
+        for cmd in &mut *cmds {
+            for key in &allowed_merge_keys {
+                if let Some(values) = env_map.get(key) {
+                    let merged_value = values.join(":");
+                    cmd.env.retain(|env| !env.starts_with(key));
+                    cmd.env.push(format!("{}={}", key, merged_value));
+                }
+            }
+        }
     }
 
     /// Initializes AFL configurations

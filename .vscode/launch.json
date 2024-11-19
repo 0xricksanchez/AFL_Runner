@@ -1,0 +1,145 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Custom Mutator",
+            "cargo": {
+                "args": [
+                    "build",
+                ],
+                "filter": {
+                    "name": "aflr",
+                    "kind": "bin"
+                }
+            },
+            "args": ["gen", "--config", "/home/user/AFL_Runner/config.toml"],
+            "cwd": "${workspaceFolder}",
+            "env": {"AFL_CUSTOM_MUTATOR_LIBRARY": "/tmp/test"}
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Normal",
+            "cargo": {
+                "args": [
+                    "build",
+                ],
+                "filter": {
+                    "name": "aflr",
+                    "kind": "bin"
+                }
+            },
+            "args": ["gen", "--config", "/home/user/AFL_Runner/config.toml"],
+            "cwd": "${workspaceFolder}",
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Use defaults",
+            "cargo": {
+                "args": [
+                    "build",
+                ],
+                "filter": {
+                    "name": "aflr",
+                    "kind": "bin"
+                }
+            },
+            "args": ["gen", "--use-afl-defaults", "--config", "/home/user/AFL_Runner/config.toml"],
+            "cwd": "${workspaceFolder}",
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Run",
+            "cargo": {
+                "args": [
+                    "build",
+                ],
+                "filter": {
+                    "name": "aflr",
+                    "kind": "bin"
+                }
+            },
+            "args": ["run", "--config", "/home/user/AFL_Runner/config.toml"],
+            "cwd": "${workspaceFolder}",
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Help",
+            "cargo": {
+                "args": [
+                    "build",
+                ],
+                "filter": {
+                    "name": "aflr",
+                    "kind": "bin"
+                }
+            },
+            "args": ["gen", "--help"],
+            "cwd": "${workspaceFolder}",
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'dummy'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=dummy",
+                    "--package=aflr_demo"
+                ],
+                "filter": {
+                    "name": "dummy",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'aflr'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=aflr",
+                    "--package=afl_runner"
+                ],
+                "filter": {
+                    "name": "aflr",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'aflr'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=aflr",
+                    "--package=afl_runner"
+                ],
+                "filter": {
+                    "name": "aflr",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
