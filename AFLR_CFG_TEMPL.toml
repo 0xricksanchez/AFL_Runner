@@ -1,6 +1,6 @@
 [target]
 # Target binary to fuzz
-path = "/path/to/instrumented/target"
+path = "/path/to/afl_instrumented/target"
 
 # Instrumented with *SAN binary to use
 san_path = "/path/to/sanitizer/target"
@@ -11,8 +11,26 @@ cmpl_path = "/path/to/cmplog/target"
 # Instrumented with Laf-intel/CMPCOV binary to use
 cmpc_path = "/path/to/cmpcov/target"
 
+# Instrumented for code-coverage dumping
+cov_path = "/path/to/cov/target"
+
 # Target binary arguments, including @@ if needed
 args = ["-foo", "--bar", "baz", "@@"]
+
+[coverage]
+# Report type: HTML, TEXT
+report_type = "HTML"
+
+# Generate a report for each queue sub-directory instead of a unified one
+split_reports = false
+
+# Miscellaneous flags the user wants to provide extra to `llvm-cov show...`
+# Compare: https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-show
+misc_show_args = ["--format=html"]
+
+# Miscellaneous flags the user wants to provide extra to `llvm-cov report...`
+# Compare: https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-report
+misc_report_args = []
 
 [afl_cfg]
 # Amount of processes to spin up
@@ -24,7 +42,7 @@ afl_binary = "/path/to/afl-fuzz"
 # Seed corpus directory
 seed_dir = "/path/to/input_dir"
 
-# Solution/Crash output directory
+# Solution/Crash output directory (AFL++ output_dir)
 solution_dir = "/path/to/output_dir"
 
 # Token dictionary to use
@@ -34,8 +52,8 @@ dictionary = "/path/to/dictionary"
 afl_flags = "-T 'MyFuzzer' -s 1234 -t 1000+"
 
 # Select the mode that determines the fuzzing strategy
-# Available modes: default, multiple-cores, ci-fuzzing
-mode = "multiple-cores"
+# Available modes: Default, MultipleCores, CIFuzzing
+mode = "MultipleCores"
 
 
 [session]

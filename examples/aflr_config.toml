@@ -11,6 +11,9 @@ cmpl_path = "./xmllint_cmplog_2.10.0"
 # Instrumented with Laf-intel/CMPCOV binary to use
 cmpc_path = "./xmllint_cmpcov_2.10.0"
 
+# Instrumented for code-coverage dumping
+cov_path = "./xmllint_coverage_2.10.0"
+
 # Target binary arguments, including @@ if needed
 args = [
   "--memory",
@@ -22,6 +25,21 @@ args = [
   "--xinclude",
   "@@",
 ]
+
+[coverage]
+# Report type: HTML, TEXT
+report_type = "TEXT"
+
+# Generate a report for each queue sub-directory instead of a unified one
+split_reports = false
+
+# Miscellaneous flags the user wants to provide extra to `llvm-cov show...`
+# Compare: https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-show
+misc_show_args = []
+
+# Miscellaneous flags the user wants to provide extra to `llvm-cov report...`
+# Compare: https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-report
+misc_report_args = []
 
 [afl_cfg]
 # Amount of processes to spin up

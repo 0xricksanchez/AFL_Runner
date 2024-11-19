@@ -27,7 +27,8 @@ Currently, this tool should work on all \*NIX flavor operating-systems.
 - [Rust toolchain v1.78.0+](https://www.rust-lang.org/tools/install) 🦀
 - [AFLPlusPlus](https://github.com/AFLplusplus/AFLplusplus)
 - [pgrep](https://man7.org/linux/man-pages/man1/pgrep.1.html)
-- [TMUX](https://github.com/tmux/tmux) || [screen](https://www.gnu.org/software/screen/) (Optional)
+- [TMUX](https://github.com/tmux/tmux) || [screen](https://www.gnu.org/software/screen/) (Optional for TUI)
+- [LLVM](https://llvm.org/) (Optional for coverage reporting)
 
 ### Installation
 
@@ -62,6 +63,7 @@ aflr --help
   - [x] Support for \*SAN, CMPLOG, CMPCOV binaries
 
 - Other features:
+  - [x] Coverage collection/visualization
   - [x] `Tmux` or `screen` option to automatically create an appropriate layout for all runners
   - [x] TUI
   - [x] Provide a configuration file via `--config` to make sharing/storing per project configurations easier
@@ -107,8 +109,9 @@ The example builds a recent version of _libxml2_ four times with different compi
 
 1. plain AFL++ instrumentation
 2. Address-Sanitizer (ASan)
-3. CMPCOV, and
-4. CMPLOG.
+3. CMPCOV,
+4. CMPLOG, and
+5. Coverage visualization
 
 Afterwards, the necessary commands for 16 instances are being generated, which then are executed in a dedicated TMUX session.
 Finally, a custom TUI offered by _AFL Runner_ is tracking the progress of the fuzzing campaign in a centralized space:
@@ -116,6 +119,10 @@ Finally, a custom TUI offered by _AFL Runner_ is tracking the progress of the fu
 ![AFL_Runner demo](img/demo.gif)
 
 _Note_: The TUI can be used as a **full** replacement for `afl-whatsup` by using `afl_runner tui <afl_output_dir>`!
+
+Coverage visualization is also covered by `AFL_Runner`:
+
+![AFL_Runner cov](img/cov.gif)
 
 ## Contributing 🤝
 
