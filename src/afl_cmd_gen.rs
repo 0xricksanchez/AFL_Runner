@@ -93,7 +93,8 @@ impl AFLCmdGenerator {
 
     /// Generates AFL commands based on the configuration
     pub fn run(&self) -> Result<Vec<AflCmd>> {
-        let mut rng = StdRng::seed_from_u64(Xorshift64::new(self.seed.unwrap_or(0)).next());
+        let seed = Xorshift64::new(self.seed.unwrap_or(0)).next();
+        let mut rng = StdRng::seed_from_u64(seed);
 
         let afl_envs = AFLEnv::new(self.runners as usize, self.use_afl_defaults, &mut rng);
         let mut cmds = self.create_initial_cmds(&afl_envs)?;
@@ -106,6 +107,10 @@ impl AFLCmdGenerator {
 
         if !self.use_afl_defaults {
             Self::apply_strategies(&mut cmds, &mut rng, is_using_custom_mutator);
+        }
+
+        if self.seed.is_some() {
+            self.apply_afl_seed(&mut cmds, seed);
         }
 
         self.apply_directory(&mut cmds);
@@ -260,6 +265,12 @@ impl AFLCmdGenerator {
             for cmd in cmds {
                 cmd.with_target_args(Some(args.clone()));
             }
+        }
+    }
+
+    fn apply_afl_seed(&self, cmds: &mut [AflCmd], seed: u64) {
+        for cmd in cmds {
+            cmd.add_flag(format!("-s {seed}"));
         }
     }
 }
@@ -536,13 +547,23 @@ mod tests {
             None,
             None,
             false,
-            true, // Use AFL defaults
-            Some(42),
+            true,
+            None,
         );
 
         let cmds_with_defaults = generator_with_defaults.run().unwrap();
 
         // Commands with defaults should be simpler
         assert!(cmds_with_defaults[0].to_string().len() < cmds_no_defaults[0].to_string().len());
+    }
+
+    #[test]
+    fn test_afl_relay_seed() {
+        let (_temp_dir, generator) = setup_test_generator();
+        let cmds = generator.run().unwrap();
+        let expected_seed = Xorshift64::new(generator.seed.unwrap()).next();
+
+        assert!(cmds[0].to_string().contains("-s"));
+        assert!(cmds[0].to_string().contains(&format!("{}", expected_seed)));
     }
 }
