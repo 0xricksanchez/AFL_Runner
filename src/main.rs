@@ -9,10 +9,7 @@ use tui::Tui;
 use clap::Parser;
 use cli::{Cli, Commands, ConfigMerge, SessionRunner};
 
-mod afl_cmd;
-mod afl_cmd_gen;
-mod afl_env;
-mod afl_strategies;
+mod afl;
 mod cli;
 mod data_collection;
 mod harness;
@@ -21,8 +18,8 @@ mod session;
 use crate::cli::AFL_CORPUS;
 use crate::session::CampaignData;
 use crate::{
-    afl_cmd::{Printable, ToStringVec},
-    afl_cmd_gen::AFLCmdGenerator,
+    afl::cmd::{Printable, ToStringVec},
+    afl::cmd_gen::AFLCmdGenerator,
     cli::{Config, GenArgs, KillArgs, RunArgs, TuiArgs},
     harness::Harness,
     runners::{
@@ -73,7 +70,7 @@ fn create_afl_runner(
         raw_afl_flags,
         gen_args.afl_binary.clone(),
         is_ramdisk,
-        gen_args.use_afl_defaults,
+        gen_args.mode,
         seed,
     ))
 }

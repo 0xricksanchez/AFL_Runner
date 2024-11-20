@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 /// Represents an AFL command configuration
 #[derive(Debug, Clone)]
-pub struct AflCmd {
+pub struct AFLCmd {
     /// Path to the AFL binary
     pub afl_binary: PathBuf,
     /// Environment variables for the AFL command
@@ -19,7 +19,7 @@ pub struct AflCmd {
     pub target_args: Option<String>,
 }
 
-impl AflCmd {
+impl AFLCmd {
     pub fn new(afl_binary: PathBuf, target_binary: PathBuf) -> Self {
         Self {
             afl_binary,
@@ -93,7 +93,7 @@ impl AflCmd {
     }
 }
 
-impl std::fmt::Display for AflCmd {
+impl std::fmt::Display for AFLCmd {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.assemble())
     }
@@ -103,13 +103,13 @@ pub trait Printable {
     fn print(&self);
 }
 
-impl Printable for AflCmd {
+impl Printable for AFLCmd {
     fn print(&self) {
         println!("{self}");
     }
 }
 
-impl Printable for Vec<AflCmd> {
+impl Printable for Vec<AFLCmd> {
     fn print(&self) {
         println!("Generated commands:");
         for (i, cmd) in self.iter().enumerate() {
@@ -123,7 +123,7 @@ pub trait ToStringVec {
     fn to_string_vec(&self) -> Vec<String>;
 }
 
-impl ToStringVec for Vec<AflCmd> {
+impl ToStringVec for Vec<AFLCmd> {
     fn to_string_vec(&self) -> Vec<String> {
         self.iter().map(std::string::ToString::to_string).collect()
     }

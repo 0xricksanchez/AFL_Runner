@@ -2,6 +2,8 @@ use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use serde::Deserialize;
 use std::path::PathBuf;
 
+use crate::afl::mode::Mode;
+
 /// Default corpus directory
 pub const AFL_CORPUS: &str = "/tmp/afl_input";
 /// Default output directory
@@ -97,9 +99,15 @@ pub struct GenArgs {
     /// Path to a TOML config file
     #[arg(long, help = "Path to TOML config file")]
     pub config: Option<PathBuf>,
-    /// Use AFL-Fuzz defaults
-    #[arg(short = 'd', long, help = "Use afl-fuzz defaults", action = ArgAction::SetTrue)]
-    pub use_afl_defaults: bool,
+    /// Select the mode that is used for command generation
+    #[arg(
+        value_enum,
+        short = 'm',
+        long,
+        help = "Select ",
+        default_value = "multiple-cores"
+    )]
+    pub mode: Mode,
     /// Seed to seed `AFL_Runners` internal PRNG
     #[arg(
         long,
@@ -137,10 +145,7 @@ impl ConfigMerge<Self> for GenArgs {
                 .afl_binary
                 .clone()
                 .or_else(|| config.afl_cfg.afl_binary.clone().filter(|b| !b.is_empty())),
-            use_afl_defaults: config
-                .afl_cfg
-                .use_afl_defaults
-                .unwrap_or(self.use_afl_defaults),
+            mode: config.afl_cfg.mode.unwrap_or(self.mode),
             seed: self.seed.or(config.misc.seed),
             use_seed_afl: config.misc.use_seed_afl.unwrap_or(self.use_seed_afl),
             config: self.config.clone(),
@@ -273,8 +278,8 @@ pub struct AflConfig {
     pub dictionary: Option<String>,
     /// Additional AFL flags
     pub afl_flags: Option<String>,
-    /// Use AFL defaults
-    pub use_afl_defaults: Option<bool>,
+    /// Mode to generate commands
+    pub mode: Option<Mode>,
 }
 
 /// Configuration for tmux/screen sessions

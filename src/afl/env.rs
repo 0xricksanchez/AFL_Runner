@@ -8,6 +8,7 @@ use system_utils::get_free_mem_in_mb;
 
 use rand::Rng;
 
+use crate::afl::mode::Mode;
 use crate::system_utils;
 
 /// Enum representing the different AFL environment flags
@@ -31,6 +32,12 @@ pub enum AFLFlag {
     /// When setting `AFL_IMPORT_FIRST`, test cases from other fuzzers in the campaign are loaded first.
     /// Note: This can slow down the start of the first fuzz by quite a lot if you have many fuzzers and/or many seeds.
     ImportFirst,
+    /// Keeps the calibration stage about 2.5x faster (albeit less precise), which can help when starting a session
+    /// against a slow target
+    FastCal,
+    /// Only perform the expensive cmplog feature for newly found test cases and not for test cases that are loaded on
+    /// startup (-i in). This is an important feature to set when resuming a fuzzing session.
+    CmplogOnlyNew,
 }
 
 impl AFLFlag {
@@ -44,6 +51,8 @@ impl AFLFlag {
             Self::ExpandHavocNow => "AFL_EXPAND_HAVOC_NOW",
             Self::IgnoreSeedProblems => "AFL_IGNORE_SEED_PROBLEMS",
             Self::ImportFirst => "AFL_IMPORT_FIRST",
+            Self::FastCal => "AFL_FAST_CAL",
+            Self::CmplogOnlyNew => "AFL_CMPLOG_ONLY_NEW",
         }
     }
 }
@@ -67,6 +76,8 @@ impl FromStr for AFLFlag {
             "AFL_EXPAND_HAVOC_NOW" => Ok(Self::ExpandHavocNow),
             "AFL_IGNORE_SEED_PROBLEMS" => Ok(Self::IgnoreSeedProblems),
             "AFL_IMPORT_FIRST" => Ok(Self::ImportFirst),
+            "AFL_FAST_CAL" => Ok(Self::FastCal),
+            "AFL_CMPLOG_ONLY_NEW" => Ok(Self::CmplogOnlyNew),
             _ => Err(format!("Unknown AFL flag: {s}")),
         }
     }
@@ -76,6 +87,7 @@ impl FromStr for AFLFlag {
 pub struct AFLEnv {
     flags: HashSet<AFLFlag>,
     pub testcache_size: u32,
+    ramdisk: Option<String>,
 }
 
 impl Default for AFLEnv {
@@ -83,6 +95,7 @@ impl Default for AFLEnv {
         Self {
             flags: HashSet::new(),
             testcache_size: 50,
+            ramdisk: None,
         }
     }
 }
@@ -90,19 +103,38 @@ impl Default for AFLEnv {
 impl AFLEnv {
     /// Creates a new vector of `AFLEnv` instances
     #[inline]
-    pub fn new(runners: usize, use_afl_defaults: bool, rng: &mut impl Rng) -> Vec<Self> {
-        let mut envs = vec![Self::default(); runners];
+    pub fn new(
+        mode: &Mode,
+        runners: &u32,
+        ramdisk: &Option<String>,
+        rng: &mut impl Rng,
+    ) -> Vec<Self> {
+        let mut envs = vec![Self::default(); *runners as usize];
+        envs.iter_mut().for_each(|env| {
+            if let Some(ramdisk) = ramdisk {
+                env.ramdisk = Some(ramdisk.clone());
+            }
+        });
+        match mode {
+            Mode::MultipleCores => {
+                Self::apply_flags(&mut envs, &AFLFlag::DisableTrim, 0.60, rng);
+                if *runners < 8 {
+                    // NOTE: With many runners and/or many seeds this can delay the startup significantly
+                    Self::apply_flags(&mut envs, &AFLFlag::ImportFirst, 1.0, rng);
+                }
+            }
+            Mode::CIFuzzing => {
+                Self::apply_flags(&mut envs, &AFLFlag::FastCal, 1.0, rng);
+                Self::apply_flags(&mut envs, &AFLFlag::CmplogOnlyNew, 1.0, rng);
+                Self::apply_flags(&mut envs, &AFLFlag::DisableTrim, 0.65, rng);
+                Self::apply_flags(&mut envs, &AFLFlag::KeepTimeouts, 0.5, rng);
+                Self::apply_flags(&mut envs, &AFLFlag::ExpandHavocNow, 0.4, rng);
+            }
+            Mode::Default => {}
+        }
 
         // Enable FinalSync for the last configuration
         envs.last_mut().unwrap().enable_flag(AFLFlag::FinalSync);
-
-        if !use_afl_defaults {
-            Self::apply_flags(&mut envs, &AFLFlag::DisableTrim, 0.60, rng);
-            if runners < 8 {
-                // NOTE: With many runners and/or many seeds this can delay the startup significantly
-                Self::apply_flags(&mut envs, &AFLFlag::ImportFirst, 1.0, rng);
-            }
-        }
 
         // Set testcache size based on available memory
         let free_mb = get_free_mem_in_mb();
@@ -131,7 +163,7 @@ impl AFLEnv {
     }
 
     /// Generates an `AFLPlusPlus` environment variable string for the current settings
-    pub fn generate(&self, ramdisk: Option<String>) -> Vec<String> {
+    pub fn generate(&self) -> Vec<String> {
         let mut command = Vec::with_capacity(self.flags.len() + 2);
 
         // If this env has FinalSync flag, add it first
@@ -140,7 +172,7 @@ impl AFLEnv {
         }
 
         // Add ramdisk if present
-        if let Some(ramdisk) = ramdisk {
+        if let Some(ref ramdisk) = self.ramdisk {
             command.push(format!("AFL_TMPDIR={ramdisk}"));
         }
 
@@ -267,27 +299,35 @@ mod tests {
             .enable_flag(AFLFlag::DisableTrim)
             .set_testcache_size(100);
 
-        let cmd = env.generate(Some("ramdisk".to_string()));
+        let cmd = env.generate();
 
         // Check ordering
         assert_eq!(cmd[0], "AFL_FINAL_SYNC=1");
-        assert_eq!(cmd[1], "AFL_TMPDIR=ramdisk");
-        assert_eq!(cmd[2], "AFL_AUTORESUME=1");
-        assert_eq!(cmd[3], "AFL_DISABLE_TRIM=1");
-        assert_eq!(cmd[4], "AFL_TESTCACHE_SIZE=100 ");
+        assert_eq!(cmd[1], "AFL_AUTORESUME=1");
+        assert_eq!(cmd[2], "AFL_DISABLE_TRIM=1");
+        assert_eq!(cmd[3], "AFL_TESTCACHE_SIZE=100 ");
+        assert!(!cmd.iter().any(|x| x.contains("AFL_TMPDIR")));
 
-        // Check without ramdisk
-        let cmd_no_ramdisk = env.generate(None);
-        assert_eq!(cmd_no_ramdisk[0], "AFL_FINAL_SYNC=1");
-        assert_eq!(cmd_no_ramdisk[1], "AFL_AUTORESUME=1");
-        assert_eq!(cmd_no_ramdisk[2], "AFL_DISABLE_TRIM=1");
-        assert_eq!(cmd_no_ramdisk[3], "AFL_TESTCACHE_SIZE=100 ");
+        // Check with ramdisk
+        let mut rng = get_test_rng();
+        let aflenv_w_ramdisk = AFLEnv::new(
+            &Mode::MultipleCores,
+            &4,
+            &Some("/ramdisk".to_string()),
+            &mut rng,
+        );
+        let cmd_w_ramdisk = aflenv_w_ramdisk[0].generate();
+
+        assert!(cmd_w_ramdisk[0].contains("AFL_TMPDIR=/ramdisk"));
+        assert!(cmd_w_ramdisk[1].contains("AFL_DISABLE_TRIM=1"));
+        assert!(cmd_w_ramdisk[2].contains("AFL_IMPORT_FIRST=1"));
+        assert!(cmd_w_ramdisk[3].contains("AFL_TESTCACHE_SIZE"));
     }
 
     #[test]
     fn test_new_multiple_environments() {
         let mut rng = get_test_rng();
-        let envs = AFLEnv::new(4, false, &mut rng);
+        let envs = AFLEnv::new(&Mode::MultipleCores, &4_u32, &None, &mut rng);
 
         // Test number of environments
         assert_eq!(envs.len(), 4);
@@ -314,10 +354,11 @@ mod tests {
     #[test]
     fn test_new_with_afl_defaults() {
         let mut rng = get_test_rng();
-        let envs = AFLEnv::new(4, true, &mut rng);
 
-        // Only FinalSync should be set when using AFL defaults
-        assert!(envs.iter().take(3).all(|env| env.flags.len() == 0));
+        let envs = AFLEnv::new(&Mode::Default, &4_u32, &None, &mut rng);
+
+        // At least FinalSync should be set when using AFL defaults
+        assert!(envs.iter().take(3).all(|env| env.flags.is_empty()));
         assert_eq!(envs.last().unwrap().flags.len(), 1);
         assert!(envs.last().unwrap().flags.contains(&AFLFlag::FinalSync));
     }
@@ -325,7 +366,7 @@ mod tests {
     #[test]
     fn test_new_with_many_runners() {
         let mut rng = get_test_rng();
-        let envs = AFLEnv::new(10, false, &mut rng);
+        let envs = AFLEnv::new(&Mode::MultipleCores, &10_u32, &None, &mut rng);
 
         // Test that ImportFirst is not applied when runners >= 8
         assert!(!envs

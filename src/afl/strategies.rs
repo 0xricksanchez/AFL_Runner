@@ -1,4 +1,5 @@
-use crate::afl_cmd::AflCmd;
+use crate::afl::cmd::AFLCmd;
+use crate::afl::mode::Mode;
 use once_cell::sync::Lazy;
 use rand::seq::SliceRandom;
 use std::collections::HashSet;
@@ -177,11 +178,10 @@ pub enum ApplicationMode {
 /// Configuration for optional AFL features
 #[derive(Debug, Clone)]
 pub struct MiscFeatures {
-    /// Probability of enabling deterministic fuzzing (`AFL_DISABLE_DETERMINISTIC`)
-    /// -L 0 flag
-    pub deterministic_fuzzing: Option<f64>,
+    /// Probability of enabling MOpt mutatori -L 0 flag
+    pub mopt_ratio: Option<f64>,
     /// Probability of enabling sequential queue cycling (-Z)
-    pub queue_cycling: Option<f64>,
+    pub seq_queue_cycling_ratio: Option<f64>,
     /// Application mode for optional features
     pub application_mode: ApplicationMode,
 }
@@ -189,16 +189,16 @@ pub struct MiscFeatures {
 impl Default for MiscFeatures {
     fn default() -> Self {
         Self {
-            deterministic_fuzzing: Some(0.1), // -L 0
-            queue_cycling: Some(0.1),         // -Z
+            mopt_ratio: None,
+            seq_queue_cycling_ratio: None,
             application_mode: ApplicationMode::Multiple,
         }
     }
 }
 
 /// Comprehensive AFL strategy configuration
-#[derive(Debug, Clone)]
-pub struct AflStrategy {
+#[derive(Debug, Clone, Default)]
+pub struct AFLStrategy {
     /// Available mutation modes with their probabilities
     pub mutation_modes: Vec<(MutationMode, f64)>,
     /// Available format modes with their probabilities
@@ -213,12 +213,27 @@ pub struct AflStrategy {
     pub cmpcov_config: Option<CmpcovConfig>,
 }
 
-impl Default for AflStrategy {
-    fn default() -> Self {
-        Self {
-            mutation_modes: vec![(MutationMode::Explore, 0.4), (MutationMode::Exploit, 0.2)],
-            format_modes: vec![(FormatMode::Binary, 0.3), (FormatMode::Text, 0.3)],
-            power_schedules: vec![
+impl AFLStrategy {
+    /// Creates a new strategy builder
+    pub fn new(mode: &Mode) -> AFLStrategyBuilder {
+        match mode {
+            Mode::Default => Self::create_default_strategy(),
+            Mode::MultipleCores => Self::create_multicore_strategy(),
+            Mode::CIFuzzing => Self::create_ci_strategy(),
+        }
+    }
+
+    fn create_default_strategy() -> AFLStrategyBuilder {
+        AFLStrategyBuilder::default()
+    }
+
+    fn create_multicore_strategy() -> AFLStrategyBuilder {
+        AFLStrategyBuilder::default()
+            .with_mutation_modes(vec![
+                (MutationMode::Explore, 0.4),
+                (MutationMode::Exploit, 0.2),
+            ])
+            .with_power_schedules(vec![
                 PowerSchedule::Fast,
                 PowerSchedule::Explore,
                 PowerSchedule::Coe,
@@ -226,28 +241,26 @@ impl Default for AflStrategy {
                 PowerSchedule::Quad,
                 PowerSchedule::Exploit,
                 PowerSchedule::Rare,
-            ],
-            optional_features: MiscFeatures::default(),
-            cmplog_config: None,
-            cmpcov_config: None,
-        }
+            ])
+            .with_test_case_format(vec![(FormatMode::Binary, 0.3), (FormatMode::Text, 0.3)])
+            .with_mopt_mutator(Some(0.1))
+            .with_seq_queue_cycling(Some(0.1))
     }
-}
 
-impl AflStrategy {
-    /// Creates a new strategy builder
-    pub fn new() -> AflStrategyBuilder {
-        AflStrategyBuilder::default()
+    fn create_ci_strategy() -> AFLStrategyBuilder {
+        AFLStrategyBuilder::default()
+            .with_mopt_mutator(Some(0.1))
+            .with_seq_queue_cycling(Some(0.2))
     }
 
     /// Applies the strategy to a slice of AFL commands
     pub fn apply<R: rand::Rng>(
-        &self,
-        cmds: &mut [AflCmd],
+        &mut self,
+        cmds: &mut [AFLCmd],
         rng: &mut R,
         is_using_custom_mutator: bool,
-    ) {
-        // Apply mutation modes (exclusively)
+    ) -> Self {
+        // Apply mutatin modes (exclusively)
         if !self.mutation_modes.is_empty() {
             Self::apply_exclusive_args(
                 cmds,
@@ -280,11 +293,23 @@ impl AflStrategy {
 
         // Apply optional features
         self.apply_optional_features(cmds, rng, is_using_custom_mutator);
+
+        // Apply cmplog if available
+        if self.cmplog_config.is_some() {
+            self.apply_cmplog(cmds, rng);
+        }
+
+        // Apply cmpcov if available
+        if self.cmpcov_config.is_some() {
+            self.apply_cmpcov(cmds, rng);
+        }
+
+        self.clone()
     }
 
     /// Applies mutually exclusive arguments to commands
     fn apply_exclusive_args<R: rand::Rng>(
-        cmds: &mut [AflCmd],
+        cmds: &mut [AFLCmd],
         args: &[(String, f64)],
         rng: &mut R,
     ) {
@@ -319,7 +344,7 @@ impl AflStrategy {
     /// Applies optional features based on configuration and application mode
     fn apply_optional_features<R: rand::Rng>(
         &self,
-        cmds: &mut [AflCmd],
+        cmds: &mut [AFLCmd],
         rng: &mut R,
         is_using_custom_mutator: bool,
     ) {
@@ -328,14 +353,14 @@ impl AflStrategy {
 
         let mut optional_args = Vec::new();
 
-        // Collect all applicable optional features
+        // Only apply MOpt if no custom mutator has been specified
         if !is_using_custom_mutator {
-            if let Some(prob) = features.deterministic_fuzzing {
+            if let Some(prob) = features.mopt_ratio {
                 optional_args.push(("-L 0".to_string(), prob));
             }
         }
 
-        if let Some(prob) = features.queue_cycling {
+        if let Some(prob) = features.seq_queue_cycling_ratio {
             optional_args.push(("-Z".to_string(), prob));
         }
 
@@ -355,7 +380,7 @@ impl AflStrategy {
     }
 
     /// Applies power schedules to commands
-    fn apply_power_schedules(&self, cmds: &mut [AflCmd]) {
+    fn apply_power_schedules(&self, cmds: &mut [AFLCmd]) {
         for (i, cmd) in cmds.iter_mut().enumerate() {
             if let Some(schedule) = self.power_schedules.get(i % self.power_schedules.len()) {
                 cmd.misc_afl_flags.push(schedule.to_string());
@@ -364,7 +389,7 @@ impl AflStrategy {
     }
 
     /// Applies CMPLOG instrumentation to the specified number of AFL commands
-    pub fn apply_cmplog<R: rand::Rng>(&self, cmds: &mut [AflCmd], rng: &mut R) {
+    fn apply_cmplog<R: rand::Rng>(&self, cmds: &mut [AFLCmd], rng: &mut R) {
         if self.cmplog_config.is_none() {
             return;
         }
@@ -380,7 +405,7 @@ impl AflStrategy {
         }
     }
 
-    fn apply_single_cmplog(cmds: &mut [AflCmd], config: &CmplogConfig) {
+    fn apply_single_cmplog(cmds: &mut [AFLCmd], config: &CmplogConfig) {
         if let Some(cmd) = cmds.get_mut(1) {
             cmd.misc_afl_flags.push(format!(
                 "{} -c {}",
@@ -390,7 +415,7 @@ impl AflStrategy {
         }
     }
 
-    fn apply_double_cmplog(cmds: &mut [AflCmd], config: &CmplogConfig) {
+    fn apply_double_cmplog(cmds: &mut [AFLCmd], config: &CmplogConfig) {
         if let Some(cmd) = cmds.get_mut(1) {
             cmd.misc_afl_flags.push(format!(
                 "{} -c {}",
@@ -407,7 +432,7 @@ impl AflStrategy {
         }
     }
 
-    fn apply_triple_cmplog(cmds: &mut [AflCmd], config: &CmplogConfig) {
+    fn apply_triple_cmplog(cmds: &mut [AFLCmd], config: &CmplogConfig) {
         if let Some(cmd) = cmds.get_mut(1) {
             cmd.misc_afl_flags.push(format!(
                 "{} -c {}",
@@ -432,7 +457,7 @@ impl AflStrategy {
     }
 
     fn apply_many_cmplog<R: rand::Rng>(
-        cmds: &mut [AflCmd],
+        cmds: &mut [AFLCmd],
         num_cmplog_cfgs: usize,
         config: &CmplogConfig,
         rng: &mut R,
@@ -459,7 +484,7 @@ impl AflStrategy {
     }
 
     /// Applies CMPCOV instrumentation to commands
-    pub fn apply_cmpcov<R: rand::Rng>(&mut self, cmds: &mut [AflCmd], rng: &mut R) {
+    fn apply_cmpcov<R: rand::Rng>(&mut self, cmds: &mut [AFLCmd], rng: &mut R) {
         if self.cmpcov_config.is_none() {
             return;
         }
@@ -498,7 +523,7 @@ impl AflStrategy {
 
 /// Builder for `AflStrategy`
 #[derive(Default)]
-pub struct AflStrategyBuilder {
+pub struct AFLStrategyBuilder {
     mutation_modes: Vec<(MutationMode, f64)>,
     format_modes: Vec<(FormatMode, f64)>,
     power_schedules: Vec<PowerSchedule>,
@@ -507,52 +532,50 @@ pub struct AflStrategyBuilder {
     cmpcov_config: Option<CmpcovConfig>,
 }
 
-impl AflStrategyBuilder {
-    pub fn with_mutation_modes(mut self) -> Self {
-        self.mutation_modes = vec![(MutationMode::Explore, 0.4), (MutationMode::Exploit, 0.2)];
+impl AFLStrategyBuilder {
+    /// Configures mutation modes with custom probabilities
+    pub fn with_mutation_modes(mut self, modes: Vec<(MutationMode, f64)>) -> Self {
+        self.mutation_modes = modes;
         self
     }
 
-    pub fn with_test_case_format(mut self) -> Self {
-        self.format_modes = vec![(FormatMode::Binary, 0.3), (FormatMode::Text, 0.3)];
+    /// Configures test case format modes with custom probabilities
+    pub fn with_test_case_format(mut self, modes: Vec<(FormatMode, f64)>) -> Self {
+        self.format_modes = modes;
         self
     }
 
-    pub fn with_power_schedules(mut self) -> Self {
-        self.power_schedules = vec![
-            PowerSchedule::Fast,
-            PowerSchedule::Explore,
-            PowerSchedule::Coe,
-            PowerSchedule::Lin,
-            PowerSchedule::Quad,
-            PowerSchedule::Exploit,
-            PowerSchedule::Rare,
-        ];
+    /// Configures power schedules with custom sequence
+    pub fn with_power_schedules(mut self, schedules: Vec<PowerSchedule>) -> Self {
+        self.power_schedules = schedules;
         self
     }
 
-    pub fn with_deterministic_fuzzing(mut self) -> Self {
-        self.optional_features.deterministic_fuzzing = Some(0.1);
+    /// Configures the ratio for which the MOpt mutator shall be enabled
+    pub fn with_mopt_mutator(mut self, ratio: Option<f64>) -> Self {
+        self.optional_features.mopt_ratio = ratio;
         self
     }
 
-    pub fn with_seq_queue_cycling(mut self) -> Self {
-        self.optional_features.queue_cycling = Some(0.1);
+    /// Configures the ratio for which the old sequential queue processing shall be enabled
+    pub fn with_seq_queue_cycling(mut self, ratio: Option<f64>) -> Self {
+        self.optional_features.seq_queue_cycling_ratio = ratio;
         self
     }
 
-    pub fn with_cmplog(mut self, config: CmplogConfig) -> Self {
+    /// Enables CMPLOG instrumentation with custom configuration
+    pub fn with_cmplog(&mut self, config: CmplogConfig) {
         self.cmplog_config = Some(config);
-        self
     }
 
-    pub fn with_cmpcov(mut self, config: CmpcovConfig) -> Self {
+    /// Enables CMPCOV instrumentation with custom configuration
+    pub fn with_cmpcov(&mut self, config: CmpcovConfig) {
         self.cmpcov_config = Some(config);
-        self
     }
 
-    pub fn build(self) -> AflStrategy {
-        AflStrategy {
+    /// Build the final AFLStrategy
+    pub fn build(self) -> AFLStrategy {
+        AFLStrategy {
             mutation_modes: self.mutation_modes,
             format_modes: self.format_modes,
             power_schedules: self.power_schedules,
@@ -575,18 +598,28 @@ mod tests {
     }
 
     // Helper function to create test AFL commands
-    fn create_test_cmds(count: usize) -> Vec<AflCmd> {
+    fn create_test_cmds(count: usize) -> Vec<AFLCmd> {
         let binary = PathBuf::from("/bin/afl-fuzz");
         let target = PathBuf::from("/bin/target");
-        vec![AflCmd::new(binary, target); count]
+        vec![AFLCmd::new(binary, target); count]
     }
 
     mod builder_tests {
         use super::*;
 
         #[test]
+        fn test_builder_multicore() {
+            let strategy = AFLStrategy::new(&Mode::MultipleCores).build();
+            assert!(!strategy.mutation_modes.is_empty());
+            assert!(!strategy.format_modes.is_empty());
+            assert!(!strategy.power_schedules.is_empty());
+            assert!(strategy.cmplog_config.is_none());
+            assert!(strategy.cmpcov_config.is_none());
+        }
+
+        #[test]
         fn test_builder_default() {
-            let strategy = AflStrategy::new().build();
+            let strategy = AFLStrategy::new(&Mode::Default).build();
             assert!(strategy.mutation_modes.is_empty());
             assert!(strategy.format_modes.is_empty());
             assert!(strategy.power_schedules.is_empty());
@@ -596,20 +629,33 @@ mod tests {
 
         #[test]
         fn test_builder_with_all_options() {
-            let strategy = AflStrategy::new()
-                .with_mutation_modes()
-                .with_test_case_format()
-                .with_power_schedules()
-                .with_seq_queue_cycling()
-                .with_cmplog(CmplogConfig::new(PathBuf::from("/bin/cmplog")))
-                .with_cmpcov(CmpcovConfig::new(PathBuf::from("/bin/cmpcov")))
-                .build();
+            let mut strategy_bld = AFLStrategy::new(&Mode::MultipleCores)
+                .with_mutation_modes(vec![
+                    (MutationMode::Explore, 0.4),
+                    (MutationMode::Exploit, 0.2),
+                ])
+                .with_power_schedules(vec![
+                    PowerSchedule::Fast,
+                    PowerSchedule::Explore,
+                    PowerSchedule::Coe,
+                    PowerSchedule::Lin,
+                    PowerSchedule::Quad,
+                    PowerSchedule::Exploit,
+                    PowerSchedule::Rare,
+                ])
+                .with_test_case_format(vec![(FormatMode::Binary, 0.3), (FormatMode::Text, 0.3)])
+                .with_mopt_mutator(Some(0.1))
+                .with_seq_queue_cycling(Some(0.1));
+            strategy_bld.with_cmplog(CmplogConfig::new(PathBuf::from("/bin/cmplog")));
+            strategy_bld.with_cmpcov(CmpcovConfig::new(PathBuf::from("/bin/cmpcov")));
 
-            assert_eq!(strategy.mutation_modes.len(), 2);
-            assert_eq!(strategy.format_modes.len(), 2);
-            assert_eq!(strategy.power_schedules.len(), 7);
-            assert!(strategy.cmplog_config.is_some());
-            assert!(strategy.cmpcov_config.is_some());
+            let strat = strategy_bld.build();
+
+            assert_eq!(strat.mutation_modes.len(), 2);
+            assert_eq!(strat.format_modes.len(), 2);
+            assert_eq!(strat.power_schedules.len(), 7);
+            assert!(strat.cmplog_config.is_some());
+            assert!(strat.cmpcov_config.is_some());
         }
     }
 
@@ -619,7 +665,12 @@ mod tests {
         #[test]
         fn test_apply_mutation_modes() {
             let mut rng = get_test_rng();
-            let strategy = AflStrategy::new().with_mutation_modes().build();
+            let mut strategy = AFLStrategy::new(&Mode::MultipleCores)
+                .with_mutation_modes(vec![
+                    (MutationMode::Explore, 0.4),
+                    (MutationMode::Exploit, 0.2),
+                ])
+                .build();
 
             let mut cmds = create_test_cmds(10);
             strategy.apply(&mut cmds, &mut rng, false);
@@ -641,7 +692,9 @@ mod tests {
         #[test]
         fn test_apply_format_modes() {
             let mut rng = get_test_rng();
-            let strategy = AflStrategy::new().with_test_case_format().build();
+            let mut strategy = AFLStrategy::new(&Mode::MultipleCores)
+                .with_test_case_format(vec![(FormatMode::Binary, 0.3), (FormatMode::Text, 0.3)])
+                .build();
 
             let mut cmds = create_test_cmds(10);
             strategy.apply(&mut cmds, &mut rng, false);
@@ -661,7 +714,17 @@ mod tests {
 
         #[test]
         fn test_apply_power_schedules() {
-            let strategy = AflStrategy::new().with_power_schedules().build();
+            let mut strategy = AFLStrategy::new(&Mode::MultipleCores)
+                .with_power_schedules(vec![
+                    PowerSchedule::Fast,
+                    PowerSchedule::Explore,
+                    PowerSchedule::Coe,
+                    PowerSchedule::Lin,
+                    PowerSchedule::Quad,
+                    PowerSchedule::Exploit,
+                    PowerSchedule::Rare,
+                ])
+                .build();
 
             let mut cmds = create_test_cmds(10);
             strategy.apply(&mut cmds, &mut get_test_rng(), false);
@@ -676,9 +739,9 @@ mod tests {
         #[test]
         fn test_optional_features() {
             let mut rng = get_test_rng();
-            let mut strategy = AflStrategy::new().build();
-            strategy.optional_features.deterministic_fuzzing = Some(1.0);
-            strategy.optional_features.queue_cycling = Some(1.0);
+            let mut strategy = AFLStrategy::new(&Mode::MultipleCores).build();
+            strategy.optional_features.mopt_ratio = Some(1.0);
+            strategy.optional_features.seq_queue_cycling_ratio = Some(1.0);
             strategy.optional_features.application_mode = ApplicationMode::Multiple;
 
             // Test without custom mutator
@@ -711,10 +774,10 @@ mod tests {
         #[test]
         fn test_optional_features_exclusive_mode() {
             let mut rng = get_test_rng();
-            let mut strategy = AflStrategy::new().build();
+            let mut strategy = AFLStrategy::new(&Mode::MultipleCores).build();
             // Set probabilities that sum to 1.0 to ensure exclusive application
-            strategy.optional_features.deterministic_fuzzing = Some(0.5);
-            strategy.optional_features.queue_cycling = Some(0.5);
+            strategy.optional_features.mopt_ratio = Some(0.5);
+            strategy.optional_features.seq_queue_cycling_ratio = Some(0.5);
             strategy.optional_features.application_mode = ApplicationMode::Exclusive;
 
             let mut cmds = create_test_cmds(10);
@@ -750,9 +813,9 @@ mod tests {
         #[test]
         fn test_optional_features_exclusive_mode_full_probability() {
             let mut rng = get_test_rng();
-            let mut strategy = AflStrategy::new().build();
-            strategy.optional_features.deterministic_fuzzing = Some(1.0);
-            strategy.optional_features.queue_cycling = Some(1.0);
+            let mut strategy = AFLStrategy::new(&Mode::MultipleCores).build();
+            strategy.optional_features.mopt_ratio = Some(1.0);
+            strategy.optional_features.seq_queue_cycling_ratio = Some(1.0);
             strategy.optional_features.application_mode = ApplicationMode::Exclusive;
 
             let mut cmds = create_test_cmds(10);
@@ -790,16 +853,17 @@ mod tests {
         #[test]
         fn test_single_cmplog() {
             let mut rng = get_test_rng();
-            let strategy = AflStrategy::new()
-                .with_cmplog(CmplogConfig {
-                    binary: PathBuf::from("/bin/cmplog"),
-                    runner_ratio: 0.2,
-                    mode_distribution: vec![(CmplogMode::Transforms, 1.0)],
-                })
-                .build();
-
             let mut cmds = create_test_cmds(5);
-            strategy.apply_cmplog(&mut cmds, &mut rng);
+
+            let mut strategy_bld = AFLStrategy::new(&Mode::MultipleCores);
+            strategy_bld.with_cmplog(CmplogConfig {
+                binary: PathBuf::from("/bin/cmplog"),
+                runner_ratio: 0.2,
+                mode_distribution: vec![(CmplogMode::Transforms, 1.0)],
+            });
+            let mut strat = strategy_bld.build();
+
+            strat.apply(&mut cmds, &mut rng, false);
 
             assert!(cmds[1]
                 .misc_afl_flags
@@ -809,20 +873,20 @@ mod tests {
         #[test]
         fn test_multiple_cmplog() {
             let mut rng = get_test_rng();
-            let strategy = AflStrategy::new()
-                .with_cmplog(CmplogConfig {
-                    binary: PathBuf::from("/bin/cmplog"),
-                    runner_ratio: 0.6,
-                    mode_distribution: vec![
-                        (CmplogMode::Standard, 0.4),
-                        (CmplogMode::Extended, 0.3),
-                        (CmplogMode::Transforms, 0.3),
-                    ],
-                })
-                .build();
-
             let mut cmds = create_test_cmds(10);
-            strategy.apply_cmplog(&mut cmds, &mut rng);
+
+            let mut strategy_bld = AFLStrategy::new(&Mode::MultipleCores);
+            strategy_bld.with_cmplog(CmplogConfig {
+                binary: PathBuf::from("/bin/cmplog"),
+                runner_ratio: 0.6,
+                mode_distribution: vec![
+                    (CmplogMode::Standard, 0.4),
+                    (CmplogMode::Extended, 0.3),
+                    (CmplogMode::Transforms, 0.3),
+                ],
+            });
+            let mut strat = strategy_bld.build();
+            strat.apply(&mut cmds, &mut rng, false);
 
             let cmplog_count = cmds
                 .iter()
@@ -848,14 +912,15 @@ mod tests {
         #[test]
         fn test_cmpcov_application() {
             let mut rng = get_test_rng();
-            let mut strategy = AflStrategy::new()
-                .with_cmpcov(CmpcovConfig::new(PathBuf::from("/bin/cmpcov")))
-                .build();
-
             let mut cmds = create_test_cmds(10);
-            strategy.apply_cmpcov(&mut cmds, &mut rng);
 
-            let cmpcov_indices = strategy.get_cmpcov_indices();
+            let mut strategy_bld = AFLStrategy::new(&Mode::MultipleCores);
+            strategy_bld.with_cmpcov(CmpcovConfig::new(PathBuf::from("/bin/cmpcov")));
+            let mut strat = strategy_bld.build();
+
+            strat.apply(&mut cmds, &mut rng, false);
+
+            let cmpcov_indices = strat.get_cmpcov_indices();
             assert_eq!(cmpcov_indices.len(), 2); // For 10 runners, should get 2 CMPCOV instances
 
             for &idx in cmpcov_indices {
@@ -866,27 +931,24 @@ mod tests {
         #[test]
         fn test_cmpcov_with_cmplog_conflict() {
             let mut rng = get_test_rng();
-            let mut strategy = AflStrategy::new()
-                .with_cmplog(CmplogConfig {
-                    binary: PathBuf::from("/bin/cmplog"),
-                    runner_ratio: 0.5,
-                    mode_distribution: vec![(CmplogMode::Standard, 1.0)],
-                })
-                .with_cmpcov(CmpcovConfig::new(PathBuf::from("/bin/cmpcov")))
-                .build();
+            let mut strategy_bld = AFLStrategy::new(&Mode::MultipleCores);
+            strategy_bld.with_cmplog(CmplogConfig {
+                binary: PathBuf::from("/bin/cmplog"),
+                runner_ratio: 0.5,
+                mode_distribution: vec![(CmplogMode::Standard, 1.0)],
+            });
+            strategy_bld.with_cmpcov(CmpcovConfig::new(PathBuf::from("/bin/cmpcov")));
+            let mut strat = strategy_bld.build();
 
             let mut cmds = create_test_cmds(10);
 
-            // Apply CMPLOG first
-            strategy.apply_cmplog(&mut cmds, &mut rng);
-
-            // Then apply CMPCOV
-            strategy.apply_cmpcov(&mut cmds, &mut rng);
+            // Apply CMPLOG + CMPCOV
+            strat.apply(&mut cmds, &mut rng, false);
 
             // Verify CMPCOV wasn't applied to CMPLOG instances
             for (i, cmd) in cmds.iter().enumerate() {
                 if cmd.misc_afl_flags.iter().any(|f| f.contains("-c")) {
-                    assert!(!strategy.get_cmpcov_indices().contains(&i));
+                    assert!(!strat.get_cmpcov_indices().contains(&i));
                 }
             }
         }
