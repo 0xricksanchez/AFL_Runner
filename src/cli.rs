@@ -108,7 +108,7 @@ pub struct GenArgs {
     )]
     pub seed: Option<u64>,
     /// Toggle to relay the seed to AFL++ as well
-    #[arg(long, help = "Forward AFLR seed to AFL++", action = ArgAction::SetTrue)]
+    #[arg(long, help = "Forward AFLR seed to AFL++", action = ArgAction::SetTrue, requires="seed")]
     pub use_seed_afl: bool,
 }
 
