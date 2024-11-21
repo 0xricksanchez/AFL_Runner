@@ -322,40 +322,40 @@ impl RunCommandExecutor<'_> {
         let pid_fn = format!("/tmp/.{}_{}.pids", &sname, std::process::id());
         let pid_fn_path = Path::new(&pid_fn);
 
-        fn run_session<T: SessionManager>(
-            session: &Session<T>,
-            args: &RunArgs,
-            session_type: &str,
-        ) -> Result<()> {
-            if args.tui {
-                session
-                    .run_with_tui(&args.gen_args.output_dir.clone().unwrap())
-                    .with_context(|| format!("Failed to run TUI {session_type} session"))?;
-            } else {
-                session
-                    .run()
-                    .with_context(|| format!("Failed to run {session_type} session"))?;
-                if !args.detached {
-                    session
-                        .attach()
-                        .with_context(|| format!("Failed to attach to {session_type} session"))?;
-                }
-            }
-            Ok(())
-        }
-
         match &merged_args.session_runner {
             SessionRunner::Screen => {
                 let screen = ScreenSession::new(&sname, afl_commands, pid_fn_path)
                     .context("Failed to create Screen session")?;
-                run_session(&screen, merged_args, "Screen")
+                Self::run_session(&screen, merged_args, "Screen")
             }
             SessionRunner::Tmux => {
                 let tmux = TmuxSession::new(&sname, afl_commands, pid_fn_path)
                     .context("Failed to create Tmux session")?;
-                run_session(&tmux, merged_args, "Tmux")
+                Self::run_session(&tmux, merged_args, "Tmux")
             }
         }
+    }
+
+    fn run_session<T: SessionManager>(
+        session: &Session<T>,
+        args: &RunArgs,
+        session_type: &str,
+    ) -> Result<()> {
+        if args.tui {
+            session
+                .run_with_tui(&args.gen_args.output_dir.clone().unwrap())
+                .with_context(|| format!("Failed to run TUI {session_type} session"))?;
+        } else {
+            session
+                .run()
+                .with_context(|| format!("Failed to run {session_type} session"))?;
+            if !args.detached {
+                session
+                    .attach()
+                    .with_context(|| format!("Failed to attach to {session_type} session"))?;
+            }
+        }
+        Ok(())
     }
 }
 

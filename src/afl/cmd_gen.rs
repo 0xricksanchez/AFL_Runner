@@ -101,7 +101,7 @@ impl AFLCmdGenerator {
         let seed = Xorshift64::new(self.seed.unwrap_or(0)).next();
         let mut rng = StdRng::seed_from_u64(seed);
 
-        let afl_envs = AFLEnv::new(&self.mode, &self.runners, &self.ramdisk, &mut rng);
+        let afl_envs = AFLEnv::new(self.mode, self.runners, self.ramdisk.as_ref(), &mut rng);
 
         let mut cmds = self.create_initial_cmds(&afl_envs)?;
 
@@ -110,7 +110,7 @@ impl AFLCmdGenerator {
             .iter()
             .any(|e| e.starts_with("AFL_CUSTOM_MUTATOR_LIBRARY"));
 
-        let mut afl_strategy_builder = AFLStrategy::new(&self.mode);
+        let mut afl_strategy_builder = AFLStrategy::new(self.mode);
 
         // Enable CMPLOG if requested
         if let Some(ref cmplog_bin) = self.harness.cmplog_bin {
@@ -130,7 +130,7 @@ impl AFLCmdGenerator {
 
         // Apply -s
         if self.seed.is_some() {
-            self.apply_afl_seed(&mut cmds, seed);
+            Self::apply_afl_seed(&mut cmds, seed);
         }
 
         // Apply -i and -o
@@ -145,7 +145,7 @@ impl AFLCmdGenerator {
 
         // Apply -S/-M
         // NOTE: Needs to called last as it relies on cmpcov/cmplog being already set
-        self.apply_fuzzer_roles(&mut cmds, afl_strategy.get_cmpcov_indices(), &self.mode);
+        self.apply_fuzzer_roles(&mut cmds, afl_strategy.get_cmpcov_indices(), self.mode);
 
         // Apply global environment variables that are not yet part of the commands
         Self::apply_global_env_vars(&mut cmds, &afl_env_vars);
@@ -196,7 +196,7 @@ impl AFLCmdGenerator {
     }
 
     /// Applies fuzzer roles to AFL commands
-    fn apply_fuzzer_roles(&self, cmds: &mut [AFLCmd], cmpcov_idxs: &HashSet<usize>, mode: &Mode) {
+    fn apply_fuzzer_roles(&self, cmds: &mut [AFLCmd], cmpcov_idxs: &HashSet<usize>, mode: Mode) {
         let get_file_stem = |path: &PathBuf| -> String {
             path.file_stem()
                 .and_then(|s| s.to_str())
@@ -207,7 +207,7 @@ impl AFLCmdGenerator {
         let target_fname = get_file_stem(&self.harness.target_bin);
 
         if let Some(cmd) = cmds.first_mut() {
-            match *mode {
+            match mode {
                 Mode::CIFuzzing => {
                     cmd.add_flag(format!("-S s_{target_fname}"));
                 }
@@ -271,7 +271,7 @@ impl AFLCmdGenerator {
         }
     }
 
-    fn apply_afl_seed(&self, cmds: &mut [AFLCmd], seed: u64) {
+    fn apply_afl_seed(cmds: &mut [AFLCmd], seed: u64) {
         for cmd in cmds {
             cmd.add_flag(format!("-s {seed}"));
         }
@@ -384,7 +384,7 @@ mod tests {
             AFLCmd::new(PathBuf::from("afl-fuzz"), PathBuf::from("/bin/test-target")),
         ];
 
-        generator.apply_fuzzer_roles(&mut cmds, &HashSet::new(), &Mode::MultipleCores);
+        generator.apply_fuzzer_roles(&mut cmds, &HashSet::new(), Mode::MultipleCores);
 
         // Check master
         assert!(cmds[0].misc_afl_flags.iter().any(|f| f.starts_with("-M")));

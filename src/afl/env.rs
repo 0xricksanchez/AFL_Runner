@@ -104,21 +104,22 @@ impl AFLEnv {
     /// Creates a new vector of `AFLEnv` instances
     #[inline]
     pub fn new(
-        mode: &Mode,
-        runners: &u32,
-        ramdisk: &Option<String>,
+        mode: Mode,
+        runners: u32,
+        ramdisk: Option<&String>,
         rng: &mut impl Rng,
     ) -> Vec<Self> {
-        let mut envs = vec![Self::default(); *runners as usize];
-        envs.iter_mut().for_each(|env| {
+        let mut envs = vec![Self::default(); runners as usize];
+        for env in &mut envs {
             if let Some(ramdisk) = ramdisk {
                 env.ramdisk = Some(ramdisk.clone());
             }
-        });
+        }
+
         match mode {
             Mode::MultipleCores => {
                 Self::apply_flags(&mut envs, &AFLFlag::DisableTrim, 0.60, rng);
-                if *runners < 8 {
+                if runners < 8 {
                     // NOTE: With many runners and/or many seeds this can delay the startup significantly
                     Self::apply_flags(&mut envs, &AFLFlag::ImportFirst, 1.0, rng);
                 }
@@ -311,9 +312,9 @@ mod tests {
         // Check with ramdisk
         let mut rng = get_test_rng();
         let aflenv_w_ramdisk = AFLEnv::new(
-            &Mode::MultipleCores,
-            &4,
-            &Some("/ramdisk".to_string()),
+            Mode::MultipleCores,
+            4,
+            Some(&"/ramdisk".to_string()),
             &mut rng,
         );
         let cmd_w_ramdisk = aflenv_w_ramdisk[0].generate();
@@ -327,7 +328,7 @@ mod tests {
     #[test]
     fn test_new_multiple_environments() {
         let mut rng = get_test_rng();
-        let envs = AFLEnv::new(&Mode::MultipleCores, &4_u32, &None, &mut rng);
+        let envs = AFLEnv::new(Mode::MultipleCores, 4_u32, None, &mut rng);
 
         // Test number of environments
         assert_eq!(envs.len(), 4);
@@ -355,7 +356,7 @@ mod tests {
     fn test_new_with_afl_defaults() {
         let mut rng = get_test_rng();
 
-        let envs = AFLEnv::new(&Mode::Default, &4_u32, &None, &mut rng);
+        let envs = AFLEnv::new(Mode::Default, 4_u32, None, &mut rng);
 
         // At least FinalSync should be set when using AFL defaults
         assert!(envs.iter().take(3).all(|env| env.flags.is_empty()));
@@ -366,7 +367,7 @@ mod tests {
     #[test]
     fn test_new_with_many_runners() {
         let mut rng = get_test_rng();
-        let envs = AFLEnv::new(&Mode::MultipleCores, &10_u32, &None, &mut rng);
+        let envs = AFLEnv::new(Mode::MultipleCores, 10_u32, None, &mut rng);
 
         // Test that ImportFirst is not applied when runners >= 8
         assert!(!envs
