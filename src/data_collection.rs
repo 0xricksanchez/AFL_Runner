@@ -279,10 +279,10 @@ impl DataFetcher {
     fn update_misc_info(&mut self, metrics: &FuzzerMetrics) {
         if self.first_update {
             if let Some(banner) = metrics.metrics.get("afl_banner") {
-                self.campaign_data.misc.afl_banner = banner.clone();
+                self.campaign_data.misc.afl_banner.clone_from(banner);
             }
             if let Some(version) = metrics.metrics.get("afl_version") {
-                self.campaign_data.misc.afl_version = version.clone();
+                self.campaign_data.misc.afl_version.clone_from(version);
             }
         }
     }
@@ -373,8 +373,8 @@ impl DataFetcher {
                     .map(String::from)
                     .unwrap_or_default();
 
-                self.collect_solution_files(&subdir, &fuzzer_name, "crashes", &mut crashes);
-                self.collect_solution_files(&subdir, &fuzzer_name, "hangs", &mut hangs);
+                Self::collect_solution_files(&subdir, &fuzzer_name, "crashes", &mut crashes);
+                Self::collect_solution_files(&subdir, &fuzzer_name, "hangs", &mut hangs);
             }
         }
 
@@ -389,7 +389,6 @@ impl DataFetcher {
     }
 
     fn collect_solution_files(
-        &self,
         subdir: &Path,
         fuzzer_name: &str,
         dir_name: &str,

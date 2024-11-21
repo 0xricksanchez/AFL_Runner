@@ -2,14 +2,15 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::afl_cmd::AflCmd;
-use crate::afl_strategies::{AflStrategy, CmpcovConfig, CmplogConfig};
+use crate::afl::cmd::AFLCmd;
+use crate::afl::mode::Mode;
+use crate::afl::strategies::{AFLStrategy, CmpcovConfig, CmplogConfig};
 use crate::harness::Harness;
 use crate::seed::Xorshift64;
-use crate::{afl_env::AFLEnv, system_utils};
+use crate::{afl::env::AFLEnv, system_utils};
 use anyhow::{Context, Result};
+use rand::rngs::StdRng;
 use rand::SeedableRng;
-use rand::{rngs::StdRng, Rng};
 
 use system_utils::{create_ramdisk, find_binary_in_path};
 
@@ -33,8 +34,8 @@ pub struct AFLCmdGenerator {
     pub afl_binary: Option<String>,
     /// Path to the `RAMDisk`
     pub ramdisk: Option<String>,
-    /// If we should use AFL defaults
-    pub use_afl_defaults: bool,
+    /// The mode that determines the amount of parameters applied to the generated commands
+    pub mode: Mode,
     /// Seed for AFL++
     pub seed: Option<u64>,
 }
@@ -50,7 +51,7 @@ impl AFLCmdGenerator {
         raw_afl_flags: Option<String>,
         afl_binary: Option<String>,
         is_ramdisk: bool,
-        use_afl_defaults: bool,
+        mode: Mode,
         seed: Option<u64>,
     ) -> Self {
         if runners > RUNNER_THRESH {
@@ -78,65 +79,75 @@ impl AFLCmdGenerator {
             raw_afl_flags,
             afl_binary,
             ramdisk: rdisk,
-            use_afl_defaults,
+            mode,
             seed,
         }
     }
 
     /// Retrieves AFL environment variables
     fn get_afl_env_vars() -> Vec<String> {
-        std::env::vars()
+        let gl_afl_env = std::env::vars()
             .filter(|(k, _)| k.starts_with("AFL_"))
             .map(|(k, v)| format!("{k}={v}"))
-            .collect::<Vec<String>>()
+            .collect::<Vec<String>>();
+        if !gl_afl_env.is_empty() {
+            println!("[!] Warning: Exported AFL environment variables found... Check generated commands!");
+        }
+        gl_afl_env
     }
 
     /// Generates AFL commands based on the configuration
-    pub fn run(&self) -> Result<Vec<AflCmd>> {
+    pub fn run(&self) -> Result<Vec<AFLCmd>> {
         let seed = Xorshift64::new(self.seed.unwrap_or(0)).next();
         let mut rng = StdRng::seed_from_u64(seed);
 
-        let afl_envs = AFLEnv::new(self.runners as usize, self.use_afl_defaults, &mut rng);
+        let afl_envs = AFLEnv::new(self.mode, self.runners, self.ramdisk.as_ref(), &mut rng);
+
         let mut cmds = self.create_initial_cmds(&afl_envs)?;
-        let mut cmpcov_idxs = HashSet::new();
 
         let afl_env_vars: Vec<String> = Self::get_afl_env_vars();
         let is_using_custom_mutator = afl_env_vars
             .iter()
             .any(|e| e.starts_with("AFL_CUSTOM_MUTATOR_LIBRARY"));
 
-        if !self.use_afl_defaults {
-            Self::apply_strategies(&mut cmds, &mut rng, is_using_custom_mutator);
+        let mut afl_strategy_builder = AFLStrategy::new(self.mode);
+
+        // Enable CMPLOG if requested
+        if let Some(ref cmplog_bin) = self.harness.cmplog_bin {
+            afl_strategy_builder.with_cmplog(CmplogConfig::new(cmplog_bin.clone()));
         }
 
+        // Enable CMPCOV if requested
+        if let Some(ref cmpcov_bin) = self.harness.cmpcov_bin {
+            afl_strategy_builder.with_cmpcov(CmpcovConfig::new(cmpcov_bin.clone()));
+        }
+
+        // Properly initialize the set of cmds
+        let afl_strategy =
+            afl_strategy_builder
+                .build()
+                .apply(&mut cmds, &mut rng, is_using_custom_mutator);
+
+        // Apply -s
         if self.seed.is_some() {
-            self.apply_afl_seed(&mut cmds, seed);
+            Self::apply_afl_seed(&mut cmds, seed);
         }
 
+        // Apply -i and -o
         self.apply_directory(&mut cmds);
+        // Apply -x
         self.apply_dictionary(&mut cmds)?;
+        // Apply sanitizer binary to first command if present
         self.apply_sanitizer_or_target_binary(&mut cmds);
 
-        // Apply CMPLOG if configured
-        if let Some(ref cmplog_bin) = self.harness.cmplog_bin {
-            AflStrategy::new()
-                .with_cmplog(CmplogConfig::new(cmplog_bin.clone()))
-                .build()
-                .apply_cmplog(&mut cmds, &mut rng);
-        }
-
+        // Apply harness arguments
         self.apply_target_args(&mut cmds);
 
-        if let Some(ref cmpcov_binary) = self.harness.cmpcov_bin {
-            let mut strategy = AflStrategy::new()
-                .with_cmpcov(CmpcovConfig::new(cmpcov_binary.clone()))
-                .build();
-            strategy.apply_cmpcov(&mut cmds, &mut rng);
-            cmpcov_idxs.clone_from(strategy.get_cmpcov_indices());
-        }
-
+        // Apply -S/-M
         // NOTE: Needs to called last as it relies on cmpcov/cmplog being already set
-        self.apply_fuzzer_roles(&mut cmds, &cmpcov_idxs);
+        self.apply_fuzzer_roles(&mut cmds, afl_strategy.get_cmpcov_indices(), self.mode);
+
+        // Apply global environment variables that are not yet part of the commands
         Self::apply_global_env_vars(&mut cmds, &afl_env_vars);
 
         Ok(cmds)
@@ -144,7 +155,7 @@ impl AFLCmdGenerator {
     }
 
     // Inherit global AFL environment variables that are not already set
-    fn apply_global_env_vars(cmds: &mut [AflCmd], afl_env_vars: &[String]) {
+    fn apply_global_env_vars(cmds: &mut [AFLCmd], afl_env_vars: &[String]) {
         for cmd in cmds {
             let to_apply: Vec<_> = afl_env_vars
                 .iter()
@@ -159,16 +170,14 @@ impl AFLCmdGenerator {
     }
 
     /// Creates initial AFL commands
-    fn create_initial_cmds(&self, configs: &[AFLEnv]) -> Result<Vec<AflCmd>> {
+    fn create_initial_cmds(&self, afl_envs: &[AFLEnv]) -> Result<Vec<AFLCmd>> {
         let afl_binary = find_binary_in_path(self.afl_binary.clone())?;
         let target_binary = &self.harness.target_bin;
-
-        Ok(configs
+        Ok(afl_envs
             .iter()
-            .map(|config| {
-                let mut cmd = AflCmd::new(afl_binary.clone(), target_binary.clone());
-                cmd.with_env(config.generate(self.ramdisk.clone()), false);
-
+            .map(|afl_env_cfg| {
+                let mut cmd = AFLCmd::new(afl_binary.clone(), target_binary.clone());
+                cmd.with_env(afl_env_cfg.generate(), false);
                 if let Some(flags) = &self.raw_afl_flags {
                     cmd.with_misc_flags(flags.split_whitespace().map(String::from).collect());
                 }
@@ -178,20 +187,8 @@ impl AFLCmdGenerator {
             .collect())
     }
 
-    fn apply_strategies(cmds: &mut [AflCmd], rng: &mut impl Rng, is_using_custom_mutator: bool) {
-        let strategy = AflStrategy::new()
-            .with_mutation_modes()
-            .with_test_case_format()
-            .with_power_schedules()
-            .with_deterministic_fuzzing()
-            .with_seq_queue_cycling()
-            .build();
-
-        strategy.apply(cmds, rng, is_using_custom_mutator);
-    }
-
     /// Applies input and output directories to AFL commands
-    fn apply_directory(&self, cmds: &mut [AflCmd]) {
+    fn apply_directory(&self, cmds: &mut [AFLCmd]) {
         for cmd in cmds {
             cmd.with_input_dir(self.input_dir.clone())
                 .with_output_dir(self.output_dir.clone());
@@ -199,7 +196,7 @@ impl AFLCmdGenerator {
     }
 
     /// Applies fuzzer roles to AFL commands
-    fn apply_fuzzer_roles(&self, cmds: &mut [AflCmd], cmpcov_idxs: &HashSet<usize>) {
+    fn apply_fuzzer_roles(&self, cmds: &mut [AFLCmd], cmpcov_idxs: &HashSet<usize>, mode: Mode) {
         let get_file_stem = |path: &PathBuf| -> String {
             path.file_stem()
                 .and_then(|s| s.to_str())
@@ -210,9 +207,15 @@ impl AFLCmdGenerator {
         let target_fname = get_file_stem(&self.harness.target_bin);
 
         if let Some(cmd) = cmds.first_mut() {
-            cmd.add_flag(format!("-M m_{target_fname}"));
+            match mode {
+                Mode::CIFuzzing => {
+                    cmd.add_flag(format!("-S s_{target_fname}"));
+                }
+                _ => {
+                    cmd.add_flag(format!("-M m_{target_fname}"));
+                }
+            }
         }
-
         for (i, cmd) in cmds.iter_mut().skip(1).enumerate() {
             let suffix = if cmd.misc_afl_flags.iter().any(|f| f.contains("-c")) {
                 format!("_{target_fname}_cl")
@@ -237,7 +240,7 @@ impl AFLCmdGenerator {
     }
 
     /// Applies dictionary to AFL commands
-    fn apply_dictionary(&self, cmds: &mut [AflCmd]) -> Result<()> {
+    fn apply_dictionary(&self, cmds: &mut [AFLCmd]) -> Result<()> {
         if let Some(dict) = &self.dictionary {
             let dict_path = fs::canonicalize(dict).context("Failed to resolve dictionary path")?;
             for cmd in cmds {
@@ -248,7 +251,7 @@ impl AFLCmdGenerator {
     }
 
     /// Applies sanitizer or target binary to AFL commands
-    fn apply_sanitizer_or_target_binary(&self, cmds: &mut [AflCmd]) {
+    fn apply_sanitizer_or_target_binary(&self, cmds: &mut [AFLCmd]) {
         if let Some(cmd) = cmds.first_mut() {
             let binary = self
                 .harness
@@ -260,7 +263,7 @@ impl AFLCmdGenerator {
     }
 
     /// Applies target arguments to AFL commands
-    fn apply_target_args(&self, cmds: &mut [AflCmd]) {
+    fn apply_target_args(&self, cmds: &mut [AFLCmd]) {
         if let Some(args) = &self.harness.target_args {
             for cmd in cmds {
                 cmd.with_target_args(Some(args.clone()));
@@ -268,7 +271,7 @@ impl AFLCmdGenerator {
         }
     }
 
-    fn apply_afl_seed(&self, cmds: &mut [AflCmd], seed: u64) {
+    fn apply_afl_seed(cmds: &mut [AFLCmd], seed: u64) {
         for cmd in cmds {
             cmd.add_flag(format!("-s {seed}"));
         }
@@ -307,7 +310,7 @@ mod tests {
             None,
             None,
             false,
-            false,
+            Mode::MultipleCores,
             Some(42),
         );
 
@@ -318,7 +321,6 @@ mod tests {
     fn test_generator_initialization() {
         let (_temp, generator) = setup_test_generator();
         assert_eq!(generator.runners, 2);
-        assert!(!generator.use_afl_defaults);
         assert_eq!(generator.seed, Some(42));
         assert!(generator.dictionary.is_none());
         assert!(generator.ramdisk.is_none());
@@ -335,7 +337,7 @@ mod tests {
             None,
             None,
             false,
-            false,
+            Mode::MultipleCores,
             None,
         );
         assert_eq!(generator.runners, RUNNER_THRESH + 1);
@@ -356,7 +358,7 @@ mod tests {
             None,
             None,
             false,
-            false,
+            Mode::MultipleCores,
             None,
         );
 
@@ -378,11 +380,11 @@ mod tests {
     fn test_fuzzer_roles() {
         let (_temp, generator) = setup_test_generator();
         let mut cmds = vec![
-            AflCmd::new(PathBuf::from("afl-fuzz"), PathBuf::from("/bin/test-target")),
-            AflCmd::new(PathBuf::from("afl-fuzz"), PathBuf::from("/bin/test-target")),
+            AFLCmd::new(PathBuf::from("afl-fuzz"), PathBuf::from("/bin/test-target")),
+            AFLCmd::new(PathBuf::from("afl-fuzz"), PathBuf::from("/bin/test-target")),
         ];
 
-        generator.apply_fuzzer_roles(&mut cmds, &HashSet::new());
+        generator.apply_fuzzer_roles(&mut cmds, &HashSet::new(), Mode::MultipleCores);
 
         // Check master
         assert!(cmds[0].misc_afl_flags.iter().any(|f| f.starts_with("-M")));
@@ -407,11 +409,11 @@ mod tests {
             None,
             None,
             false,
-            false,
+            Mode::MultipleCores,
             Some(42),
         );
 
-        let mut cmds = vec![AflCmd::new(
+        let mut cmds = vec![AFLCmd::new(
             PathBuf::from("afl-fuzz"),
             PathBuf::from("/bin/test-target"),
         )];
@@ -434,7 +436,7 @@ mod tests {
             None,
             None,
             false,
-            false,
+            Mode::MultipleCores,
             Some(42),
         );
 
@@ -443,6 +445,8 @@ mod tests {
 
         let cmds = result.unwrap();
         assert!(!cmds.is_empty());
+
+        println!("{:?}", cmds);
         assert!(cmds
             .iter()
             .any(|cmd| cmd.to_string().contains("cmpcov-binary")));
@@ -462,7 +466,7 @@ mod tests {
             None,
             None,
             false,
-            false,
+            Mode::MultipleCores,
             Some(42),
         );
 
@@ -470,6 +474,7 @@ mod tests {
         assert!(result.is_ok());
 
         let cmds = result.unwrap();
+
         assert!(!cmds.is_empty());
         assert!(cmds.iter().any(|cmd| cmd.to_string().contains("-c")));
     }
@@ -488,11 +493,11 @@ mod tests {
             None,
             None,
             false,
-            false,
+            Mode::MultipleCores,
             Some(42),
         );
 
-        let mut cmds = vec![AflCmd::new(
+        let mut cmds = vec![AFLCmd::new(
             PathBuf::from("afl-fuzz"),
             PathBuf::from("/bin/test-target"),
         )];
@@ -547,7 +552,7 @@ mod tests {
             None,
             None,
             false,
-            true,
+            Mode::MultipleCores,
             None,
         );
 

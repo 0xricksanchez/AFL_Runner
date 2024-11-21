@@ -66,6 +66,8 @@ aflr --help
   - [x] TUI
   - [x] Provide a configuration file via `--config` to make sharing/storing per project configurations easier
     - [x] Automatically read out a configuration named `aflr_cfg.toml` in the `CWD` when no `--config` was supplied
+  - [x] Mode: `default` (vanilla AFL++), `multiple-cores` ([Ref.](https://aflplus.plus/docs/fuzzing_in_depth/#c-using-multiple-cores)), and `ci-fuzzing` ([Ref.](https://aflplus.plus/docs/fuzzing_in_depth/#5-ci-fuzzing))!
+  - [x] _Deterministic_ command generation and AFL++ with seeding
 
 _Note_: Arguments supplied over the command-line take precedence over any configuration file options.
 
@@ -85,6 +87,7 @@ So, this tool is **not** (yet) a helper for:
 - [ ] Native integration for [statsd](https://registry.hub.docker.com/r/prom/statsd-exporter)
 - [ ] Add more configuration options
   - [ ] Add more sensible defaults for other options
+  - [ ] Full modularity to cater to very specialized fuzzing campaigns
 - [ ] Allow AFLPlusPlus forks to be used on some amount of runners
 
 ## Usage Example 💡
@@ -108,7 +111,7 @@ The example builds a recent version of _libxml2_ four times with different compi
 4. CMPLOG.
 
 Afterwards, the necessary commands for 16 instances are being generated, which then are executed in a dedicated TMUX session.
-Finally, a custom TUI offered by \*_AFL Runner_ is tracking the progress of the fuzzing campaign in a centralized space:
+Finally, a custom TUI offered by _AFL Runner_ is tracking the progress of the fuzzing campaign in a centralized space:
 
 ![AFL_Runner demo](img/demo.gif)
 
@@ -117,7 +120,7 @@ _Note_: The TUI can be used as a **full** replacement for `afl-whatsup` by using
 ## Contributing 🤝
 
 Contributions are welcome! Please feel free to submit a pull request or open an issue for any bugs, feature requests, or improvements.
-Any other support is also more than welcome :).
+Any other support is also more than welcome :). Feel to reach out on [X](https://x.com/0xricksanchez) or [BSKY](https://bsky.app/profile/434b.bsky.social).
 
 ## License 📜
 

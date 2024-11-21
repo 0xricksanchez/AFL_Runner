@@ -33,8 +33,9 @@ dictionary = "/path/to/dictionary"
 # Custom AFL flags
 afl_flags = "-T 'MyFuzzer' -s 1234 -t 1000+"
 
-# Do not apply any 'optimized' settings and use the default AFL afl_flags
-use_afl_defaults = false
+# Select the mode that determines the fuzzing strategy
+# Available modes: default, multiple-cores, ci-fuzzing
+mode = "multiple-cores"
 
 
 [session]

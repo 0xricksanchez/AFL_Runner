@@ -9,10 +9,7 @@ use tui::Tui;
 use clap::Parser;
 use cli::{Cli, Commands, ConfigMerge, SessionRunner};
 
-mod afl_cmd;
-mod afl_cmd_gen;
-mod afl_env;
-mod afl_strategies;
+mod afl;
 mod cli;
 mod data_collection;
 mod harness;
@@ -21,8 +18,8 @@ mod session;
 use crate::cli::AFL_CORPUS;
 use crate::session::CampaignData;
 use crate::{
-    afl_cmd::{Printable, ToStringVec},
-    afl_cmd_gen::AFLCmdGenerator,
+    afl::cmd::{Printable, ToStringVec},
+    afl::cmd_gen::AFLCmdGenerator,
     cli::{Config, GenArgs, KillArgs, RunArgs, TuiArgs},
     harness::Harness,
     runners::{
@@ -73,7 +70,7 @@ fn create_afl_runner(
         raw_afl_flags,
         gen_args.afl_binary.clone(),
         is_ramdisk,
-        gen_args.use_afl_defaults,
+        gen_args.mode,
         seed,
     ))
 }
@@ -98,6 +95,9 @@ fn validate_tui_output_dir(output_dir: &Path) -> Result<()> {
 ///
 /// If the `session_name` is not specified in `RunArgs`, the function generates a unique name
 /// by combining the target binary name, input directory name, and a hash of the `target_args`.
+///
+/// # Panics
+/// If the target binary is not provided in `RunArgs`.
 pub fn generate_session_name(args: &RunArgs, target_args: &str) -> String {
     args.session_name.as_ref().map_or_else(
         || {
@@ -325,40 +325,40 @@ impl RunCommandExecutor<'_> {
         let pid_fn = format!("/tmp/.{}_{}.pids", &sname, std::process::id());
         let pid_fn_path = Path::new(&pid_fn);
 
-        fn run_session<T: SessionManager>(
-            session: &Session<T>,
-            args: &RunArgs,
-            session_type: &str,
-        ) -> Result<()> {
-            if args.tui {
-                session
-                    .run_with_tui(&args.gen_args.output_dir.clone().unwrap())
-                    .with_context(|| format!("Failed to run TUI {session_type} session"))?;
-            } else {
-                session
-                    .run()
-                    .with_context(|| format!("Failed to run {session_type} session"))?;
-                if !args.detached {
-                    session
-                        .attach()
-                        .with_context(|| format!("Failed to attach to {session_type} session"))?;
-                }
-            }
-            Ok(())
-        }
-
         match &merged_args.session_runner {
             SessionRunner::Screen => {
                 let screen = ScreenSession::new(&sname, afl_commands, pid_fn_path)
                     .context("Failed to create Screen session")?;
-                run_session(&screen, merged_args, "Screen")
+                Self::run_session(&screen, merged_args, "Screen")
             }
             SessionRunner::Tmux => {
                 let tmux = TmuxSession::new(&sname, afl_commands, pid_fn_path)
                     .context("Failed to create Tmux session")?;
-                run_session(&tmux, merged_args, "Tmux")
+                Self::run_session(&tmux, merged_args, "Tmux")
             }
         }
+    }
+
+    fn run_session<T: SessionManager>(
+        session: &Session<T>,
+        args: &RunArgs,
+        session_type: &str,
+    ) -> Result<()> {
+        if args.tui {
+            session
+                .run_with_tui(&args.gen_args.output_dir.clone().unwrap())
+                .with_context(|| format!("Failed to run TUI {session_type} session"))?;
+        } else {
+            session
+                .run()
+                .with_context(|| format!("Failed to run {session_type} session"))?;
+            if !args.detached {
+                session
+                    .attach()
+                    .with_context(|| format!("Failed to attach to {session_type} session"))?;
+            }
+        }
+        Ok(())
     }
 }
 
