@@ -95,6 +95,9 @@ fn validate_tui_output_dir(output_dir: &Path) -> Result<()> {
 ///
 /// If the `session_name` is not specified in `RunArgs`, the function generates a unique name
 /// by combining the target binary name, input directory name, and a hash of the `target_args`.
+///
+/// # Panics
+/// If the target binary is not provided in `RunArgs`.
 pub fn generate_session_name(args: &RunArgs, target_args: &str) -> String {
     args.session_name.as_ref().map_or_else(
         || {

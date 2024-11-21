@@ -143,8 +143,8 @@ impl AFLEnv {
         let free_mb = get_free_mem_in_mb();
         for env in &mut envs {
             match free_mb {
-                x if x > (runners * 500 + 4096) as u64 => env.set_testcache_size(500),
-                x if x > (runners * 250 + 4096) as u64 => env.set_testcache_size(250),
+                x if x > u64::from(runners * 500 + 4096) => env.set_testcache_size(500),
+                x if x > u64::from(runners * 250 + 4096) => env.set_testcache_size(250),
                 _ => {}
             }
         }

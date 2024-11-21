@@ -385,14 +385,20 @@ impl AFLStrategy {
         match mode {
             ApplicationMode::Exclusive => Self::apply_exclusive_args(cmds, &optional_args, rng),
             ApplicationMode::Multiple => {
+                const PROB_ONE_MARGIN: f64 = 1e-10; // Small margin for floating point comparison
+
                 if !cmds.is_empty() {
                     for (arg, prob) in &optional_args {
-                        let prob_none = (1.0 - prob).powi(cmds.len() as i32);
+                        // Safe conversion of length to i32 for powi
+                        let exp = i32::try_from(cmds.len()).unwrap_or(i32::MAX);
+                        let prob_none = (1.0 - prob).powi(exp);
+
+                        let is_prob_one = (*prob - 1.0).abs() < PROB_ONE_MARGIN;
 
                         // If probability is 1.0 or probability of not appearing is high
-                        if *prob == 1.0 || prob_none > 0.45 {
-                            // For prob 1.0, add to all commands, otherwise just one
-                            if *prob == 1.0 {
+                        if is_prob_one || prob_none > 0.45 {
+                            if is_prob_one {
+                                // For prob 1.0, add to all commands, otherwise just one
                                 for cmd in cmds.iter_mut() {
                                     if !cmd.misc_afl_flags.contains(arg) {
                                         cmd.misc_afl_flags.push(arg.clone());
@@ -405,6 +411,7 @@ impl AFLStrategy {
                         }
                     }
                 }
+
                 // Then apply the normal random distribution if at least a certain threshold of
                 // cmds is passed
                 if cmds.len() >= 8 {
@@ -476,12 +483,12 @@ impl AFLStrategy {
         rng: &mut R,
     ) {
         let indices: Vec<usize> = (1..cmds.len()).collect();
-        let chosen_indices: Vec<_> = indices
+
+        for (idx, mode) in indices
             .choose_multiple(rng, modes_to_apply.len())
             .copied()
-            .collect();
-
-        for (idx, mode) in chosen_indices.into_iter().zip(modes_to_apply) {
+            .zip(modes_to_apply)
+        {
             if let Some(cmd) = cmds.get_mut(idx) {
                 cmd.misc_afl_flags
                     .push(format!("{} -c {}", mode, config.binary.display()));
