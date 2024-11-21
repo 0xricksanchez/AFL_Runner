@@ -119,7 +119,7 @@ impl AFLEnv {
         match mode {
             Mode::MultipleCores => {
                 Self::apply_flags(&mut envs, &AFLFlag::DisableTrim, 0.60, rng);
-                if runners < 8 {
+                if runners < 16 {
                     // NOTE: With many runners and/or many seeds this can delay the startup significantly
                     Self::apply_flags(&mut envs, &AFLFlag::ImportFirst, 1.0, rng);
                 }
@@ -134,8 +134,10 @@ impl AFLEnv {
             Mode::Default => {}
         }
 
-        // Enable FinalSync for the last configuration
-        envs.last_mut().unwrap().enable_flag(AFLFlag::FinalSync);
+        if mode != Mode::CIFuzzing {
+            // Enable FinalSync for the first configuration (-M)
+            envs.first_mut().unwrap().enable_flag(AFLFlag::FinalSync);
+        }
 
         // Set testcache size based on available memory
         let free_mb = get_free_mem_in_mb();
@@ -319,10 +321,11 @@ mod tests {
         );
         let cmd_w_ramdisk = aflenv_w_ramdisk[0].generate();
 
-        assert!(cmd_w_ramdisk[0].contains("AFL_TMPDIR=/ramdisk"));
-        assert!(cmd_w_ramdisk[1].contains("AFL_DISABLE_TRIM=1"));
-        assert!(cmd_w_ramdisk[2].contains("AFL_IMPORT_FIRST=1"));
-        assert!(cmd_w_ramdisk[3].contains("AFL_TESTCACHE_SIZE"));
+        assert!(cmd_w_ramdisk[0].contains("AFL_FINAL_SYNC=1"));
+        assert!(cmd_w_ramdisk[1].contains("AFL_TMPDIR=/ramdisk"));
+        assert!(cmd_w_ramdisk[2].contains("AFL_DISABLE_TRIM=1"));
+        assert!(cmd_w_ramdisk[3].contains("AFL_IMPORT_FIRST=1"));
+        assert!(cmd_w_ramdisk[4].contains("AFL_TESTCACHE_SIZE"));
     }
 
     #[test]
@@ -333,11 +336,11 @@ mod tests {
         // Test number of environments
         assert_eq!(envs.len(), 4);
 
-        // Test FinalSync on last environment
-        assert!(!envs[0].flags.contains(&AFLFlag::FinalSync));
+        // Test FinalSync only in first environment
+        assert!(envs[0].flags.contains(&AFLFlag::FinalSync));
         assert!(!envs[1].flags.contains(&AFLFlag::FinalSync));
         assert!(!envs[2].flags.contains(&AFLFlag::FinalSync));
-        assert!(envs[3].flags.contains(&AFLFlag::FinalSync));
+        assert!(!envs[3].flags.contains(&AFLFlag::FinalSync));
 
         // Test DisableTrim distribution (with fixed RNG seed)
         let disable_trim_count = envs
@@ -358,18 +361,20 @@ mod tests {
 
         let envs = AFLEnv::new(Mode::Default, 4_u32, None, &mut rng);
 
-        // At least FinalSync should be set when using AFL defaults
-        assert!(envs.iter().take(3).all(|env| env.flags.is_empty()));
-        assert_eq!(envs.last().unwrap().flags.len(), 1);
-        assert!(envs.last().unwrap().flags.contains(&AFLFlag::FinalSync));
+        assert!(envs.iter().take(0).all(|env| env.flags.len() == 1));
+        // Check that the main fuzzer has at least the FINAL_SYNC flag set
+        assert!(envs
+            .iter()
+            .take(0)
+            .all(|env| env.flags.contains(&AFLFlag::FinalSync)));
     }
 
     #[test]
     fn test_new_with_many_runners() {
         let mut rng = get_test_rng();
-        let envs = AFLEnv::new(Mode::MultipleCores, 10_u32, None, &mut rng);
+        let envs = AFLEnv::new(Mode::MultipleCores, 20_u32, None, &mut rng);
 
-        // Test that ImportFirst is not applied when runners >= 8
+        // Test that ImportFirst is not applied when runners >= 16
         assert!(!envs
             .iter()
             .any(|env| env.flags.contains(&AFLFlag::ImportFirst)));

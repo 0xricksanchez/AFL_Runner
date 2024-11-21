@@ -211,6 +211,9 @@ pub struct AFLStrategy {
     pub cmplog_config: Option<CmplogConfig>,
     /// CMPCOV configuration
     pub cmpcov_config: Option<CmpcovConfig>,
+    /// internal state to check where to apply some configurations
+    /// (e.g. in CI mode we apply all configurations to all commands as we do not have a -M fuzzer)
+    is_ci_fuzzing: bool,
 }
 
 impl AFLStrategy {
@@ -251,6 +254,7 @@ impl AFLStrategy {
         AFLStrategyBuilder::default()
             .with_mopt_mutator(Some(0.1))
             .with_seq_queue_cycling(Some(0.2))
+            .with_ci()
     }
 
     /// Applies the strategy to a slice of AFL commands
@@ -260,39 +264,16 @@ impl AFLStrategy {
         rng: &mut R,
         is_using_custom_mutator: bool,
     ) -> Self {
-        // Apply mutatin modes (exclusively)
-        if !self.mutation_modes.is_empty() {
-            Self::apply_exclusive_args(
-                cmds,
-                &self
-                    .mutation_modes
-                    .iter()
-                    .map(|(mode, prob)| (mode.to_string(), *prob))
-                    .collect::<Vec<_>>(),
-                rng,
-            );
-        }
-
-        // Apply format modes (exclusively)
-        if !self.format_modes.is_empty() {
-            Self::apply_exclusive_args(
-                cmds,
-                &self
-                    .format_modes
-                    .iter()
-                    .map(|(mode, prob)| (mode.to_string(), *prob))
-                    .collect::<Vec<_>>(),
-                rng,
-            );
-        }
+        // Applies to ALL instances
 
         // Apply power schedules
         if !self.power_schedules.is_empty() {
             self.apply_power_schedules(cmds);
         }
 
-        // Apply optional features
-        self.apply_optional_features(cmds, rng, is_using_custom_mutator);
+        // CMPLOG and CMPCOV do *not* apply to all but implementation
+        // is currently based on the fact that the full `cmds` slice is used
+        // for calculation of the amount and position
 
         // Apply cmplog if available
         if self.cmplog_config.is_some() {
@@ -303,6 +284,42 @@ impl AFLStrategy {
         if self.cmpcov_config.is_some() {
             self.apply_cmpcov(cmds, rng);
         }
+
+        // Apply to either all or skip the first command (-M)
+        let target_cmds = if self.is_ci_fuzzing {
+            cmds
+        } else {
+            &mut cmds[1..]
+        };
+
+        // Apply mutation modes
+        if !self.mutation_modes.is_empty() {
+            Self::apply_exclusive_args(
+                target_cmds,
+                &self
+                    .mutation_modes
+                    .iter()
+                    .map(|(mode, prob)| (mode.to_string(), *prob))
+                    .collect::<Vec<_>>(),
+                rng,
+            );
+        }
+
+        // Apply format modes
+        if !self.format_modes.is_empty() {
+            Self::apply_exclusive_args(
+                target_cmds,
+                &self
+                    .format_modes
+                    .iter()
+                    .map(|(mode, prob)| (mode.to_string(), *prob))
+                    .collect::<Vec<_>>(),
+                rng,
+            );
+        }
+
+        // Apply optional features
+        self.apply_optional_features(target_cmds, rng, is_using_custom_mutator);
 
         self.clone()
     }
@@ -368,10 +385,34 @@ impl AFLStrategy {
         match mode {
             ApplicationMode::Exclusive => Self::apply_exclusive_args(cmds, &optional_args, rng),
             ApplicationMode::Multiple => {
-                for cmd in cmds {
+                if !cmds.is_empty() {
                     for (arg, prob) in &optional_args {
-                        if rng.gen::<f64>() < *prob {
-                            cmd.misc_afl_flags.push(arg.clone());
+                        let prob_none = (1.0 - prob).powi(cmds.len() as i32);
+
+                        // If probability is 1.0 or probability of not appearing is high
+                        if *prob == 1.0 || prob_none > 0.45 {
+                            // For prob 1.0, add to all commands, otherwise just one
+                            if *prob == 1.0 {
+                                for cmd in cmds.iter_mut() {
+                                    if !cmd.misc_afl_flags.contains(arg) {
+                                        cmd.misc_afl_flags.push(arg.clone());
+                                    }
+                                }
+                            } else {
+                                let cmd_idx = rng.gen_range(0..cmds.len());
+                                cmds[cmd_idx].misc_afl_flags.push(arg.clone());
+                            }
+                        }
+                    }
+                }
+                // Then apply the normal random distribution if at least a certain threshold of
+                // cmds is passed
+                if cmds.len() >= 8 {
+                    for cmd in cmds {
+                        for (arg, prob) in &optional_args {
+                            if !cmd.misc_afl_flags.contains(arg) && rng.gen::<f64>() < *prob {
+                                cmd.misc_afl_flags.push(arg.clone());
+                            }
                         }
                     }
                 }
@@ -398,61 +439,53 @@ impl AFLStrategy {
 
         match num_cmplog_cfgs {
             0 => {}
-            1 => Self::apply_single_cmplog(cmds, config),
-            2 => Self::apply_double_cmplog(cmds, config),
-            3 => Self::apply_triple_cmplog(cmds, config),
-            _ => Self::apply_many_cmplog(cmds, num_cmplog_cfgs, config, rng),
+            1 => {
+                Self::apply_cmplog_1_to_3(cmds, config, &[CmplogMode::Transforms], rng);
+            }
+            2 => {
+                Self::apply_cmplog_1_to_3(
+                    cmds,
+                    config,
+                    &[CmplogMode::Standard, CmplogMode::Transforms],
+                    rng,
+                );
+            }
+            3 => {
+                Self::apply_cmplog_1_to_3(
+                    cmds,
+                    config,
+                    &[
+                        CmplogMode::Standard,
+                        CmplogMode::Transforms,
+                        CmplogMode::Extended,
+                    ],
+                    rng,
+                );
+            }
+
+            _ => {
+                Self::apply_many_cmplog(cmds, num_cmplog_cfgs, config, rng);
+            }
         }
     }
 
-    fn apply_single_cmplog(cmds: &mut [AFLCmd], config: &CmplogConfig) {
-        if let Some(cmd) = cmds.get_mut(1) {
-            cmd.misc_afl_flags.push(format!(
-                "{} -c {}",
-                CmplogMode::Transforms,
-                config.binary.display()
-            ));
-        }
-    }
+    fn apply_cmplog_1_to_3<R: rand::Rng>(
+        cmds: &mut [AFLCmd],
+        config: &CmplogConfig,
+        modes_to_apply: &[CmplogMode],
+        rng: &mut R,
+    ) {
+        let indices: Vec<usize> = (1..cmds.len()).collect();
+        let chosen_indices: Vec<_> = indices
+            .choose_multiple(rng, modes_to_apply.len())
+            .copied()
+            .collect();
 
-    fn apply_double_cmplog(cmds: &mut [AFLCmd], config: &CmplogConfig) {
-        if let Some(cmd) = cmds.get_mut(1) {
-            cmd.misc_afl_flags.push(format!(
-                "{} -c {}",
-                CmplogMode::Standard,
-                config.binary.display()
-            ));
-        }
-        if let Some(cmd) = cmds.get_mut(2) {
-            cmd.misc_afl_flags.push(format!(
-                "{} -c {}",
-                CmplogMode::Transforms,
-                config.binary.display()
-            ));
-        }
-    }
-
-    fn apply_triple_cmplog(cmds: &mut [AFLCmd], config: &CmplogConfig) {
-        if let Some(cmd) = cmds.get_mut(1) {
-            cmd.misc_afl_flags.push(format!(
-                "{} -c {}",
-                CmplogMode::Standard,
-                config.binary.display()
-            ));
-        }
-        if let Some(cmd) = cmds.get_mut(2) {
-            cmd.misc_afl_flags.push(format!(
-                "{} -c {}",
-                CmplogMode::Transforms,
-                config.binary.display()
-            ));
-        }
-        if let Some(cmd) = cmds.get_mut(3) {
-            cmd.misc_afl_flags.push(format!(
-                "{} -c {}",
-                CmplogMode::Extended,
-                config.binary.display()
-            ));
+        for (idx, mode) in chosen_indices.into_iter().zip(modes_to_apply) {
+            if let Some(cmd) = cmds.get_mut(idx) {
+                cmd.misc_afl_flags
+                    .push(format!("{} -c {}", mode, config.binary.display()));
+            }
         }
     }
 
@@ -530,6 +563,7 @@ pub struct AFLStrategyBuilder {
     optional_features: MiscFeatures,
     cmplog_config: Option<CmplogConfig>,
     cmpcov_config: Option<CmpcovConfig>,
+    is_ci_fuzzing: bool,
 }
 
 impl AFLStrategyBuilder {
@@ -573,6 +607,11 @@ impl AFLStrategyBuilder {
         self.cmpcov_config = Some(config);
     }
 
+    fn with_ci(mut self) -> Self {
+        self.is_ci_fuzzing = true;
+        self
+    }
+
     /// Build the final `AFLStrategy`
     pub fn build(self) -> AFLStrategy {
         AFLStrategy {
@@ -582,6 +621,7 @@ impl AFLStrategyBuilder {
             optional_features: self.optional_features,
             cmplog_config: self.cmplog_config,
             cmpcov_config: self.cmpcov_config,
+            is_ci_fuzzing: self.is_ci_fuzzing,
         }
     }
 }
@@ -665,7 +705,7 @@ mod tests {
         #[test]
         fn test_apply_mutation_modes() {
             let mut rng = get_test_rng();
-            let mut strategy = AFLStrategy::new(Mode::MultipleCores)
+            let mut strategy = AFLStrategy::new(Mode::CIFuzzing)
                 .with_mutation_modes(vec![
                     (MutationMode::Explore, 0.4),
                     (MutationMode::Exploit, 0.2),
@@ -684,7 +724,6 @@ mod tests {
                 .filter(|cmd| cmd.misc_afl_flags.iter().any(|f| f == "-P exploit"))
                 .count();
 
-            println!("{:?}", cmds);
             assert_eq!(explore_count, 4); // 40% of 10
             assert_eq!(exploit_count, 2); // 20% of 10
         }
@@ -692,11 +731,11 @@ mod tests {
         #[test]
         fn test_apply_format_modes() {
             let mut rng = get_test_rng();
-            let mut strategy = AFLStrategy::new(Mode::MultipleCores)
+            let mut strategy = AFLStrategy::new(Mode::CIFuzzing)
                 .with_test_case_format(vec![(FormatMode::Binary, 0.3), (FormatMode::Text, 0.3)])
                 .build();
 
-            let mut cmds = create_test_cmds(10);
+            let mut cmds = create_test_cmds(11);
             strategy.apply(&mut cmds, &mut rng, false);
 
             let binary_count = cmds
@@ -749,7 +788,8 @@ mod tests {
             strategy.apply(&mut cmds, &mut rng, false);
 
             // In Multiple mode, both flags should be present
-            for cmd in &cmds {
+            println!("cmds: {:?}", cmds);
+            for cmd in &cmds[1..] {
                 assert!(cmd.misc_afl_flags.contains(&"-L 0".to_string()));
                 assert!(cmd.misc_afl_flags.contains(&"-Z".to_string()));
                 // Ensure no duplicates
@@ -764,7 +804,7 @@ mod tests {
             let mut cmds = create_test_cmds(5);
             strategy.apply(&mut cmds, &mut rng, true);
 
-            for cmd in &cmds {
+            for cmd in &cmds[1..] {
                 assert!(!cmd.misc_afl_flags.contains(&"-L 0".to_string())); // Should not apply when using custom mutator
                 assert!(cmd.misc_afl_flags.contains(&"-Z".to_string())); // Should still apply queue cycling
                 assert_eq!(cmd.misc_afl_flags.iter().filter(|&f| f == "-Z").count(), 1);
@@ -772,9 +812,70 @@ mod tests {
         }
 
         #[test]
-        fn test_optional_features_exclusive_mode() {
+        fn test_optional_features_threshold_behavior() {
             let mut rng = get_test_rng();
             let mut strategy = AFLStrategy::new(Mode::MultipleCores).build();
+
+            // Set low probabilities to trigger the enforcement behavior
+            strategy.optional_features.mopt_ratio = Some(0.1);
+            strategy.optional_features.seq_queue_cycling_ratio = Some(0.1);
+            strategy.optional_features.application_mode = ApplicationMode::Multiple;
+
+            // Test with small command set (below threshold)
+            let mut small_cmds = create_test_cmds(5);
+            strategy.apply(&mut small_cmds, &mut rng, false);
+
+            // Verify that each flag appears exactly once in the small set
+            let mopt_count: usize = small_cmds
+                .iter()
+                .filter(|cmd| cmd.misc_afl_flags.contains(&"-L 0".to_string()))
+                .count();
+            let queue_count: usize = small_cmds
+                .iter()
+                .filter(|cmd| cmd.misc_afl_flags.contains(&"-Z".to_string()))
+                .count();
+
+            assert_eq!(
+                mopt_count, 1,
+                "With small cmd set, -L 0 should appear exactly once"
+            );
+            assert_eq!(
+                queue_count, 1,
+                "With small cmd set, -Z should appear exactly once"
+            );
+
+            // Test with large command set (above threshold)
+            let mut large_cmds = create_test_cmds(10);
+            strategy.apply(&mut large_cmds, &mut rng, false);
+
+            // For large set, we expect both enforced appearances and potential additional random ones
+            let large_mopt_count: usize = large_cmds
+                .iter()
+                .filter(|cmd| cmd.misc_afl_flags.contains(&"-L 0".to_string()))
+                .count();
+            let large_queue_count: usize = large_cmds
+                .iter()
+                .filter(|cmd| cmd.misc_afl_flags.contains(&"-Z".to_string()))
+                .count();
+
+            // Should have at least one occurrence (enforced) and potentially more
+            assert!(
+                large_mopt_count >= 1,
+                "Large cmd set should have at least one -L 0"
+            );
+            assert!(
+                large_queue_count >= 1,
+                "Large cmd set should have at least one -Z"
+            );
+
+            // Due to additional random distribution, might have more occurrences
+            // but this is probabilistic, so we don't assert exact counts
+        }
+
+        #[test]
+        fn test_optional_features_exclusive_mode() {
+            let mut rng = get_test_rng();
+            let mut strategy = AFLStrategy::new(Mode::CIFuzzing).build();
             // Set probabilities that sum to 1.0 to ensure exclusive application
             strategy.optional_features.mopt_ratio = Some(0.5);
             strategy.optional_features.seq_queue_cycling_ratio = Some(0.5);
@@ -800,7 +901,7 @@ mod tests {
             assert_eq!(z_count, 5);
 
             // Verify no command has both flags
-            for cmd in &cmds {
+            for cmd in &cmds[1..] {
                 assert!(
                     (cmd.misc_afl_flags.contains(&"-L 0".to_string())
                         && !cmd.misc_afl_flags.contains(&"-Z".to_string()))
@@ -813,7 +914,7 @@ mod tests {
         #[test]
         fn test_optional_features_exclusive_mode_full_probability() {
             let mut rng = get_test_rng();
-            let mut strategy = AFLStrategy::new(Mode::MultipleCores).build();
+            let mut strategy = AFLStrategy::new(Mode::CIFuzzing).build();
             strategy.optional_features.mopt_ratio = Some(1.0);
             strategy.optional_features.seq_queue_cycling_ratio = Some(1.0);
             strategy.optional_features.application_mode = ApplicationMode::Exclusive;
@@ -835,7 +936,7 @@ mod tests {
             assert_eq!(flag_count, 10, "Each command should have exactly one flag");
 
             // Verify no command has both flags
-            for cmd in &cmds {
+            for cmd in &cmds[1..] {
                 assert!(
                     (cmd.misc_afl_flags.contains(&"-L 0".to_string())
                         && !cmd.misc_afl_flags.contains(&"-Z".to_string()))
@@ -865,7 +966,7 @@ mod tests {
 
             strat.apply(&mut cmds, &mut rng, false);
 
-            assert!(cmds[1]
+            assert!(cmds[3]
                 .misc_afl_flags
                 .contains(&format!("-l 2AT -c {}", Path::new("/bin/cmplog").display())));
         }

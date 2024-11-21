@@ -11,8 +11,6 @@ use uuid::Uuid;
 
 /// Retrieves the amount of free memory in the system in MB
 /// This function is used to determine the `AFL_TESTCACHE_SIZE` value
-///
-/// NOTE: This function will likely break on Windows
 #[cfg(not(target_os = "windows"))]
 pub fn get_free_mem_in_mb() -> u64 {
     let s = System::new_all();
