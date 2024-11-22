@@ -77,7 +77,7 @@ impl AFLCmdGenerator {
             .iter()
             .any(|e| e.starts_with("AFL_CUSTOM_MUTATOR_LIBRARY"));
 
-        let mut afl_strategy_builder = AFLStrategy::new(self.mode);
+        let mut afl_strategy_builder = AFLStrategy::builder(self.mode);
 
         // Enable CMPLOG if requested
         if let Some(ref cmplog_bin) = self.harness.cmplog_bin {
