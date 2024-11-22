@@ -170,7 +170,7 @@ impl<T: SessionManager> Session<T> {
 
     fn confirm_start(&self) -> Result<()> {
         println!(
-            "Starting {} session '{}' for {} generated commands. Continue [Y/n]?",
+            "Generated {} session '{}' for {} commands. Continue [Y/n]?",
             T::manager_name(),
             self.name,
             self.commands.len()
@@ -180,6 +180,7 @@ impl<T: SessionManager> Session<T> {
         if get_user_input() != 'y' {
             anyhow::bail!("Aborting");
         }
+        println!("Starting session...");
         Ok(())
     }
 

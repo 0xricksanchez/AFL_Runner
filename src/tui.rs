@@ -7,7 +7,6 @@ use std::time::Duration;
 
 use crate::data_collection::DataFetcher;
 use crate::session::{CampaignData, CrashInfoDetails};
-use anyhow::bail;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
@@ -21,41 +20,76 @@ use ratatui::{
     Terminal,
 };
 
-static SLOW_EXEC_PS_THRESHOLD: f64 = 250.0;
-static CAUTION_STABILITY: f64 = 90.0;
-static WARN_STABILITY: f64 = 75.0;
-static ERROR_STABILITY: f64 = 60.0;
+// Constants moved to a dedicated section for better visibility
+const SLOW_EXEC_PS_THRESHOLD: f64 = 250.0;
+const CAUTION_STABILITY: f64 = 90.0;
+const WARN_STABILITY: f64 = 75.0;
+const ERROR_STABILITY: f64 = 60.0;
+const KILO: f64 = 1_000.0;
+const MEGA: f64 = KILO * KILO;
+const GIGA: f64 = MEGA * KILO;
+const TERA: f64 = GIGA * KILO;
+
+/// Threshold markers for number formatting
+#[derive(Debug)]
+enum NumberScale {
+    Base(f64),
+    Kilo(f64),
+    Mega(f64),
+    Giga(f64),
+    Tera(f64),
+}
+
+impl NumberScale {
+    fn from_f64(num: f64) -> Self {
+        match num {
+            n if n < KILO => Self::Base(n),
+            n if n < MEGA => Self::Kilo(n / KILO),
+            n if n < GIGA => Self::Mega(n / MEGA),
+            n if n < TERA => Self::Giga(n / GIGA),
+            n => Self::Tera(n / TERA),
+        }
+    }
+
+    fn format(&self) -> String {
+        match self {
+            Self::Base(n) => format!("{n:.2}"),
+            Self::Kilo(n) => format!("{n:.2}K"),
+            Self::Mega(n) => format!("{n:.2}M"),
+            Self::Giga(n) => format!("{n:.2}B"),
+            Self::Tera(n) => format!("{n:.2}T"),
+        }
+    }
+}
 
 /// Represents the TUI (Text User Interface)
 pub struct Tui {
-    /// The terminal instance
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
 }
 
 impl Tui {
     /// Creates a new `Tui` instance
     pub fn new() -> io::Result<Self> {
-        let stdout = io::stdout();
-        let backend = CrosstermBackend::new(stdout);
+        let backend = CrosstermBackend::new(io::stdout());
         let terminal = Terminal::new(backend)?;
         Ok(Self { terminal })
     }
 
     /// Formats a duration into a string based on days, hours, minutes, and seconds
     pub fn format_duration(duration: &Duration) -> String {
-        let mut secs = duration.as_secs();
-        let days = secs / 86400;
-        let hours = (secs % 86400) / 3600;
-        let mins = (secs % 3600) / 60;
-        secs %= 60;
-        if days > 0 {
-            format!("{days} days, {hours:02}:{mins:02}:{secs:02}")
-        } else if days == 0 && hours > 0 {
-            format!("{hours:02}:{mins:02}:{secs:02}")
-        } else if days == 0 && hours == 0 && mins > 0 {
-            format!("{mins:02}:{secs:02}")
-        } else {
-            format!("{secs:02}s")
+        let total_secs = duration.as_secs();
+        let (days, hours, mins, secs) = (
+            total_secs / 86400,
+            (total_secs % 86400) / 3600,
+            (total_secs % 3600) / 60,
+            total_secs % 60,
+        );
+
+        match (days, hours, mins) {
+            (d, _, _) if d > 0 => format!("{d} days, {hours:02}:{mins:02}:{secs:02}"),
+            (0, h, _) if h > 0 => format!("{h:02}:{mins:02}:{secs:02}"),
+            (0, 0, m) if m > 0 => format!("{m:02}:{secs:02}"),
+            _ => format!("{secs:02}s"),
         }
     }
 
@@ -64,20 +98,20 @@ impl Tui {
         let output_dir = output_dir.to_path_buf();
         cdata.log("Initialized TUI");
         let mut dfetcher = DataFetcher::new(&output_dir, pid_file, cdata);
-        let (session_data_tx, session_data_rx) = mpsc::channel();
+
+        let (tx, rx) = mpsc::channel();
+
         thread::spawn(move || loop {
             let session_data = dfetcher.collect_session_data().clone();
-            if let Err(e) = session_data_tx.send(session_data) {
-                eprintln!("Error sending session data: {e}");
+            if tx.send(session_data).is_err() {
                 break;
             }
             thread::sleep(Duration::from_secs(1));
         });
 
-        if let Err(e) = Self::new().and_then(|mut tui| tui.run_internal(&session_data_rx)) {
-            bail!("Error running TUI: {e}");
-        }
-        Ok(())
+        Self::new()
+            .and_then(|mut tui| tui.run_internal(&rx))
+            .map_err(|e| anyhow::anyhow!("Error running TUI: {e}"))
     }
 
     /// Runs the TUI with the specified session data receiver
@@ -329,21 +363,21 @@ impl Tui {
                 session_data.cycles.done.max,
             )),
             Line::from(format!(
-                "Crashes saved: {} ({}->{}->{})",
+                "Crashes saved: {} ({}->{}<-{})",
                 session_data.crashes.cum,
                 session_data.crashes.min,
                 session_data.crashes.avg,
                 session_data.crashes.max,
             )),
             Line::from(format!(
-                "Hangs saved: {} ({}->{}->{})",
+                "Hangs saved: {} ({}->{}<-{})",
                 session_data.hangs.cum,
                 session_data.hangs.min,
                 session_data.hangs.avg,
                 session_data.hangs.max,
             )),
             Line::from(format!(
-                "Corpus count: {} ({}->{}->{})",
+                "Corpus count: {} ({}->{}<-{})",
                 Self::format_int_to_hint(session_data.corpus.cum),
                 Self::format_int_to_hint(session_data.corpus.min),
                 Self::format_int_to_hint(session_data.corpus.avg),
@@ -501,72 +535,41 @@ Cycles without finds: {} ({}/{})",
 
     /// Format a floating-point number in a more human readable representation
     fn format_float_to_hfloat(float_num: f64) -> String {
-        if float_num < 1000.0 {
-            format!("{float_num:.2}")
-        } else if float_num < 1_000_000.0 {
-            format!("{:.2}K", float_num / 1000.0)
-        } else if float_num < 1_000_000_000.0 {
-            format!("{:.2}M", float_num / 1_000_000.0)
-        } else if float_num < 1_000_000_000_000.0 {
-            format!("{:.2}B", float_num / 1_000_000_000.0)
-        } else {
-            format!("{:.2}T", float_num / 1_000_000_000_000.0)
-        }
+        NumberScale::from_f64(float_num).format()
     }
 
-    /// Format a integer in a more human readable representation
-    // TODO: Merge with format_float_to_hfloat
-    // TODO: Fix the clippy warnings regarding f64 conversion
+    /// Format an integer in a more human readable representation
     fn format_int_to_hint(int_num: usize) -> String {
-        if int_num < 1000 {
-            format!("{int_num}")
-        } else if int_num < 1_000_000 {
-            format!("{:.2}K", int_num as f64 / 1000.0)
-        } else if int_num < 1_000_000_000 {
-            format!("{:.2}M", int_num as f64 / 1_000_000.0)
-        } else if int_num < 1_000_000_000_000 {
-            format!("{:.2}B", int_num as f64 / 1_000_000_000.0)
-        } else {
-            format!("{:.2}T", int_num as f64 / 1_000_000_000_000.0)
-        }
+        #[allow(clippy::cast_precision_loss)]
+        NumberScale::from_f64(int_num as f64).format()
     }
 
     /// Formats the last event duration
     fn format_last_event(events: &[CrashInfoDetails], total_run_time: &Duration) -> String {
-        events.first().map_or_else(
-            || "N/A".to_string(),
-            |event| {
-                let event_time = (*total_run_time).checked_sub(Duration::from_millis(event.time));
-                event_time.map_or_else(
-                    || "N/A".to_string(),
-                    |duration: std::time::Duration| Self::format_duration(&duration),
-                )
-            },
-        )
+        events
+            .first()
+            .and_then(|event| total_run_time.checked_sub(Duration::from_millis(event.time)))
+            .map_or_else(
+                || "N/A".to_string(),
+                |duration| Self::format_duration(&duration),
+            )
     }
 
     /// Format the solution time to a human readable representation
     fn format_solution_time(total_runtime: &Duration, solution_time: u64) -> String {
         let solution_duration = Duration::from_millis(solution_time);
-        let time_ago = total_runtime.checked_sub(solution_duration);
-
-        time_ago.map_or_else(
+        total_runtime.checked_sub(solution_duration).map_or_else(
             || String::from("Solution found in the future"),
             |duration| {
-                let seconds = duration.as_secs();
-                let minutes = seconds / 60;
-                let hours = minutes / 60;
+                let secs = duration.as_secs();
+                let mins = secs / 60;
+                let hours = mins / 60;
 
-                if hours > 0 {
-                    if minutes % 60 > 0 {
-                        format!("{hours} hour(s) {} minute(s) ago", minutes % 60)
-                    } else {
-                        format!("{hours} hour(s) ago")
-                    }
-                } else if minutes > 0 {
-                    format!("{minutes} minute(s) ago")
-                } else {
-                    format!("{seconds} second(s) ago")
+                match (hours, mins % 60) {
+                    (h, m) if h > 0 && m > 0 => format!("{h} hour(s) {m} minute(s) ago"),
+                    (h, 0) if h > 0 => format!("{h} hour(s) ago"),
+                    (0, m) if m > 0 => format!("{m} minute(s) ago"),
+                    _ => format!("{secs} second(s) ago"),
                 }
             },
         )
@@ -625,5 +628,188 @@ Cycles without finds: {} ({}/{})",
             .join("\n");
 
         format!("{header}\n{separator}\n{rows}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{path::PathBuf, time::Duration};
+
+    // Helper function to create a sample CrashInfoDetails
+    fn create_crash_info(time: u64, fuzzer_name: &str) -> CrashInfoDetails {
+        CrashInfoDetails {
+            fuzzer_name: fuzzer_name.to_string(),
+            file_path: PathBuf::from("crash1"),
+            id: "id1".to_string(),
+            time,
+            sig: Some("SIGSEGV".to_string()),
+            execs: 1000,
+            src: "src/main.rs".to_string(),
+            op: "havoc".to_string(),
+            rep: 2,
+        }
+    }
+
+    #[test]
+    fn test_number_scale_classification() {
+        assert!(matches!(NumberScale::from_f64(100.0), NumberScale::Base(_)));
+        assert!(matches!(
+            NumberScale::from_f64(1500.0),
+            NumberScale::Kilo(_)
+        ));
+        assert!(matches!(
+            NumberScale::from_f64(1_500_000.0),
+            NumberScale::Mega(_)
+        ));
+        assert!(matches!(
+            NumberScale::from_f64(1_500_000_000.0),
+            NumberScale::Giga(_)
+        ));
+        assert!(matches!(
+            NumberScale::from_f64(1_500_000_000_000.0),
+            NumberScale::Tera(_)
+        ));
+    }
+
+    #[test]
+    fn test_number_scale_formatting() {
+        let cases = vec![
+            (100.0, "100.00"),
+            (1500.0, "1.50K"),
+            (1_500_000.0, "1.50M"),
+            (1_500_000_000.0, "1.50B"),
+            (1_500_000_000_000.0, "1.50T"),
+        ];
+
+        for (input, expected) in cases {
+            assert_eq!(NumberScale::from_f64(input).format(), expected);
+        }
+    }
+
+    #[test]
+    fn test_format_float_to_hfloat() {
+        let test_cases = vec![
+            (0.0, "0.00"),
+            (999.99, "999.99"),
+            (1000.0, "1.00K"),
+            (1234.5678, "1.23K"),
+            (1_000_000.0, "1.00M"),
+            (1_234_567.89, "1.23M"),
+            (1_000_000_000.0, "1.00B"),
+            (1_234_567_890.12, "1.23B"),
+            (1_000_000_000_000.0, "1.00T"),
+        ];
+
+        for (input, expected) in test_cases {
+            assert_eq!(Tui::format_float_to_hfloat(input), expected);
+        }
+    }
+
+    #[test]
+    fn test_format_int_to_hint() {
+        let test_cases = vec![
+            (0, "0.00"),
+            (999, "999.00"),
+            (1000, "1.00K"),
+            (1234, "1.23K"),
+            (1_000_000, "1.00M"),
+            (1_234_567, "1.23M"),
+            (1_000_000_000, "1.00B"),
+            (1_234_567_890, "1.23B"),
+            (1_000_000_000_000, "1.00T"),
+        ];
+
+        for (input, expected) in test_cases {
+            assert_eq!(Tui::format_int_to_hint(input), expected);
+        }
+    }
+
+    #[test]
+    fn test_format_duration() {
+        let test_cases = vec![
+            (30, "30s"),
+            (60, "01:00"),
+            (90, "01:30"),
+            (3600, "01:00:00"),
+            (3661, "01:01:01"),
+            (86400, "1 days, 00:00:00"),
+            (90061, "1 days, 01:01:01"),
+        ];
+
+        for (seconds, expected) in test_cases {
+            let duration = Duration::from_secs(seconds);
+            assert_eq!(Tui::format_duration(&duration), expected);
+        }
+    }
+
+    #[test]
+    fn test_format_last_event() {
+        let total_runtime = Duration::from_secs(3600); // 1 hour
+
+        // Test with empty events
+        let empty_events: Vec<CrashInfoDetails> = vec![];
+        assert_eq!(Tui::format_last_event(&empty_events, &total_runtime), "N/A");
+
+        // Test with recent event (3500 seconds = 58:20 remaining)
+        let recent_events = vec![create_crash_info(3500000, "fuzzer1")]; // 3500 seconds
+        assert_eq!(
+            Tui::format_last_event(&recent_events, &total_runtime),
+            "01:40"
+        );
+
+        // Test with future event (should return N/A)
+        let future_events = vec![create_crash_info(4000000, "fuzzer1")]; // 4000 seconds
+        assert_eq!(
+            Tui::format_last_event(&future_events, &total_runtime),
+            "N/A"
+        );
+    }
+
+    #[test]
+    fn test_format_solution_time() {
+        let total_runtime = Duration::from_secs(7200); // 2 hours
+
+        let test_cases = vec![
+            // 7200 - 7000 = 200 seconds = ~3.33 minutes ago
+            (7000000, "3 minute(s) ago"),
+            // 7200 - 3600 = 3600 seconds = 1 hour ago
+            (3600000, "1 hour(s) ago"),
+            // 7200 - 5400 = 1800 seconds = 30 minutes ago
+            (5400000, "30 minute(s) ago"),
+            // Current time
+            (7200000, "0 second(s) ago"),
+            // Future time
+            (7300000, "Solution found in the future"),
+        ];
+
+        for (solution_time, expected) in test_cases {
+            assert_eq!(
+                Tui::format_solution_time(&total_runtime, solution_time),
+                expected,
+                "Failed for solution_time: {}",
+                solution_time
+            );
+        }
+    }
+
+    // Batch testing for number formatting consistency
+    #[test]
+    fn test_number_formatting_consistency() {
+        // Test that integer and float formatting are consistent
+        let test_cases = vec![
+            (1000, 1000.0),
+            (1_000_000, 1_000_000.0),
+            (1_000_000_000, 1_000_000_000.0),
+        ];
+
+        for (int_val, float_val) in test_cases {
+            assert_eq!(
+                Tui::format_int_to_hint(int_val),
+                Tui::format_float_to_hfloat(float_val),
+                "Mismatch between int and float formatting for value: {}",
+                int_val
+            );
+        }
     }
 }

@@ -174,6 +174,7 @@ impl From<&str> for SessionRunner {
 
 /// Arguments for the `run` subcommand
 #[derive(Args, Clone, Debug, Default)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct RunArgs {
     /// Arguments for generating the commands
     #[command(flatten)]

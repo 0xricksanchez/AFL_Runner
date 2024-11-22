@@ -218,7 +218,7 @@ pub struct AFLStrategy {
 
 impl AFLStrategy {
     /// Creates a new strategy builder
-    pub fn new(mode: Mode) -> AFLStrategyBuilder {
+    pub fn builder(mode: Mode) -> AFLStrategyBuilder {
         match mode {
             Mode::Default => Self::create_default_strategy(),
             Mode::MultipleCores => Self::create_multicore_strategy(),
@@ -347,6 +347,9 @@ impl AFLStrategy {
         // Apply args according to their percentages
         let mut current_idx = 0;
         for (arg, percentage) in args {
+            #[allow(clippy::cast_possible_truncation)]
+            #[allow(clippy::cast_precision_loss)]
+            #[allow(clippy::cast_sign_loss)]
             let count = (n as f64 * percentage) as usize;
             let end_idx = (current_idx + count).min(available_indices.len());
 
@@ -442,6 +445,9 @@ impl AFLStrategy {
             return;
         }
         let config = self.cmplog_config.as_ref().unwrap();
+        #[allow(clippy::cast_possible_truncation)]
+        #[allow(clippy::cast_precision_loss)]
+        #[allow(clippy::cast_sign_loss)]
         let num_cmplog_cfgs = (cmds.len() as f64 * config.runner_ratio) as usize;
 
         match num_cmplog_cfgs {
@@ -656,7 +662,7 @@ mod tests {
 
         #[test]
         fn test_builder_multicore() {
-            let strategy = AFLStrategy::new(Mode::MultipleCores).build();
+            let strategy = AFLStrategy::builder(Mode::MultipleCores).build();
             assert!(!strategy.mutation_modes.is_empty());
             assert!(!strategy.format_modes.is_empty());
             assert!(!strategy.power_schedules.is_empty());
@@ -666,7 +672,7 @@ mod tests {
 
         #[test]
         fn test_builder_default() {
-            let strategy = AFLStrategy::new(Mode::Default).build();
+            let strategy = AFLStrategy::builder(Mode::Default).build();
             assert!(strategy.mutation_modes.is_empty());
             assert!(strategy.format_modes.is_empty());
             assert!(strategy.power_schedules.is_empty());
@@ -676,7 +682,7 @@ mod tests {
 
         #[test]
         fn test_builder_with_all_options() {
-            let mut strategy_bld = AFLStrategy::new(Mode::MultipleCores)
+            let mut strategy_bld = AFLStrategy::builder(Mode::MultipleCores)
                 .with_mutation_modes(vec![
                     (MutationMode::Explore, 0.4),
                     (MutationMode::Exploit, 0.2),
@@ -712,7 +718,7 @@ mod tests {
         #[test]
         fn test_apply_mutation_modes() {
             let mut rng = get_test_rng();
-            let mut strategy = AFLStrategy::new(Mode::CIFuzzing)
+            let mut strategy = AFLStrategy::builder(Mode::CIFuzzing)
                 .with_mutation_modes(vec![
                     (MutationMode::Explore, 0.4),
                     (MutationMode::Exploit, 0.2),
@@ -738,7 +744,7 @@ mod tests {
         #[test]
         fn test_apply_format_modes() {
             let mut rng = get_test_rng();
-            let mut strategy = AFLStrategy::new(Mode::CIFuzzing)
+            let mut strategy = AFLStrategy::builder(Mode::CIFuzzing)
                 .with_test_case_format(vec![(FormatMode::Binary, 0.3), (FormatMode::Text, 0.3)])
                 .build();
 
@@ -760,7 +766,7 @@ mod tests {
 
         #[test]
         fn test_apply_power_schedules() {
-            let mut strategy = AFLStrategy::new(Mode::MultipleCores)
+            let mut strategy = AFLStrategy::builder(Mode::MultipleCores)
                 .with_power_schedules(vec![
                     PowerSchedule::Fast,
                     PowerSchedule::Explore,
@@ -785,7 +791,7 @@ mod tests {
         #[test]
         fn test_optional_features() {
             let mut rng = get_test_rng();
-            let mut strategy = AFLStrategy::new(Mode::MultipleCores).build();
+            let mut strategy = AFLStrategy::builder(Mode::MultipleCores).build();
             strategy.optional_features.mopt_ratio = Some(1.0);
             strategy.optional_features.seq_queue_cycling_ratio = Some(1.0);
             strategy.optional_features.application_mode = ApplicationMode::Multiple;
@@ -821,7 +827,7 @@ mod tests {
         #[test]
         fn test_optional_features_threshold_behavior() {
             let mut rng = get_test_rng();
-            let mut strategy = AFLStrategy::new(Mode::MultipleCores).build();
+            let mut strategy = AFLStrategy::builder(Mode::MultipleCores).build();
 
             // Set low probabilities to trigger the enforcement behavior
             strategy.optional_features.mopt_ratio = Some(0.1);
@@ -882,7 +888,7 @@ mod tests {
         #[test]
         fn test_optional_features_exclusive_mode() {
             let mut rng = get_test_rng();
-            let mut strategy = AFLStrategy::new(Mode::CIFuzzing).build();
+            let mut strategy = AFLStrategy::builder(Mode::CIFuzzing).build();
             // Set probabilities that sum to 1.0 to ensure exclusive application
             strategy.optional_features.mopt_ratio = Some(0.5);
             strategy.optional_features.seq_queue_cycling_ratio = Some(0.5);
@@ -921,7 +927,7 @@ mod tests {
         #[test]
         fn test_optional_features_exclusive_mode_full_probability() {
             let mut rng = get_test_rng();
-            let mut strategy = AFLStrategy::new(Mode::CIFuzzing).build();
+            let mut strategy = AFLStrategy::builder(Mode::CIFuzzing).build();
             strategy.optional_features.mopt_ratio = Some(1.0);
             strategy.optional_features.seq_queue_cycling_ratio = Some(1.0);
             strategy.optional_features.application_mode = ApplicationMode::Exclusive;
@@ -963,7 +969,7 @@ mod tests {
             let mut rng = get_test_rng();
             let mut cmds = create_test_cmds(5);
 
-            let mut strategy_bld = AFLStrategy::new(Mode::MultipleCores);
+            let mut strategy_bld = AFLStrategy::builder(Mode::MultipleCores);
             strategy_bld.with_cmplog(CmplogConfig {
                 binary: PathBuf::from("/bin/cmplog"),
                 runner_ratio: 0.2,
@@ -983,7 +989,7 @@ mod tests {
             let mut rng = get_test_rng();
             let mut cmds = create_test_cmds(10);
 
-            let mut strategy_bld = AFLStrategy::new(Mode::MultipleCores);
+            let mut strategy_bld = AFLStrategy::builder(Mode::MultipleCores);
             strategy_bld.with_cmplog(CmplogConfig {
                 binary: PathBuf::from("/bin/cmplog"),
                 runner_ratio: 0.6,
@@ -1022,7 +1028,7 @@ mod tests {
             let mut rng = get_test_rng();
             let mut cmds = create_test_cmds(10);
 
-            let mut strategy_bld = AFLStrategy::new(Mode::MultipleCores);
+            let mut strategy_bld = AFLStrategy::builder(Mode::MultipleCores);
             strategy_bld.with_cmpcov(CmpcovConfig::new(PathBuf::from("/bin/cmpcov")));
             let mut strat = strategy_bld.build();
 
@@ -1039,7 +1045,7 @@ mod tests {
         #[test]
         fn test_cmpcov_with_cmplog_conflict() {
             let mut rng = get_test_rng();
-            let mut strategy_bld = AFLStrategy::new(Mode::MultipleCores);
+            let mut strategy_bld = AFLStrategy::builder(Mode::MultipleCores);
             strategy_bld.with_cmplog(CmplogConfig {
                 binary: PathBuf::from("/bin/cmplog"),
                 runner_ratio: 0.5,

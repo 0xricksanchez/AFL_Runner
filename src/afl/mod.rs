@@ -1,3 +1,4 @@
+pub mod base_cfg;
 pub mod cmd;
 pub mod cmd_gen;
 pub mod env;

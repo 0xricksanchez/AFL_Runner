@@ -2,9 +2,9 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::afl::cmd::AFLCmd;
 use crate::afl::mode::Mode;
 use crate::afl::strategies::{AFLStrategy, CmpcovConfig, CmplogConfig};
+use crate::afl::{base_cfg::Bcfg, cmd::AFLCmd};
 use crate::harness::Harness;
 use crate::seed::Xorshift64;
 use crate::{afl::env::AFLEnv, system_utils};
@@ -12,7 +12,7 @@ use anyhow::{Context, Result};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 
-use system_utils::{create_ramdisk, find_binary_in_path};
+use system_utils::find_binary_in_path;
 
 const RUNNER_THRESH: u32 = 32;
 
@@ -20,20 +20,10 @@ const RUNNER_THRESH: u32 = 32;
 pub struct AFLCmdGenerator {
     /// The harness configuration
     pub harness: Harness,
-    /// Input directory for AFL
-    pub input_dir: PathBuf,
-    /// Output directory for AFL
-    pub output_dir: PathBuf,
+    /// AFL++ base configuration
+    pub base_cfg: Bcfg,
     /// Number of AFL runners
     pub runners: u32,
-    /// Path to the dictionary file/directory
-    pub dictionary: Option<String>,
-    /// Raw AFL flags
-    pub raw_afl_flags: Option<String>,
-    /// Path to the AFL binary
-    pub afl_binary: Option<String>,
-    /// Path to the `RAMDisk`
-    pub ramdisk: Option<String>,
     /// The mode that determines the amount of parameters applied to the generated commands
     pub mode: Mode,
     /// Seed for AFL++
@@ -42,43 +32,15 @@ pub struct AFLCmdGenerator {
 
 impl AFLCmdGenerator {
     /// Creates a new `AFLCmdGenerator` instance
-    pub fn new(
-        harness: Harness,
-        runners: u32,
-        input_dir: PathBuf,
-        output_dir: PathBuf,
-        dictionary: Option<PathBuf>,
-        raw_afl_flags: Option<String>,
-        afl_binary: Option<String>,
-        is_ramdisk: bool,
-        mode: Mode,
-        seed: Option<u64>,
-    ) -> Self {
+    pub fn new(harness: Harness, runners: u32, meta: &Bcfg, mode: Mode, seed: Option<u64>) -> Self {
         if runners > RUNNER_THRESH {
             println!("[!] Warning: Performance degradation may occur with more than 32 runners. Observe campaign results carefully.");
         }
 
-        let dict = dictionary.and_then(|d| d.exists().then(|| d.to_string_lossy().into_owned()));
-
-        let rdisk = is_ramdisk
-            .then(|| create_ramdisk().map_err(|e| println!("[!] Failed to create RAMDisk: {e}")))
-            .transpose()
-            .ok()
-            .flatten();
-
-        if let Some(ref disk) = rdisk {
-            println!("[+] Using RAMDisk: {disk}");
-        }
-
         Self {
             harness,
-            input_dir,
-            output_dir,
+            base_cfg: meta.clone(),
             runners,
-            dictionary: dict,
-            raw_afl_flags,
-            afl_binary,
-            ramdisk: rdisk,
             mode,
             seed,
         }
@@ -101,7 +63,12 @@ impl AFLCmdGenerator {
         let seed = Xorshift64::new(self.seed.unwrap_or(0)).next();
         let mut rng = StdRng::seed_from_u64(seed);
 
-        let afl_envs = AFLEnv::new(self.mode, self.runners, self.ramdisk.as_ref(), &mut rng);
+        let afl_envs = AFLEnv::new(
+            self.mode,
+            self.runners,
+            self.base_cfg.ramdisk.as_ref(),
+            &mut rng,
+        );
 
         let mut cmds = self.create_initial_cmds(&afl_envs)?;
 
@@ -110,7 +77,7 @@ impl AFLCmdGenerator {
             .iter()
             .any(|e| e.starts_with("AFL_CUSTOM_MUTATOR_LIBRARY"));
 
-        let mut afl_strategy_builder = AFLStrategy::new(self.mode);
+        let mut afl_strategy_builder = AFLStrategy::builder(self.mode);
 
         // Enable CMPLOG if requested
         if let Some(ref cmplog_bin) = self.harness.cmplog_bin {
@@ -171,14 +138,14 @@ impl AFLCmdGenerator {
 
     /// Creates initial AFL commands
     fn create_initial_cmds(&self, afl_envs: &[AFLEnv]) -> Result<Vec<AFLCmd>> {
-        let afl_binary = find_binary_in_path(self.afl_binary.clone())?;
+        let afl_binary = find_binary_in_path(self.base_cfg.afl_binary.clone())?;
         let target_binary = &self.harness.target_bin;
         Ok(afl_envs
             .iter()
             .map(|afl_env_cfg| {
                 let mut cmd = AFLCmd::new(afl_binary.clone(), target_binary.clone());
                 cmd.with_env(afl_env_cfg.generate(), false);
-                if let Some(flags) = &self.raw_afl_flags {
+                if let Some(flags) = &self.base_cfg.raw_afl_flags {
                     cmd.with_misc_flags(flags.split_whitespace().map(String::from).collect());
                 }
 
@@ -190,8 +157,8 @@ impl AFLCmdGenerator {
     /// Applies input and output directories to AFL commands
     fn apply_directory(&self, cmds: &mut [AFLCmd]) {
         for cmd in cmds {
-            cmd.with_input_dir(self.input_dir.clone())
-                .with_output_dir(self.output_dir.clone());
+            cmd.with_input_dir(self.base_cfg.input_dir.clone())
+                .with_output_dir(self.base_cfg.output_dir.clone());
         }
     }
 
@@ -241,7 +208,7 @@ impl AFLCmdGenerator {
 
     /// Applies dictionary to AFL commands
     fn apply_dictionary(&self, cmds: &mut [AFLCmd]) -> Result<()> {
-        if let Some(dict) = &self.dictionary {
+        if let Some(dict) = &self.base_cfg.dictionary {
             let dict_path = fs::canonicalize(dict).context("Failed to resolve dictionary path")?;
             for cmd in cmds {
                 cmd.add_flag(format!("-x {}", dict_path.display()));
@@ -294,6 +261,10 @@ mod tests {
         }
     }
 
+    fn create_afl_base_cfg() -> Bcfg {
+        Bcfg::new(PathBuf::from("/input"), PathBuf::from("/output"))
+    }
+
     fn setup_test_generator() -> (TempDir, AFLCmdGenerator) {
         let temp_dir = TempDir::new().unwrap();
         let input_dir = temp_dir.path().join("input");
@@ -301,15 +272,12 @@ mod tests {
         fs::create_dir(&input_dir).unwrap();
         fs::create_dir(&output_dir).unwrap();
 
+        let afl_base = Bcfg::new(input_dir.clone(), output_dir.clone());
+
         let generator = AFLCmdGenerator::new(
             create_test_harness(),
             2,
-            input_dir,
-            output_dir,
-            None,
-            None,
-            None,
-            false,
+            &afl_base,
             Mode::MultipleCores,
             Some(42),
         );
@@ -322,21 +290,18 @@ mod tests {
         let (_temp, generator) = setup_test_generator();
         assert_eq!(generator.runners, 2);
         assert_eq!(generator.seed, Some(42));
-        assert!(generator.dictionary.is_none());
-        assert!(generator.ramdisk.is_none());
+        assert!(generator.base_cfg.dictionary.is_none());
+        assert!(generator.base_cfg.ramdisk.is_none());
     }
 
     #[test]
     fn test_generator_with_too_many_runners() {
+        let harness = create_test_harness();
+        let afl_base = create_afl_base_cfg();
         let generator = AFLCmdGenerator::new(
-            create_test_harness(),
+            harness,
             RUNNER_THRESH + 1,
-            PathBuf::from("/input"),
-            PathBuf::from("/output"),
-            None,
-            None,
-            None,
-            false,
+            &afl_base,
             Mode::MultipleCores,
             None,
         );
@@ -349,20 +314,17 @@ mod tests {
         let dict_path = temp_dir.path().join("dict.txt");
         fs::write(&dict_path, "test:test").unwrap();
 
+        let afl_base = create_afl_base_cfg().with_dictionary(Some(dict_path));
+
         let generator = AFLCmdGenerator::new(
             create_test_harness(),
             2,
-            PathBuf::from("/input"),
-            PathBuf::from("/output"),
-            Some(dict_path),
-            None,
-            None,
-            false,
+            &afl_base,
             Mode::MultipleCores,
             None,
         );
 
-        assert!(generator.dictionary.is_some());
+        assert!(generator.base_cfg.dictionary.is_some());
 
         let cmds = generator.run().unwrap();
         assert!(cmds.iter().all(|cmd| cmd.to_string().contains("-x")));
@@ -400,18 +362,9 @@ mod tests {
         let mut harness = create_test_harness();
         harness.sanitizer_bin = Some(PathBuf::from("/bin/sanitizer"));
 
-        let generator = AFLCmdGenerator::new(
-            harness,
-            2,
-            PathBuf::from("/input"),
-            PathBuf::from("/output"),
-            None,
-            None,
-            None,
-            false,
-            Mode::MultipleCores,
-            Some(42),
-        );
+        let afl_base = create_afl_base_cfg();
+
+        let generator = AFLCmdGenerator::new(harness, 2, &afl_base, Mode::MultipleCores, Some(42));
 
         let mut cmds = vec![AFLCmd::new(
             PathBuf::from("afl-fuzz"),
@@ -427,18 +380,9 @@ mod tests {
         let mut harness = create_test_harness();
         harness.cmpcov_bin = Some(PathBuf::from("/bin/cmpcov-binary"));
 
-        let generator = AFLCmdGenerator::new(
-            harness,
-            4,
-            PathBuf::from("/input"),
-            PathBuf::from("/output"),
-            None,
-            None,
-            None,
-            false,
-            Mode::MultipleCores,
-            Some(42),
-        );
+        let afl_base = Bcfg::new(PathBuf::from("/input"), PathBuf::from("/output"));
+
+        let generator = AFLCmdGenerator::new(harness, 4, &afl_base, Mode::MultipleCores, Some(42));
 
         let result = generator.run();
         assert!(result.is_ok());
@@ -457,18 +401,9 @@ mod tests {
         let mut harness = create_test_harness();
         harness.cmplog_bin = Some(PathBuf::from("/bin/cmplog-binary"));
 
-        let generator = AFLCmdGenerator::new(
-            harness,
-            4,
-            PathBuf::from("/input"),
-            PathBuf::from("/output"),
-            None,
-            None,
-            None,
-            false,
-            Mode::MultipleCores,
-            Some(42),
-        );
+        let afl_base = create_afl_base_cfg();
+
+        let generator = AFLCmdGenerator::new(harness, 4, &afl_base, Mode::MultipleCores, Some(42));
 
         let result = generator.run();
         assert!(result.is_ok());
@@ -484,18 +419,9 @@ mod tests {
         let mut harness = create_test_harness();
         harness.target_args = Some("--test argument".to_string());
 
-        let generator = AFLCmdGenerator::new(
-            harness,
-            2,
-            PathBuf::from("/input"),
-            PathBuf::from("/output"),
-            None,
-            None,
-            None,
-            false,
-            Mode::MultipleCores,
-            Some(42),
-        );
+        let afl_base = create_afl_base_cfg();
+
+        let generator = AFLCmdGenerator::new(harness, 2, &afl_base, Mode::MultipleCores, Some(42));
 
         let mut cmds = vec![AFLCmd::new(
             PathBuf::from("afl-fuzz"),
@@ -546,12 +472,7 @@ mod tests {
         let generator_with_defaults = AFLCmdGenerator::new(
             create_test_harness(),
             2,
-            generator.input_dir.clone(),
-            generator.output_dir.clone(),
-            None,
-            None,
-            None,
-            false,
+            &generator.base_cfg.clone(),
             Mode::MultipleCores,
             None,
         );
