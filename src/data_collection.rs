@@ -10,6 +10,63 @@ use sysinfo::{Pid, System};
 
 use crate::session::{CampaignData, CrashInfoDetails};
 
+macro_rules! update_stat {
+    // Special case for floating point numbers
+    ($field:expr, $metrics:expr, $key:expr, f64) => {
+        if let Some(value) = $metrics.get::<f64>($key) {
+            $field.max = $field.max.max(value);
+            if $field.min == 0.0 {
+                $field.min = value;
+            } else {
+                $field.min = $field.min.min(value);
+            }
+            $field.cum += value;
+        }
+    };
+    // Case for integer types (usize)
+    ($field:expr, $metrics:expr, $key:expr, usize) => {
+        if let Some(value) = $metrics.get::<usize>($key) {
+            $field.max = $field.max.max(value);
+            if $field.min == 0 {
+                $field.min = value;
+            } else {
+                $field.min = $field.min.min(value);
+            }
+            $field.cum += value;
+        }
+    };
+}
+
+macro_rules! calculate_average {
+    // Case for integer averages from cum/count
+    ($field:expr, $fuzzer_count:expr) => {
+        $field.avg = $field.cum / $fuzzer_count;
+    };
+    // Case for floating point averages from cum/count
+    ($field:expr, $fuzzer_count:expr, f64) => {
+        #[allow(clippy::cast_precision_loss)]
+        {
+            $field.avg = $field.cum / ($fuzzer_count as f64);
+        }
+    };
+}
+
+// Separate macro for min-max calculations
+macro_rules! calculate_minmax_average {
+    // Case for floating point min-max
+    ($field:expr) => {
+        if $field.max != 0.0 || $field.min != 0.0 {
+            $field.avg = ($field.min + $field.max) / 2.0;
+        }
+    };
+    // Case for integer min-max
+    ($field:expr, integer) => {
+        if $field.max != 0 || $field.min != 0 {
+            $field.avg = ($field.min + $field.max) / 2;
+        }
+    };
+}
+
 #[derive(Debug)]
 struct FuzzerMetrics {
     pid: Option<u32>,
@@ -211,52 +268,59 @@ impl DataFetcher {
             }
         }
 
-        macro_rules! update_stat {
-            // Special case for floating point numbers
-            ($field:expr, $key:expr, f64) => {
-                if let Some(value) = metrics.get::<f64>($key) {
-                    $field.max = $field.max.max(value);
-                    if $field.min == 0.0 {
-                        $field.min = value;
-                    } else {
-                        $field.min = $field.min.min(value);
-                    }
-                    $field.cum += value;
-                }
-            };
-            // Case for integer types (usize)
-            ($field:expr, $key:expr, usize) => {
-                if let Some(value) = metrics.get::<usize>($key) {
-                    $field.max = $field.max.max(value);
-                    if $field.min == 0 {
-                        $field.min = value;
-                    } else {
-                        $field.min = $field.min.min(value);
-                    }
-                    $field.cum += value;
-                }
-            };
-        }
-
+        // Update integer statistics
         update_stat!(
             self.campaign_data.time_without_finds,
+            metrics,
             "time_wo_finds",
             usize
         );
-        update_stat!(self.campaign_data.executions.per_sec, "execs_per_sec", f64);
-        update_stat!(self.campaign_data.executions.count, "execs_done", usize);
-        update_stat!(self.campaign_data.pending.favorites, "pending_favs", usize);
-        update_stat!(self.campaign_data.pending.total, "pending_total", usize);
-        update_stat!(self.campaign_data.corpus, "corpus_count", usize);
-        update_stat!(self.campaign_data.crashes, "saved_crashes", usize);
-        update_stat!(self.campaign_data.hangs, "saved_hangs", usize);
-        update_stat!(self.campaign_data.levels, "max_depth", usize);
-        update_stat!(self.campaign_data.cycles.wo_finds, "cycles_wo_finds", usize);
+        update_stat!(
+            self.campaign_data.executions.count,
+            metrics,
+            "execs_done",
+            usize
+        );
+        update_stat!(
+            self.campaign_data.pending.favorites,
+            metrics,
+            "pending_favs",
+            usize
+        );
+        update_stat!(
+            self.campaign_data.pending.total,
+            metrics,
+            "pending_total",
+            usize
+        );
+        update_stat!(self.campaign_data.corpus, metrics, "corpus_count", usize);
+        update_stat!(self.campaign_data.crashes, metrics, "saved_crashes", usize);
+        update_stat!(self.campaign_data.hangs, metrics, "saved_hangs", usize);
+        update_stat!(self.campaign_data.levels, metrics, "max_depth", usize);
+        update_stat!(
+            self.campaign_data.cycles.wo_finds,
+            metrics,
+            "cycles_wo_finds",
+            usize
+        );
 
-        // Handle special cases that need custom initialization
+        // Update floating point statistics
+        update_stat!(
+            self.campaign_data.executions.per_sec,
+            metrics,
+            "execs_per_sec",
+            f64
+        );
+
+        self.update_stability_and_coverage(metrics);
+        self.update_misc_info(metrics);
+        self.first_update = false;
+    }
+
+    fn update_stability_and_coverage(&mut self, metrics: &FuzzerMetrics) {
+        // Handle stability
         if let Some(stability) = metrics.get::<f64>("stability") {
             self.campaign_data.stability.max = self.campaign_data.stability.max.max(stability);
-            // Initialize min with the first non-zero value we see
             if self.campaign_data.stability.min == 0.0
                 || stability < self.campaign_data.stability.min
             {
@@ -264,6 +328,7 @@ impl DataFetcher {
             }
         }
 
+        // Handle coverage
         if let Some(coverage) = metrics.get::<f64>("bitmap_cvg") {
             self.campaign_data.coverage.max = self.campaign_data.coverage.max.max(coverage);
             if self.campaign_data.coverage.min == 0.0 || coverage < self.campaign_data.coverage.min
@@ -271,9 +336,6 @@ impl DataFetcher {
                 self.campaign_data.coverage.min = coverage;
             }
         }
-
-        self.update_misc_info(metrics);
-        self.first_update = false;
     }
 
     fn update_misc_info(&mut self, metrics: &FuzzerMetrics) {
@@ -312,44 +374,22 @@ impl DataFetcher {
             return;
         }
 
-        let fuzzer_count_f64 = fuzzer_count as f64;
+        // Calculate cumulative averages (using fuzzer count)
+        calculate_average!(self.campaign_data.executions.count, fuzzer_count);
+        calculate_average!(self.campaign_data.executions.per_sec, fuzzer_count, f64);
+        calculate_average!(self.campaign_data.pending.favorites, fuzzer_count);
+        calculate_average!(self.campaign_data.pending.total, fuzzer_count);
+        calculate_average!(self.campaign_data.corpus, fuzzer_count);
+        calculate_average!(self.campaign_data.crashes, fuzzer_count);
+        calculate_average!(self.campaign_data.hangs, fuzzer_count);
 
-        // Helper macro to calculate averages
-        macro_rules! calc_avg {
-            // Case for integer averages
-            ($field:expr) => {
-                $field.avg = $field.cum / fuzzer_count;
-            };
-            // Case for floating point averages using fuzzer count
-            ($field:expr, f64) => {
-                $field.avg = $field.cum / fuzzer_count_f64;
-            };
-            // Case for min-max floating point averages
-            ($field:expr, minmax_f64) => {
-                $field.avg = ($field.min + $field.max) / 2.0;
-            };
-            // Case for min-max integer averages
-            ($field:expr, minmax) => {
-                $field.avg = ($field.min + $field.max) / 2;
-            };
-        }
-
-        // Calculate all averages using the macro
-        calc_avg!(self.campaign_data.executions.count);
-        calc_avg!(self.campaign_data.executions.per_sec, f64);
-        calc_avg!(self.campaign_data.pending.favorites);
-        calc_avg!(self.campaign_data.pending.total);
-        calc_avg!(self.campaign_data.corpus);
-        calc_avg!(self.campaign_data.crashes);
-        calc_avg!(self.campaign_data.hangs);
-
-        // Min-max based averages
-        calc_avg!(self.campaign_data.coverage, minmax_f64);
-        calc_avg!(self.campaign_data.stability, minmax_f64);
-        calc_avg!(self.campaign_data.cycles.done, minmax);
-        calc_avg!(self.campaign_data.cycles.wo_finds, minmax);
-        calc_avg!(self.campaign_data.levels, minmax);
-        calc_avg!(self.campaign_data.time_without_finds, minmax);
+        // Calculate min-max based averages
+        calculate_minmax_average!(self.campaign_data.coverage);
+        calculate_minmax_average!(self.campaign_data.stability);
+        calculate_minmax_average!(self.campaign_data.cycles.done, integer);
+        calculate_minmax_average!(self.campaign_data.cycles.wo_finds, integer);
+        calculate_minmax_average!(self.campaign_data.levels, integer);
+        calculate_minmax_average!(self.campaign_data.time_without_finds, integer);
     }
 
     fn collect_crashes_and_hangs(
@@ -689,5 +729,93 @@ mod tests {
 
         assert_eq!(fetcher.campaign_data.time_without_finds.max, 341);
         assert_eq!(fetcher.campaign_data.time_without_finds.min, 341);
+    }
+
+    #[test]
+    fn test_average_calculations() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut campaign_data = CampaignData::new();
+
+        // Test data with varying values to exercise both types of averages
+        let fuzzer_stats = vec![
+            ("fuzzer01", "100.00", "1000000", "250.0", "45.5"),
+            ("fuzzer02", "98.50", "1200000", "275.0", "47.2"),
+            ("fuzzer03", "99.75", "1100000", "260.0", "46.3"),
+        ];
+
+        for (fuzzer_name, stability, execs, execs_per_sec, coverage) in &fuzzer_stats {
+            let stats_dir = temp_dir.path().join(fuzzer_name);
+            fs::create_dir(&stats_dir).unwrap();
+            let stats_content = format!(
+                r#"
+                fuzzer_pid : 1234
+                execs_done : {}
+                execs_per_sec : {}
+                pending_favs : 100
+                pending_total : 500
+                stability : {}%
+                bitmap_cvg : {}%
+                "#,
+                execs, execs_per_sec, stability, coverage
+            );
+            let stats_file = stats_dir.join("fuzzer_stats");
+            File::create(&stats_file)
+                .unwrap()
+                .write_all(stats_content.as_bytes())
+                .unwrap();
+        }
+
+        let mut fetcher = DataFetcher::new(temp_dir.path(), None, &mut campaign_data);
+        fetcher.campaign_data.fuzzers_alive = vec![1234];
+        fetcher.process_fuzzer_directories();
+        fetcher.calculate_averages();
+
+        // Test cumulative averages
+        assert_eq!(fetcher.campaign_data.executions.count.cum, 3300000);
+        assert_eq!(fetcher.campaign_data.executions.count.avg, 3300000); // Only one fuzzer alive
+        assert!((fetcher.campaign_data.executions.per_sec.cum - 785.0).abs() < 0.01);
+
+        // Test min-max based averages
+        assert!((fetcher.campaign_data.stability.max - 100.0).abs() < f64::EPSILON);
+        assert!((fetcher.campaign_data.stability.min - 98.50).abs() < f64::EPSILON);
+        assert!((fetcher.campaign_data.stability.avg - 99.25).abs() < 0.01);
+
+        assert!((fetcher.campaign_data.coverage.max - 47.2).abs() < f64::EPSILON);
+        assert!((fetcher.campaign_data.coverage.min - 45.5).abs() < f64::EPSILON);
+        assert!((fetcher.campaign_data.coverage.avg - 46.35).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_zero_value_handling() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut campaign_data = CampaignData::new();
+
+        let stats_content = r#"
+            fuzzer_pid : 1234
+            execs_done : 0
+            execs_per_sec : 0.0
+            pending_favs : 0
+            pending_total : 0
+            stability : 0.00%
+            bitmap_cvg : 0.0%
+        "#;
+
+        let stats_dir = temp_dir.path().join("fuzzer01");
+        fs::create_dir(&stats_dir).unwrap();
+        File::create(stats_dir.join("fuzzer_stats"))
+            .unwrap()
+            .write_all(stats_content.as_bytes())
+            .unwrap();
+
+        let mut fetcher = DataFetcher::new(temp_dir.path(), None, &mut campaign_data);
+        fetcher.campaign_data.fuzzers_alive = vec![1234];
+        fetcher.process_fuzzer_directories();
+        fetcher.calculate_averages();
+
+        // Test that zero values are handled correctly
+        assert_eq!(fetcher.campaign_data.executions.count.avg, 0);
+        assert_eq!(fetcher.campaign_data.executions.per_sec.avg, 0.0);
+        assert_eq!(fetcher.campaign_data.stability.avg, 0.0);
+        assert_eq!(fetcher.campaign_data.coverage.avg, 0.0);
     }
 }
