@@ -15,8 +15,8 @@ mod data_collection;
 mod harness;
 mod runners;
 mod session;
-use crate::cli::AFL_CORPUS;
 use crate::session::CampaignData;
+use crate::{afl::base_cfg::Bcfg, cli::AFL_CORPUS};
 use crate::{
     afl::cmd::{Printable, ToStringVec},
     afl::cmd_gen::AFLCmdGenerator,
@@ -37,7 +37,7 @@ pub static DEFAULT_AFL_CONFIG: &str = "aflr_cfg.toml";
 
 fn create_afl_runner(
     gen_args: &cli::GenArgs,
-    raw_afl_flags: Option<String>,
+    raw_afl_flags: Option<&String>,
     is_ramdisk: bool,
 ) -> Result<AFLCmdGenerator> {
     // TODO: Implement coverage target in gen_args
@@ -55,9 +55,8 @@ fn create_afl_runner(
     } else {
         None
     };
-    Ok(AFLCmdGenerator::new(
-        harness,
-        gen_args.runners.unwrap_or(1),
+
+    let afl_meta = Bcfg::new(
         gen_args
             .input_dir
             .clone()
@@ -66,10 +65,16 @@ fn create_afl_runner(
             .output_dir
             .clone()
             .unwrap_or_else(|| Path::new("/tmp/afl_output").to_path_buf()),
-        gen_args.dictionary.clone(),
-        raw_afl_flags,
-        gen_args.afl_binary.clone(),
-        is_ramdisk,
+    )
+    .with_dictionary(gen_args.dictionary.clone())
+    .with_raw_afl_flags(raw_afl_flags)
+    .with_afl_binary(gen_args.afl_binary.clone())
+    .with_ramdisk(is_ramdisk);
+
+    Ok(AFLCmdGenerator::new(
+        harness,
+        gen_args.runners.unwrap_or(1),
+        &afl_meta,
         gen_args.mode,
         seed,
     ))
@@ -197,6 +202,10 @@ impl ConfigManager {
         Self::default()
     }
 
+    /// Loads the configuration from the provided path.
+    ///
+    /// # Errors
+    /// Returns an error if the configuration file is not found or the configuration is invalid.
     pub fn load(&mut self, config_path: Option<&PathBuf>) -> Result<()> {
         let path = config_path.unwrap_or(&self.default_config_path);
         if path.exists() {
@@ -212,6 +221,10 @@ impl ConfigManager {
         Ok(())
     }
 
+    /// Merges the provided `GenArgs` with the loaded configuration if available.
+    ///
+    /// # Errors
+    /// Returns an error if the configuration is not loaded or the merge fails.
     pub fn merge_gen_args(&self, args: &GenArgs) -> Result<(GenArgs, Option<String>)> {
         let merged = self
             .config
@@ -226,6 +239,10 @@ impl ConfigManager {
         Ok((merged, raw_afl_flags))
     }
 
+    /// Merges the `RunArgs` with the loaded configuration from file (if any).
+    ///
+    /// # Errors
+    /// Returns an error if the configuration file is not found or the configuration is invalid.
     pub fn merge_run_args(&self, args: &RunArgs) -> Result<(RunArgs, Option<String>)> {
         let merged = self
             .config
@@ -243,6 +260,10 @@ impl ConfigManager {
 
 /// Command executor trait for better abstraction
 pub trait CommandExecutor {
+    /// Executes the command
+    ///
+    /// # Errors
+    /// Returns an error if the command execution fails
     fn execute(&self) -> Result<()>;
 }
 
@@ -264,7 +285,7 @@ impl<'a> GenCommandExecutor<'a> {
 impl CommandExecutor for GenCommandExecutor<'_> {
     fn execute(&self) -> Result<()> {
         let (merged_args, raw_afl_flags) = self.config_manager.merge_gen_args(self.args)?;
-        let afl_generator = create_afl_runner(&merged_args, raw_afl_flags, false)
+        let afl_generator = create_afl_runner(&merged_args, raw_afl_flags.as_ref(), false)
             .context("Failed to create AFL runner")?;
         afl_generator
             .run()
@@ -297,9 +318,12 @@ impl CommandExecutor for RunCommandExecutor<'_> {
             bail!("TUI and detached mode cannot be used together");
         }
 
-        let afl_generator =
-            create_afl_runner(&merged_args.gen_args, raw_afl_flags, merged_args.is_ramdisk)
-                .context("Failed to create AFL runner")?;
+        let afl_generator = create_afl_runner(
+            &merged_args.gen_args,
+            raw_afl_flags.as_ref(),
+            merged_args.is_ramdisk,
+        )
+        .context("Failed to create AFL runner")?;
 
         let afl_commands = afl_generator.run().context("Failed to run AFL generator")?;
 

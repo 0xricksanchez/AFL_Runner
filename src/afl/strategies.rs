@@ -347,6 +347,9 @@ impl AFLStrategy {
         // Apply args according to their percentages
         let mut current_idx = 0;
         for (arg, percentage) in args {
+            #[allow(clippy::cast_possible_truncation)]
+            #[allow(clippy::cast_precision_loss)]
+            #[allow(clippy::cast_sign_loss)]
             let count = (n as f64 * percentage) as usize;
             let end_idx = (current_idx + count).min(available_indices.len());
 
@@ -442,6 +445,9 @@ impl AFLStrategy {
             return;
         }
         let config = self.cmplog_config.as_ref().unwrap();
+        #[allow(clippy::cast_possible_truncation)]
+        #[allow(clippy::cast_precision_loss)]
+        #[allow(clippy::cast_sign_loss)]
         let num_cmplog_cfgs = (cmds.len() as f64 * config.runner_ratio) as usize;
 
         match num_cmplog_cfgs {
