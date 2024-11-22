@@ -55,15 +55,11 @@ macro_rules! calculate_average {
 macro_rules! calculate_minmax_average {
     // Case for floating point min-max
     ($field:expr) => {
-        if $field.max != 0.0 || $field.min != 0.0 {
-            $field.avg = ($field.min + $field.max) / 2.0;
-        }
+        $field.avg = ($field.min + $field.max) / 2.0;
     };
     // Case for integer min-max
     ($field:expr, integer) => {
-        if $field.max != 0 || $field.min != 0 {
-            $field.avg = ($field.min + $field.max) / 2;
-        }
+        $field.avg = ($field.min + $field.max) / 2;
     };
 }
 
