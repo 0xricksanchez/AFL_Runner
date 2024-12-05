@@ -300,7 +300,7 @@ impl CommandExecutor for CovCommandExecutor<'_> {
     fn execute(&self) -> Result<()> {
         let merged_args = self.config_manager.merge_cov_args(self.args)?;
         let mut cov_collector =
-            CoverageCollector::new(merged_args.target.unwrap(), merged_args.output_dir.unwrap());
+            CoverageCollector::new(merged_args.target.unwrap(), merged_args.output_dir.unwrap())?;
 
         if let Some(target_args) = &merged_args.target_args {
             cov_collector.with_target_args(target_args.clone());

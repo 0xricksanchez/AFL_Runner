@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use glob::glob;
 use rayon::prelude::*;
 use std::{
@@ -62,15 +62,67 @@ impl CoverageCollector {
     /// # Arguments
     /// * `target` - Path to the instrumented binary
     /// * `afl_out` - Path to the AFL++ output directory containing queue folders
-    pub fn new<P: AsRef<Path>>(target: P, afl_out: P) -> Self {
-        Self {
+    ///
+    /// # Returns
+    /// * `Result<Self>` - A new CoverageCollector instance or an error
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - Any of the system requirements are not met
+    /// - The target binary is not compiled with LLVM coverage instrumentation
+    /// - The readelf command fails to execute
+    pub fn new<P: AsRef<Path>>(target: P, afl_out: P) -> Result<Self> {
+        Self::is_req_present(&target)?;
+        let progs = vec!["llvm-profdata", "llvm-cov", "genhtml", "lcov"];
+        Self::is_llvm_available(&progs)?;
+
+        Ok(Self {
             target: target.as_ref().to_path_buf(),
             afl_out: afl_out.as_ref().to_path_buf(),
             config: CollectorConfig::default(),
             merged_profdata: None,
+        })
+    }
+
+    fn is_req_present<P: AsRef<Path>>(path: P) -> Result<bool> {
+        let output = Command::new("readelf")
+            .arg("-s")
+            .arg(path.as_ref())
+            .output()?;
+
+        if !output.status.success() {
+            bail!("readelf command failed to execute",);
+        }
+
+        // Convert output bytes to string, ignoring invalid UTF-8 sequences
+        let output_str = String::from_utf8_lossy(&output.stdout);
+
+        // Check if any line contains "covrec"
+        if output_str.lines().any(|line| line.contains("covrec")) {
+            Ok(true)
+        } else {
+            bail!("Target binary is not compiled with LLVM coverage instrumentation");
         }
     }
 
+    fn is_llvm_available(progs: &[&str]) -> Result<()> {
+        for prog in progs {
+            let output = Command::new(prog)
+                .arg("--version")
+                .output()
+                .with_context(|| {
+                    format!(
+                        "Failed to execute {}. Please ensure that the required tools are installed",
+                        prog
+                    )
+                })?;
+
+            if !output.status.success() {
+                bail!("{} failed to execute successfully: {}", prog, output.status);
+            }
+        }
+        Ok(())
+    }
     /// Sets the arguments to be passed to the target binary during coverage collection
     ///
     /// # Arguments
@@ -545,8 +597,9 @@ mod tests {
 
     #[test]
     fn test_find_queue_directories() -> Result<()> {
+        let binary_path = create_mock_binary()?;
         let (test_dir, afl_dir) = setup_test_dir()?;
-        let collector = CoverageCollector::new("/bin/ls", &afl_dir.to_str().unwrap());
+        let collector = CoverageCollector::new(binary_path, afl_dir)?;
 
         let queue_dirs = collector.find_queue_directories()?;
         assert_eq!(queue_dirs.len(), 3); // We now create 3 fuzzer instances
@@ -557,17 +610,20 @@ mod tests {
     }
 
     #[test]
-    fn test_is_file_based_harness() {
-        let mut collector = CoverageCollector::new("/bin/ls", "/tmp");
+    fn test_is_file_based_harness() -> Result<()> {
+        let binary_path = create_mock_binary()?;
+        let mut collector = CoverageCollector::new(binary_path, "/tmp".into())?;
         assert!(!collector.is_file_based_harness());
 
         collector.with_target_args(vec!["@@".to_string()]);
         assert!(collector.is_file_based_harness());
+        Ok(())
     }
 
     #[test]
-    fn test_collector_config() {
-        let mut collector = CoverageCollector::new("/bin/ls", "/tmp");
+    fn test_collector_config() -> Result<()> {
+        let binary_path = create_mock_binary()?;
+        let mut collector = CoverageCollector::new(binary_path, "/tmp".into())?;
         collector
             .with_html(false)
             .with_split_report(true)
@@ -580,12 +636,15 @@ mod tests {
         assert_eq!(collector.config.target_args, vec!["arg1"]);
         assert_eq!(collector.config.show_args, vec!["--show-branches"]);
         assert_eq!(collector.config.report_args, vec!["--show-functions"]);
+
+        Ok(())
     }
 
     #[test]
     fn test_collect_queue_files() -> Result<()> {
+        let binary_path = create_mock_binary()?;
         let (test_dir, afl_dir) = setup_test_dir()?;
-        let collector = CoverageCollector::new("/bin/ls", &afl_dir.to_str().unwrap());
+        let collector = CoverageCollector::new(binary_path, afl_dir)?;
 
         let queue_dirs = collector.find_queue_directories()?;
         let files = CoverageCollector::collect_queue_files(&queue_dirs[0].path);
@@ -602,7 +661,7 @@ mod tests {
         let binary_path = create_mock_binary()?;
         let (test_dir, afl_dir) = setup_test_dir()?;
 
-        let mut collector = CoverageCollector::new(&binary_path, &afl_dir);
+        let mut collector = CoverageCollector::new(&binary_path, &afl_dir)?;
         collector.with_target_args(vec!["@@".to_string()]);
 
         let queue_dirs = collector.find_queue_directories()?;
@@ -619,17 +678,20 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_afl_directory() {
-        let collector = CoverageCollector::new("/bin/ls", "/nonexistent");
+    fn test_invalid_afl_directory() -> Result<()> {
+        let binary_path = create_mock_binary()?;
+        let collector = CoverageCollector::new(binary_path, "/nonexistent".into())?;
         assert!(collector.find_queue_directories().is_err());
+        Ok(())
     }
 
     #[test]
     fn test_empty_afl_directory() -> Result<()> {
+        let binary_path = create_mock_binary()?;
         let test_dir = PathBuf::from("/tmp").join(format!("test_coverage_{}", Uuid::new_v4()));
         fs::create_dir(&test_dir)?;
 
-        let collector = CoverageCollector::new("/bin/ls", &test_dir.to_str().unwrap());
+        let collector = CoverageCollector::new(binary_path, test_dir.clone())?;
         assert!(collector.find_queue_directories().is_err());
 
         fs::remove_dir_all(test_dir)?;
