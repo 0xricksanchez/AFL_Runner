@@ -260,7 +260,7 @@ impl ConfigManager {
         Ok((merged, raw_afl_flags))
     }
 
-    /// Merges the 'CoverageArgs' with the loaded configuration from file (if any).
+    /// Merges the `CoverageArgs` with the loaded configuration from file (if any).
     ///
     /// # Errors
     /// Returns an error if the configuration file is not found or the configuration is invalid.
@@ -299,10 +299,8 @@ impl<'a> CovCommandExecutor<'a> {
 impl CommandExecutor for CovCommandExecutor<'_> {
     fn execute(&self) -> Result<()> {
         let merged_args = self.config_manager.merge_cov_args(self.args)?;
-        let mut cov_collector = CoverageCollector::new(
-            merged_args.target.unwrap().clone(),
-            merged_args.output_dir.unwrap().clone(),
-        );
+        let mut cov_collector =
+            CoverageCollector::new(merged_args.target.unwrap(), merged_args.output_dir.unwrap());
 
         if let Some(target_args) = &merged_args.target_args {
             cov_collector.with_target_args(target_args.clone());

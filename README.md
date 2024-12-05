@@ -124,6 +124,8 @@ Coverage visualization is also covered by `AFL_Runner`:
 
 ![AFL_Runner cov](img/cov.gif)
 
+_Note_: IFF you ran the AFLR demo campaign for a while you can run `cargo make afl_coverage` to run the coverage collection as shown above.
+
 ## Contributing 🤝
 
 Contributions are welcome! Please feel free to submit a pull request or open an issue for any bugs, feature requests, or improvements.

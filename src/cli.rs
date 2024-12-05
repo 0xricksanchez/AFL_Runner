@@ -89,8 +89,8 @@ impl ConfigMerge<Self> for CovArgs {
                 .or_else(|| Some(PathBuf::from(AFL_OUTPUT))),
             split_report: config.coverage.split_report.unwrap_or(self.split_report),
             text_report: match config.coverage.report_type.as_deref() {
-                Some("HTML") | Some("html") => false,
-                Some("TEXT") | Some("text") => true,
+                Some("HTML" | "html") => false,
+                Some("TEXT" | "text") => true,
                 Some(unknown) => {
                     eprintln!(
                         "Warning: Unknown report type '{}', defaulting to {}",

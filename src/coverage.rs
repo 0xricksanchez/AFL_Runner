@@ -134,9 +134,9 @@ impl CoverageCollector {
     fn process_split_reports(&mut self, queue_dirs: Vec<QueueDirectory>) -> Result<()> {
         for (idx, dir) in queue_dirs.into_iter().enumerate() {
             let tmp_dir = self.process_queue_directory(&dir)?;
-            let output_file = self.afl_out.join(format!("merged_{}.profdata", idx));
+            let output_file = self.afl_out.join(format!("merged_{idx}.profdata"));
 
-            self.merge_raw_coverage(&tmp_dir, &output_file)?;
+            Self::merge_raw_coverage(&tmp_dir, &output_file)?;
             self.merged_profdata = Some(output_file);
 
             let report_type = if self.config.is_html {
@@ -159,7 +159,7 @@ impl CoverageCollector {
         Ok(())
     }
 
-    fn is_base_dir_remove(&self, bdir: &Path) -> Result<()> {
+    fn is_base_dir_remove(bdir: &Path) -> Result<()> {
         if bdir.exists() {
             println!(
                 "[!] Existing HTML reports found in {}. Overwrite? [Y/n]",
@@ -181,19 +181,19 @@ impl CoverageCollector {
 
         let queue_files: Vec<_> = queue_dirs
             .into_iter()
-            .flat_map(|dir| self.collect_queue_files(&dir.path))
+            .flat_map(|dir| Self::collect_queue_files(&dir.path))
             .collect();
 
         println!("[*] Processing {} queue files", queue_files.len());
-        self.process_queue_files(&queue_files, &tmp_dir)?;
+        self.process_queue_files(&queue_files, &tmp_dir);
 
         let output_file = self.afl_out.join("merged.profdata");
-        self.merge_raw_coverage(&tmp_dir, &output_file)?;
+        Self::merge_raw_coverage(&tmp_dir, &output_file)?;
         self.merged_profdata = Some(output_file);
 
         let report_type = if self.config.is_html {
             let base_dir = self.afl_out.join("coverage_html");
-            self.is_base_dir_remove(&base_dir)?;
+            Self::is_base_dir_remove(&base_dir)?;
             ReportType::Html {
                 base_dir: self.afl_out.join("coverage_html"),
                 instance: None,
@@ -218,7 +218,7 @@ impl CoverageCollector {
         match report_type {
             ReportType::Html { base_dir, instance } => {
                 let output_dir = if let Some(idx) = instance {
-                    base_dir.join(format!("instance_{}", idx))
+                    base_dir.join(format!("instance_{idx}"))
                 } else {
                     base_dir
                 };
@@ -281,7 +281,7 @@ impl CoverageCollector {
             .args(additional_args)
             .args(config_args)
             .status()
-            .with_context(|| format!("Failed to run llvm-cov {}", subcommand))?;
+            .with_context(|| format!("Failed to run llvm-cov {subcommand}"))?;
 
         if !status.success() {
             anyhow::bail!("llvm-cov {} failed", subcommand);
@@ -297,7 +297,7 @@ impl CoverageCollector {
                     self.afl_out.display()
                 )
             })?
-            .filter_map(|entry| entry.ok())
+            .filter_map(std::result::Result::ok)
             .filter_map(|entry| {
                 let queue_path = entry.path().join("queue");
                 if queue_path.is_dir() {
@@ -317,11 +317,11 @@ impl CoverageCollector {
         Ok(dirs)
     }
 
-    fn collect_queue_files(&self, queue_path: &Path) -> Vec<PathBuf> {
+    fn collect_queue_files(queue_path: &Path) -> Vec<PathBuf> {
         fs::read_dir(queue_path)
             .into_iter()
             .flatten()
-            .filter_map(|entry| entry.ok())
+            .filter_map(std::result::Result::ok)
             .filter_map(|entry| {
                 if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
                     Some(entry.path())
@@ -333,8 +333,8 @@ impl CoverageCollector {
     }
 
     fn process_queue_directory(&self, dir: &QueueDirectory) -> Result<PathBuf> {
-        let tmp_dir = CoverageCollector::create_persistent_tmpdir()?;
-        let queue_files = self.collect_queue_files(&dir.path);
+        let tmp_dir = Self::create_persistent_tmpdir()?;
+        let queue_files = Self::collect_queue_files(&dir.path);
 
         println!(
             "[+] Processing queue directory for instance: {} with {} entries",
@@ -342,21 +342,22 @@ impl CoverageCollector {
             queue_files.len()
         );
 
-        self.process_queue_files(&queue_files, &tmp_dir)?;
+        self.process_queue_files(&queue_files, &tmp_dir);
 
         Ok(tmp_dir)
     }
 
-    fn process_queue_files(&self, queue_files: &[PathBuf], tmp_dir: &Path) -> Result<()> {
+    #[allow(clippy::cast_precision_loss)]
+    fn process_queue_files(&self, queue_files: &[PathBuf], tmp_dir: &Path) {
         let start_time = Instant::now();
         let total_files = queue_files.len();
 
         queue_files.par_iter().for_each(|file_path| {
             let file_name = file_path.file_name().unwrap().to_str().unwrap();
-            let dst_path = tmp_dir.join(format!("cov_{}_.profraw", file_name));
+            let dst_path = tmp_dir.join(format!("cov_{file_name}_.profraw"));
 
             if let Err(e) = self.run_target_with_input(file_path, &dst_path) {
-                eprintln!("[-] Failed to process {}: {}", file_name, e);
+                eprintln!("[-] Failed to process {file_name}: {e}");
             }
         });
 
@@ -367,8 +368,6 @@ impl CoverageCollector {
             total_time.as_secs_f64(),
             total_files as f64 / total_time.as_secs_f64()
         );
-
-        Ok(())
     }
 
     fn run_target_with_input(&self, input_path: &Path, output_path: &Path) -> Result<()> {
@@ -443,7 +442,7 @@ impl CoverageCollector {
         Ok(())
     }
 
-    fn merge_raw_coverage(&self, raw_cov_dir: &Path, output_file: &Path) -> Result<()> {
+    fn merge_raw_coverage(raw_cov_dir: &Path, output_file: &Path) -> Result<()> {
         let pattern = raw_cov_dir.join("cov_*.profraw");
         let profraw_files: Vec<_> = glob(pattern.to_str().unwrap())?
             .filter_map(Result::ok)
@@ -589,7 +588,7 @@ mod tests {
         let collector = CoverageCollector::new("/bin/ls", &afl_dir.to_str().unwrap());
 
         let queue_dirs = collector.find_queue_directories()?;
-        let files = collector.collect_queue_files(&queue_dirs[0].path);
+        let files = CoverageCollector::collect_queue_files(&queue_dirs[0].path);
 
         assert_eq!(files.len(), 3); // Each queue directory has 3 files
         assert!(files.iter().all(|f| f.to_str().unwrap().contains("id:")));
