@@ -66,7 +66,7 @@ exit 0
 """
 
 [tasks.build_libxml2]
-description = "Build libxml2/xmllint in all 4 versions"
+description = "Build libxml2/xmllint in all versions"
 dependencies = [
   "get_libxml2",
   "is_tooling_installed",
@@ -74,6 +74,7 @@ dependencies = [
   "build_libxml2_sanitized",
   "build_libxml2_cmplog",
   "build_libxml2_cmpcov",
+  "build_libxml2_coverage",
 ]
 
 [tasks.build_libxml2_instrumented]
@@ -222,6 +223,46 @@ AFL_LLVM_LAF_ALL = "1"
 AFL_HARDEN = "1"
 
 
+[tasks.build_libxml2_coverage]
+description = "Build libxml2 for coverage visualization AFL++ instrumentation"
+condition = { files_not_exist = ["../xmllint_coverage_${LIBXML2_VER}"] }
+dependencies = ["get_libxml2"]
+cwd = "libxml2-${LIBXML2_VER}/"
+script_runner = "@shell"
+script = """
+  if [ -f Makefile ]; then
+    make clean
+  fi
+
+  never_unset=""
+  for var in $(env | grep -e "^AFL_"); do
+    var=$(echo $var | cut -d= -f1)
+    skip=0
+    for item in $never_unset; do
+      if [ "$var" = "$item" ]; then
+        skip=1
+        break
+      fi
+    done
+    if [ $skip -eq 0 ]; then
+      unset $var
+    fi
+  done
+
+  autoreconf -fvi
+  ./configure --disable-shared --prefix="$(pwd)/install" --without-ftp --without-http --without-legacy --without-python
+  make -j$(nproc)
+  make install
+  mv install/bin/xmllint ../xmllint_coverage_${LIBXML2_VER}
+"""
+
+[tasks.build_libxml2_coverage.env]
+CC = "clang"
+CFLAGS = "-fprofile-instr-generate -fcoverage-mapping"
+CPPFLAGS = "-fprofile-instr-generate -fcoverage-mapping"
+LDFLAGS = "--coverage"
+
+
 # ----------------- RUN CAMPAIGN -----------------
 
 [tasks.run]
@@ -238,6 +279,14 @@ description = "Run aflr with the optimizal settings"
 script_runner = "@shell"
 script = """
 ../target/release/aflr run --config aflr_config.toml --dry-run
+"""
+
+[tasks.afl_coverage]
+dependencies = ["build_aflr", "build_libxml2"]
+description = "Run aflr coverage"
+script_runner = "@shell"
+script = """
+../target/release/aflr cov --config aflr_config.toml
 """
 
 [tasks.explain]

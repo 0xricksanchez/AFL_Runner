@@ -4,23 +4,28 @@ use std::{
     hash::{DefaultHasher, Hasher},
     path::{Path, PathBuf},
 };
-use tui::Tui;
 
 use clap::Parser;
-use cli::{Cli, Commands, ConfigMerge, SessionRunner};
 
 mod afl;
 mod cli;
+mod coverage;
 mod data_collection;
 mod harness;
+mod log_buffer;
 mod runners;
+mod seed;
 mod session;
-use crate::session::CampaignData;
-use crate::{afl::base_cfg::Bcfg, cli::AFL_CORPUS};
+mod system_utils;
+mod tui;
 use crate::{
+    afl::base_cfg::Bcfg,
     afl::cmd::{Printable, ToStringVec},
     afl::cmd_gen::AFLCmdGenerator,
-    cli::{Config, GenArgs, KillArgs, RunArgs, TuiArgs},
+    cli::{
+        Cli, Commands, Config, ConfigMerge, CovArgs, GenArgs, KillArgs, RunArgs, SessionRunner,
+        TuiArgs, AFL_CORPUS,
+    },
     harness::Harness,
     runners::{
         runner::{Session, SessionManager},
@@ -28,10 +33,8 @@ use crate::{
         tmux::TmuxSession,
     },
 };
-mod log_buffer;
-mod seed;
-mod system_utils;
-mod tui;
+use crate::{coverage::CoverageCollector, session::CampaignData};
+use tui::Tui;
 
 pub static DEFAULT_AFL_CONFIG: &str = "aflr_cfg.toml";
 
@@ -256,6 +259,17 @@ impl ConfigManager {
 
         Ok((merged, raw_afl_flags))
     }
+
+    /// Merges the `CoverageArgs` with the loaded configuration from file (if any).
+    ///
+    /// # Errors
+    /// Returns an error if the configuration file is not found or the configuration is invalid.
+    pub fn merge_cov_args(&self, args: &cli::CovArgs) -> Result<CovArgs> {
+        Ok(self
+            .config
+            .as_ref()
+            .map_or_else(|| args.clone(), |config| args.merge_with_config(config)))
+    }
 }
 
 /// Command executor trait for better abstraction
@@ -265,6 +279,52 @@ pub trait CommandExecutor {
     /// # Errors
     /// Returns an error if the command execution fails
     fn execute(&self) -> Result<()>;
+}
+
+/// Coverage command executor
+pub struct CovCommandExecutor<'a> {
+    args: &'a cli::CovArgs,
+    config_manager: &'a ConfigManager,
+}
+
+impl<'a> CovCommandExecutor<'a> {
+    pub fn new(args: &'a CovArgs, config_manager: &'a ConfigManager) -> Self {
+        Self {
+            args,
+            config_manager,
+        }
+    }
+}
+
+impl CommandExecutor for CovCommandExecutor<'_> {
+    fn execute(&self) -> Result<()> {
+        let merged_args = self.config_manager.merge_cov_args(self.args)?;
+        let mut cov_collector =
+            CoverageCollector::new(merged_args.target.unwrap(), merged_args.output_dir.unwrap());
+
+        if let Some(target_args) = &merged_args.target_args {
+            cov_collector.with_target_args(target_args.clone());
+        }
+
+        if merged_args.split_report {
+            cov_collector.with_split_report(true);
+        }
+
+        if merged_args.show_args.is_some() {
+            cov_collector.with_misc_show_args(merged_args.show_args.clone().unwrap());
+        }
+
+        if merged_args.report_args.is_some() {
+            cov_collector.with_misc_report_args(merged_args.report_args.clone().unwrap());
+        }
+
+        if merged_args.text_report {
+            cov_collector.with_html(false);
+        }
+
+        cov_collector.collect()?;
+        Ok(())
+    }
 }
 
 /// Generator command executor
@@ -394,6 +454,7 @@ fn main() -> Result<()> {
     match &cli_args.cmd {
         Commands::Gen(args) => config_manager.load(args.config.as_ref()),
         Commands::Run(args) => config_manager.load(args.gen_args.config.as_ref()),
+        Commands::Cov(args) => config_manager.load(args.config.as_ref()),
         _ => Ok(()),
     }?;
 
@@ -401,6 +462,7 @@ fn main() -> Result<()> {
     match &cli_args.cmd {
         Commands::Gen(args) => GenCommandExecutor::new(args, &config_manager).execute(),
         Commands::Run(args) => RunCommandExecutor::new(args, &config_manager).execute(),
+        Commands::Cov(args) => CovCommandExecutor::new(args, &config_manager).execute(),
         Commands::Tui(args) => execute_tui_command(args),
         Commands::Kill(args) => execute_kill_command(args),
     }

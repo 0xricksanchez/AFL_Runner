@@ -23,10 +23,12 @@ pub struct Cli {
 /// Available subcommands
 #[derive(Subcommand, Clone, Debug)]
 pub enum Commands {
-    /// Only generate the commands, don't run them
+    /// Only generate commands for fuzzing campaign, don't run them
     Gen(GenArgs),
-    /// Generate commands and run them
+    /// Generate fuzzing campaign and run it
     Run(RunArgs),
+    /// Collect and visualize fuzzing coverage
+    Cov(CovArgs),
     /// Show stats TUI for a running campaign
     Tui(TuiArgs),
     /// Kills a running session and all spawned processes inside
@@ -36,6 +38,87 @@ pub enum Commands {
 // Common trait for config merging behavior
 pub trait ConfigMerge<T> {
     fn merge_with_config(&self, config: &Config) -> T;
+}
+
+/// Arguments for the `cov` subcommand
+#[derive(Args, Clone, Debug, Default)]
+pub struct CovArgs {
+    /// Target binary instrumented for coverage collection
+    #[arg(
+        short,
+        long,
+        help = "Instrumented target binary for coverage collection"
+    )]
+    pub target: Option<PathBuf>,
+    /// Target binary arguments
+    #[arg(help = "Target binary arguments, including @@ if needed", raw = true)]
+    pub target_args: Option<Vec<String>>,
+    /// Output directory
+    #[arg(short = 'i', long, help = "Top-level AFL++ output directory")]
+    pub output_dir: Option<PathBuf>,
+    /// Do *NOT* merge all coverage files into a single report
+    #[arg(long, help = "Do *not* merge all coverage files into a single report", action = ArgAction::SetTrue)]
+    pub split_report: bool,
+    /// Force text-based coverage report
+    #[arg(long, help = "Force text-based coverage report", action = ArgAction::SetTrue)]
+    pub text_report: bool,
+    /// Misc llvm-cov show arguments
+    #[arg(short = 'a', long, help = "Miscellaneous llvm-cov show arguments")]
+    pub show_args: Option<Vec<String>>,
+    /// Misc llvm-cov report arguments
+    #[arg(short = 'r', long, help = "Miscellaneous llvm-cov report arguments")]
+    pub report_args: Option<Vec<String>>,
+    /// Path to a TOML config file
+    #[arg(long, help = "Path to TOML config file")]
+    pub config: Option<PathBuf>,
+}
+
+impl ConfigMerge<Self> for CovArgs {
+    fn merge_with_config(&self, config: &Config) -> Self {
+        let merge_path = |opt: Option<PathBuf>, cfg_str: Option<String>| {
+            opt.or_else(|| cfg_str.filter(|p| !p.is_empty()).map(PathBuf::from))
+        };
+
+        Self {
+            target: merge_path(self.target.clone(), config.target.cov_path.clone()),
+            target_args: self
+                .target_args
+                .clone()
+                .or_else(|| config.target.args.clone().filter(|args| !args.is_empty())),
+            output_dir: merge_path(self.output_dir.clone(), config.afl_cfg.solution_dir.clone())
+                .or_else(|| Some(PathBuf::from(AFL_OUTPUT))),
+            split_report: config.coverage.split_report.unwrap_or(self.split_report),
+            text_report: match config.coverage.report_type.as_deref() {
+                Some("HTML" | "html") => false,
+                Some("TEXT" | "text") => true,
+                Some(unknown) => {
+                    eprintln!(
+                        "Warning: Unknown report type '{}', defaulting to {}",
+                        unknown,
+                        if self.text_report { "text" } else { "html" }
+                    );
+                    self.text_report
+                }
+                None => self.text_report,
+            },
+            show_args: self.show_args.clone().or_else(|| {
+                config
+                    .coverage
+                    .misc_show_args
+                    .clone()
+                    .filter(|args| !args.is_empty())
+            }),
+            report_args: self.report_args.clone().or_else(|| {
+                config
+                    .coverage
+                    .misc_report_args
+                    .clone()
+                    .filter(|args| !args.is_empty())
+            }),
+
+            config: self.config.clone(),
+        }
+    }
 }
 
 /// Arguments for the `tui` subcommand
@@ -241,6 +324,8 @@ impl ConfigMerge<Self> for RunArgs {
 pub struct Config {
     /// Target configuration
     pub target: TargetConfig,
+    /// Coverage configuration
+    pub coverage: CoverageConfig,
     /// AFL configuration
     pub afl_cfg: AflConfig,
     /// Session configuration
@@ -260,8 +345,23 @@ pub struct TargetConfig {
     pub cmpl_path: Option<String>,
     /// Path to the CMPCOV binary
     pub cmpc_path: Option<String>,
+    /// Path to the Coverage binary
+    pub cov_path: Option<String>,
     /// Arguments for the target binary
     pub args: Option<Vec<String>>,
+}
+
+/// Configuration for the target binary
+#[derive(Deserialize, Default, Debug, Clone)]
+pub struct CoverageConfig {
+    /// HTML- or Text-based coverage report
+    pub report_type: Option<String>,
+    /// Split coverage report
+    pub split_report: Option<bool>,
+    /// Misc llvm-cov show arguments
+    pub misc_show_args: Option<Vec<String>>,
+    /// Misc llvm-cov report arguments
+    pub misc_report_args: Option<Vec<String>>,
 }
 
 /// Configuration for AFL
