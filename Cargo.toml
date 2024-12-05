@@ -3,7 +3,7 @@ name = "afl_runner"
 authors = ["0x434b <admin@0x434b.dev"]
 repository = "https://github.com/0xricksanchez/AFL_Runner"
 description = "Scaling best-practice AFLPlusPlus fuzzing campaigns made easy"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 keywords = ["afl", "fuzzing", "fuzz-testing", "testing", "fuzzer"]
 license = "Apache-2.0"
@@ -16,7 +16,7 @@ path = "src/main.rs"
 anyhow = "1.0.93"
 clap = { version = "4.5.21", features = ["wrap_help", "string", "derive"] }
 rand = "0.8.5"
-sysinfo = "0.32.0"
+sysinfo = "0.33.0"
 upon = "0.8.1"
 toml = "0.8.19"
 serde = { version = "1.0.215", features = ["derive"] }
