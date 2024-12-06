@@ -72,9 +72,9 @@ impl CoverageCollector {
     /// - The target binary is not compiled with LLVM coverage instrumentation
     /// - The readelf command fails to execute
     pub fn new<P: AsRef<Path>>(target: P, afl_out: P) -> Result<Self> {
-        Self::is_req_present(&target)?;
+        Self::is_target_cov_compiled(&target)?;
         let progs = vec!["llvm-profdata", "llvm-cov", "genhtml", "lcov"];
-        Self::is_llvm_available(&progs)?;
+        Self::are_reqs_met(&progs)?;
 
         Ok(Self {
             target: target.as_ref().to_path_buf(),
@@ -84,7 +84,7 @@ impl CoverageCollector {
         })
     }
 
-    fn is_req_present<P: AsRef<Path>>(path: P) -> Result<bool> {
+    fn is_target_cov_compiled<P: AsRef<Path>>(path: P) -> Result<bool> {
         let output = Command::new("readelf")
             .arg("-s")
             .arg(path.as_ref())
@@ -105,7 +105,7 @@ impl CoverageCollector {
         }
     }
 
-    fn is_llvm_available(progs: &[&str]) -> Result<()> {
+    fn are_reqs_met(progs: &[&str]) -> Result<()> {
         for prog in progs {
             let output = Command::new(prog)
                 .arg("--version")
@@ -118,11 +118,17 @@ impl CoverageCollector {
                 })?;
 
             if !output.status.success() {
-                bail!("{} failed to execute successfully: {}", prog, output.status);
+                bail!(
+                    "{} failed to execute (return code: {}) - {:?}",
+                    prog,
+                    output.status,
+                    output.stderr
+                );
             }
         }
         Ok(())
     }
+
     /// Sets the arguments to be passed to the target binary during coverage collection
     ///
     /// # Arguments

@@ -22,12 +22,39 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # Set up tool cache
+      - name: Cache tools
+        id: cache-tools
+        uses: actions/cache@v3
+        with:
+          path: |
+            /usr/local/bin/llvm*
+            ~/.cargo
+            ~/.local/bin
+          key: ${{ runner.os }}-tools-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-tools-
+
+      # Install tools if not cached
+      - name: Install LLVM tools
+        if: steps.cache-tools.outputs.cache-hit != 'true'
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 18
+          sudo apt-get install -y lcov
+          sudo ln -s /usr/lib/llvm-18/bin/llvm-profdata /usr/local/bin/llvm-profdata
+          sudo ln -s /usr/lib/llvm-18/bin/llvm-cov /usr/local/bin/llvm-cov
+
       - name: Add fake afl-fuzz into path
         run: |
           mkdir -p $HOME/.local/bin
           cp /bin/ls $HOME/.local/bin/afl-fuzz
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Build
         run: cargo build --verbose
+
       - name: Run tests
         run: cargo test --verbose
