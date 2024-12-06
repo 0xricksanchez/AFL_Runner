@@ -16,6 +16,7 @@ dependencies = [
  "cargo-make",
  "chrono",
  "clap",
+ "clap_complete",
  "crossterm",
  "glob",
  "once_cell",
@@ -381,6 +382,15 @@ dependencies = [
  "clap_lex",
  "strsim",
  "terminal_size",
+]
+
+[[package]]
+name = "clap_complete"
+version = "4.5.38"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9647a559c112175f17cf724dc72d3645680a883c58481332779192b0d8e7a01"
+dependencies = [
+ "clap",
 ]
 
 [[package]]

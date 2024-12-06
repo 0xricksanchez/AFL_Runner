@@ -14,6 +14,7 @@
     - [What is not? ❌](#what-is-not-)
     - [Roadmap 🗺️](#roadmap-)
   - [Usage Example 💡](#usage-example-)
+    - [Shell Completion ⚡](#shell-completion-)
   - [Showcase 🎥](#showcase-)
   - [Contributing 🤝](#contributing-)
   - [License 📜](#license-)
@@ -39,6 +40,9 @@ git clone https://github.com/0xricksanchez/AFL_Runner.git
 cd AFL_Runner
 cargo build --release
 ./target/release/aflr --help
+
+# Optional: Generate completion scripts
+cargo run --features completion --bin generate_completions
 ```
 
 ...or install directly via [crates.io](https://crates.io/crates/afl_runner):
@@ -46,6 +50,9 @@ cargo build --release
 ```bash
 cargo install afl_runner
 aflr --help
+
+# Alternatively, with the completion support included
+cargo install --path . --features completion
 ```
 
 ## Features ✨
@@ -99,6 +106,45 @@ Here's an example of generating AFL++ commands with `AFL_Runner`:
 ![AFL_Runner_cmd_gen](img/gen.gif)
 
 _Note_: Supplying the \*SAN, CMPLOG, or CMPCOV binaries is optional and if omitted all invocations just contain the (mandatory) instrumented target instead.
+
+### Shell Completion ⚡
+
+The tool supports shell completion for tmux session names when using the kill command. To enable completion:
+
+1. First generation the completion scripts:
+
+```bash
+cargo run --bin generate_completions
+```
+
+2. Depending on your shell, do the following:
+
+For ZSH:
+
+```bash
+# Option 1: Source directly
+source completions/aflr_dynamic.zsh
+
+# Option 2 (preferred): Install to completion directory
+mkdir -p ~/.zsh/completions
+cp completions/aflr_dynamic.zsh ~/.zsh/completions/_aflr
+# Add to your .zshrc:
+fpath=(~/.zsh/completions $fpath)
+autoload -U compinit && compinit
+```
+
+For Bash:
+
+```bash
+# Add to your .bashrc:
+source /path/to/completions/aflr_dynamic.bash
+```
+
+Once set up, you can use tab completion to see available tmux sessions:
+
+```bash
+aflr kill <TAB>
+```
 
 ## Showcase 🎥
 

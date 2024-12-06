@@ -147,11 +147,7 @@ fn execute_tui_command(args: &TuiArgs) -> Result<()> {
 }
 
 fn execute_kill_command(args: &KillArgs) -> Result<()> {
-    let session_name = args
-        .session_name
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Session name is required for kill command"))?;
-
+    let session_name = &args.session_name;
     let mut terminated = false;
 
     // Try Tmux session

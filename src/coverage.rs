@@ -64,7 +64,7 @@ impl CoverageCollector {
     /// * `afl_out` - Path to the AFL++ output directory containing queue folders
     ///
     /// # Returns
-    /// * `Result<Self>` - A new CoverageCollector instance or an error
+    /// * `Result<Self>` - A new `CoverageCollector` instance or an error
     ///
     /// # Errors
     /// Returns an error if:
@@ -112,8 +112,7 @@ impl CoverageCollector {
                 .output()
                 .with_context(|| {
                     format!(
-                        "Failed to execute {}. Please ensure that the required tools are installed",
-                        prog
+                        "Failed to execute {prog}. Please ensure that the required tools are installed",
                     )
                 })?;
 
