@@ -32,6 +32,7 @@ After a successful build of the example, you should see the following files
 - `xmllint_san`: The `xmllint` binary with AFL++ instrumentation and sanitizers
 - `xmllint_cmplog`: The `xmllint` binary with AFL++ instrumentation and cmplog
 - `xmllint_cmpcov`: The `xmllint` binary with AFL++ instrumentation and cmpcov
+- `xmlint_coverage`: The `xmllint` binary with clang code-coverage instrumentation 
 
 ## Build and run the example
 
