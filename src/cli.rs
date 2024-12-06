@@ -1,4 +1,4 @@
-use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
 use serde::Deserialize;
 use std::path::PathBuf;
 
@@ -410,10 +410,47 @@ pub struct MiscConfig {
 }
 
 /// Arguments for the `kill` subcommand
-#[derive(Args, Clone, Debug, Default)]
+#[derive(Args, Clone, Debug)]
 pub struct KillArgs {
     /// Session name to kill
-    pub session_name: Option<String>,
+    #[arg(
+        value_parser = possible_values_session_names,
+        required = true,
+        value_hint = ValueHint::Other
+    )]
+    pub session_name: String,
+}
+
+/// Get possible tmux session names for completion
+fn get_session_names() -> Result<Vec<String>, std::io::Error> {
+    let output = std::process::Command::new("tmux").arg("ls").output()?;
+
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(|line| line.split(':').next())
+            .map(|s| s.trim().to_string())
+            .collect())
+    } else {
+        Ok(vec![])
+    }
+}
+
+/// Value parser function that takes the required argument
+fn possible_values_session_names(s: &str) -> Result<String, String> {
+    match get_session_names() {
+        Ok(names) => {
+            if names.is_empty() {
+                return Err("No active tmux sessions found".to_string());
+            }
+            if names.contains(&s.to_string()) {
+                Ok(s.to_string())
+            } else {
+                Err(format!("Available sessions: {}", names.join(", ")))
+            }
+        }
+        Err(_) => Err("Failed to get tmux sessions".to_string()),
+    }
 }
 
 // Add tests module
