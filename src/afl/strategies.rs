@@ -6,9 +6,9 @@ use std::collections::HashSet;
 use std::{fmt, path::PathBuf};
 
 /// These structs contain the AFL strategies and their probabilities of being applied in the command generation.
+///
 /// The values and probabilities are loosely based on the following AFL documentation:
 /// `https://github.com/AFLplusplus/AFLplusplus/blob/stable/docs/fuzzing_in_depth.md#c-using-multiple-cores`
-
 /// Static empty set for default case
 pub static EMPTY_INDICES: Lazy<HashSet<usize>> = Lazy::new(HashSet::new);
 

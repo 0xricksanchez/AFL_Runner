@@ -27,6 +27,10 @@ impl ConfigManager {
         Self::default()
     }
 
+    /// Load the config from the provided path
+    ///
+    /// # Errors
+    /// * If the config file cannot be read or parsed
     pub fn load(&mut self, config_path: Option<&PathBuf>) -> Result<()> {
         let path = config_path.unwrap_or(&self.default_config_path);
         if path.exists() {
@@ -42,6 +46,10 @@ impl ConfigManager {
         Ok(())
     }
 
+    /// Merge the provided general arguments with the config
+    ///
+    /// # Errors
+    /// * If the config cannot be merged
     pub fn merge_gen_args(&self, args: &GenArgs) -> Result<(GenArgs, Option<String>)> {
         let merged = self
             .config
@@ -56,6 +64,10 @@ impl ConfigManager {
         Ok((merged, raw_afl_flags))
     }
 
+    /// Merge the provided run arguments with the config
+    ///
+    /// # Errors
+    /// * If the config cannot be merged
     pub fn merge_run_args(&self, args: &RunArgs) -> Result<(RunArgs, Option<String>)> {
         let merged = self
             .config
@@ -70,6 +82,10 @@ impl ConfigManager {
         Ok((merged, raw_afl_flags))
     }
 
+    /// Merge the provided coverage arguments with the config
+    ///
+    /// # Errors
+    /// * If the config cannot be merged
     pub fn merge_cov_args(&self, args: &CovArgs) -> Result<CovArgs> {
         Ok(self
             .config

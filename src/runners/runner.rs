@@ -27,6 +27,10 @@ pub struct SessionCommand {
 }
 
 impl SessionCommand {
+    /// Parse a command string into a `SessionCommand`
+    ///
+    /// # Errors
+    /// * If the input or output directories could not be found
     pub fn new(cmd: &str) -> Result<Self> {
         let parts: Vec<_> = cmd.split_whitespace().collect();
         let input_dir = parts
@@ -72,6 +76,9 @@ pub trait SessionManager: Sized {
     fn build_attach_command(session_name: &str) -> Command;
 
     /// Optional post-attachment setup (e.g., finding window ID in tmux)
+    ///
+    /// # Errors
+    /// * If the implementation specific setup fails
     fn post_attach_setup(_session_name: &str) -> Result<()> {
         Ok(())
     }
@@ -88,6 +95,10 @@ pub struct Session<T: SessionManager> {
 }
 
 impl<T: SessionManager> Session<T> {
+    /// Create a new session
+    ///
+    /// # Errors
+    /// * If any session command could not be parsed
     pub fn new(session_name: &str, commands: &[String], pid_file: &Path) -> Result<Self> {
         let commands = commands
             .iter()
@@ -115,6 +126,10 @@ impl<T: SessionManager> Session<T> {
             .unwrap_or(false)
     }
 
+    /// Kill the session
+    ///
+    /// # Errors
+    /// If `run_command` fails
     pub fn kill_session(&self) -> Result<()> {
         Self::run_command(T::build_kill_command(&self.name))
     }

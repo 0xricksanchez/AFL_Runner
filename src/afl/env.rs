@@ -102,6 +102,9 @@ impl Default for AFLEnv {
 
 impl AFLEnv {
     /// Creates a new vector of `AFLEnv` instances
+    ///
+    /// # Panics
+    /// * If `runners` is zero
     #[inline]
     pub fn new(
         mode: Mode,

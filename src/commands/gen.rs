@@ -21,6 +21,13 @@ impl<'a> GenCommand<'a> {
         }
     }
 
+    /// Create an AFL runner
+    ///
+    /// # Errors
+    /// * If any of the provided target binaries are invalid
+    ///
+    /// # Panics
+    /// If the main target binary is empty
     pub fn create_afl_runner(
         gen_args: &GenArgs,
         raw_afl_flags: Option<&String>,

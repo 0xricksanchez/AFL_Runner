@@ -84,6 +84,9 @@ impl Harness {
     }
 
     /// Sets the sanitizer binary
+    ///
+    /// # Errors
+    /// Returns `HarnessError` if the binary is invalid or cannot be resolved
     pub fn with_sanitizer<P>(mut self, sanitizer_bin: Option<P>) -> Result<Self, HarnessError>
     where
         P: Into<PathBuf> + AsRef<Path>,
@@ -93,6 +96,9 @@ impl Harness {
     }
 
     /// Sets the cmplog binary
+    ///
+    /// # Errors
+    /// Returns `HarnessError` if the binary is invalid or cannot be resolved
     pub fn with_cmplog<P>(mut self, cmplog_bin: Option<P>) -> Result<Self, HarnessError>
     where
         P: Into<PathBuf> + AsRef<Path>,
@@ -102,6 +108,9 @@ impl Harness {
     }
 
     /// Sets the cmpcov binary
+    ///
+    /// # Errors
+    /// Returns `HarnessError` if the binary is invalid or cannot be resolved
     pub fn with_cmpcov<P>(mut self, cmpcov_bin: Option<P>) -> Result<Self, HarnessError>
     where
         P: Into<PathBuf> + AsRef<Path>,
@@ -111,6 +120,9 @@ impl Harness {
     }
 
     /// Sets the code-coverage binary
+    ///
+    /// # Errors
+    /// Returns `HarnessError` if the binary is invalid or cannot be resolved
     pub fn with_coverage<P>(mut self, cov_bin: Option<P>) -> Result<Self, HarnessError>
     where
         P: Into<PathBuf> + AsRef<Path>,

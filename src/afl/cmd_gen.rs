@@ -59,6 +59,10 @@ impl AFLCmdGenerator {
     }
 
     /// Generates AFL commands based on the configuration
+    ///
+    /// # Errors
+    /// * If the set of intial commands cannot be constructed
+    /// * If dictionary path cannot be resolved
     pub fn run(&self) -> Result<Vec<AFLCmd>> {
         let seed = Xorshift64::new(self.seed.unwrap_or(0)).rand();
         let mut rng = StdRng::seed_from_u64(seed);
@@ -118,7 +122,6 @@ impl AFLCmdGenerator {
         Self::apply_global_env_vars(&mut cmds, &afl_env_vars);
 
         Ok(cmds)
-        //Ok(cmds.into_iter().map(|cmd| cmd.as_string()).collect())
     }
 
     // Inherit global AFL environment variables that are not already set

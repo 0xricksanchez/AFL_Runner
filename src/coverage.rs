@@ -178,6 +178,9 @@ impl CoverageCollector {
     /// This function processes all queue files, generates raw coverage data,
     /// and creates either a unified report or separate reports for each fuzzer instance
     /// based on the configuration.
+    ///
+    /// # Errors
+    /// * If the AFL++ output directory cannot be read
     pub fn collect(&mut self) -> Result<()> {
         let queue_dirs = self.find_queue_directories()?;
 
