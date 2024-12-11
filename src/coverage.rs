@@ -112,8 +112,7 @@ impl CoverageCollector {
                 .output()
                 .with_context(|| {
                     format!(
-                        "Failed to execute {}. Please ensure that the required tools are installed",
-                        prog
+                        "Failed to execute {prog}. Please ensure that the required tools are installed",
                     )
                 })?;
 

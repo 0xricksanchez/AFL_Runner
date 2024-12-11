@@ -8,4 +8,5 @@ examples/xml*
 examples/seed*
 examples/target/
 
+# Autocompletions
 completions
