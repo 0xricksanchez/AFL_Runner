@@ -423,8 +423,7 @@ impl CoverageCollector {
 
         let total_time = start_time.elapsed();
         println!(
-            "[+] Finished processing {} files in {:.1}s ({:.1} files/sec)",
-            total_files,
+            "  [+] Finished in {:.1}s ({:.1} files/sec)",
             total_time.as_secs_f64(),
             total_files as f64 / total_time.as_secs_f64()
         );
