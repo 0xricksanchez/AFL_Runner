@@ -60,7 +60,7 @@ impl AFLCmdGenerator {
 
     /// Generates AFL commands based on the configuration
     pub fn run(&self) -> Result<Vec<AFLCmd>> {
-        let seed = Xorshift64::new(self.seed.unwrap_or(0)).next();
+        let seed = Xorshift64::new(self.seed.unwrap_or(0)).rand();
         let mut rng = StdRng::seed_from_u64(seed);
 
         let afl_envs = AFLEnv::new(
@@ -487,7 +487,7 @@ mod tests {
     fn test_afl_relay_seed() {
         let (_temp_dir, generator) = setup_test_generator();
         let cmds = generator.run().unwrap();
-        let expected_seed = Xorshift64::new(generator.seed.unwrap()).next();
+        let expected_seed = Xorshift64::new(generator.seed.unwrap()).rand();
 
         assert!(cmds[0].to_string().contains("-s"));
         assert!(cmds[0].to_string().contains(&format!("{}", expected_seed)));

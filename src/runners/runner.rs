@@ -119,11 +119,23 @@ impl<T: SessionManager> Session<T> {
         Self::run_command(T::build_kill_command(&self.name))
     }
 
+    /// Attach to the session
+    ///
+    /// # Errors
+    /// * If the session could not be attached
     pub fn attach(&self) -> Result<()> {
         T::post_attach_setup(&self.name)?;
         Self::run_command(T::build_attach_command(&self.name))
     }
 
+    /// Create a bash script to run the session
+    ///
+    /// # Errors
+    /// * If the template could not be loaded
+    /// * If the template could not be rendered
+    ///
+    /// # Panics
+    /// * If the log file or pid file paths are not valid UTF-8
     pub fn create_bash_script(&self) -> Result<String> {
         let mut engine = upon::Engine::new();
         engine.add_template("session", T::template())?;
@@ -147,6 +159,11 @@ impl<T: SessionManager> Session<T> {
         Ok(())
     }
 
+    /// Run the session
+    ///
+    /// # Errors
+    /// * If the session script could not be created
+    /// * If the session could not be started
     pub fn run(&self) -> Result<()> {
         self.setup_directories()?;
         self.confirm_start()?;
@@ -227,6 +244,10 @@ impl<T: SessionManager> Session<T> {
         Ok(())
     }
 
+    /// Run the session with a TUI
+    ///
+    /// # Errors
+    /// * If the session could not be started
     pub fn run_with_tui(&self, out_dir: &Path) -> Result<()> {
         let mut cdata = CampaignData::new();
         self.run()?;

@@ -69,6 +69,9 @@ pub struct Tui {
 
 impl Tui {
     /// Creates a new `Tui` instance
+    ///
+    /// # Errors
+    /// Returns an error if the terminal backend cannot be created
     pub fn new() -> io::Result<Self> {
         let backend = CrosstermBackend::new(io::stdout());
         let terminal = Terminal::new(backend)?;
@@ -94,6 +97,9 @@ impl Tui {
     }
 
     /// Runs the TUI standalone with the specified output directory
+    ///
+    /// # Errors
+    /// Returns an error if the TUI fails to run
     pub fn run(output_dir: &Path, pid_file: Option<&Path>, cdata: &mut CampaignData) -> Result<()> {
         let output_dir = output_dir.to_path_buf();
         cdata.log("Initialized TUI");

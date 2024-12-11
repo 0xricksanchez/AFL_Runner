@@ -64,7 +64,7 @@ impl CoverageCollector {
     /// * `afl_out` - Path to the AFL++ output directory containing queue folders
     ///
     /// # Returns
-    /// * `Result<Self>` - A new CoverageCollector instance or an error
+    /// * `Result<Self>` - A new `CoverageCollector` instance or an error
     ///
     /// # Errors
     /// Returns an error if:

@@ -22,6 +22,14 @@ pub fn get_free_mem_in_mb() -> u64 {
     0
 }
 
+/// Creates a `RAMDisk` with 4GB size
+///
+/// # Returns
+/// * `Result<String>` - Path to the `RAMDisk`
+///
+/// # Errors
+/// * If the command to create the `RAMDisk` fails
+/// * If the command to mount the `RAMDisk` fails
 pub fn create_ramdisk() -> Result<String> {
     println!("[*] Attempting to create RAMDisk. Needing elevated privileges.");
     let uuid = Uuid::new_v4().to_string();
@@ -41,6 +49,12 @@ fn is_valid_afl_binary(path: &Path) -> bool {
 }
 
 /// Retrieves the path to the AFL binary
+///
+/// # Returns
+/// * `Result<PathBuf>` - Path to the AFL binary
+///
+/// # Errors
+/// * If the AFL binary is not found
 pub fn find_binary_in_path<P>(custom_path: Option<P>) -> Result<PathBuf>
 where
     P: Into<PathBuf>,
@@ -90,6 +104,11 @@ where
 /// # Returns
 ///
 /// * `Result<()>` - Ok if directory was created/cleaned successfully, Error otherwise
+///
+/// # Errors
+///
+/// * If the path exists but is a file
+/// * If the path exists and is not empty and user chooses not to clean it
 pub fn mkdir_helper(dir: &Path, check_empty: bool) -> Result<()> {
     if dir.is_file() {
         bail!("Path {} exists but is a file", dir.display());
@@ -137,7 +156,7 @@ pub fn get_user_input() -> char {
         .map_or('y', |byte| {
             let b = byte as char;
             if b.is_ascii_alphabetic() {
-                b.to_lowercase().next().unwrap()
+                b.to_lowercase().next().unwrap_or('y')
             } else if b == '\n' {
                 'y'
             } else {
