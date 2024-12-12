@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use std::fs;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -182,7 +182,7 @@ impl<T: SessionManager> Session<T> {
         self.setup_directories()?;
         self.confirm_start()?;
         Self::check_manager_installation()?;
-        self.execute_session_script()
+        self.execute_session_script().map_err(|e| anyhow!("{}", e))
     }
 
     fn setup_directories(&self) -> Result<()> {
@@ -223,7 +223,7 @@ impl<T: SessionManager> Session<T> {
             .status()?;
 
         if !status.success() {
-            anyhow::bail!("Error: {} not found or not executable", T::manager_name());
+            anyhow::bail!("{} not found or not executable", T::manager_name());
         }
         Ok(())
     }
@@ -239,20 +239,24 @@ impl<T: SessionManager> Session<T> {
 
         let output = Command::new("bash")
             .arg(temp_script.path())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .output()?;
 
         if !output.status.success() {
-            let stderr = String::from_utf8(output.stderr)
-                .unwrap_or_else(|e| format!("Failed to parse stderr: {e}"));
-            let path = temp_script.into_temp_path().keep()?;
-            anyhow::bail!(
-                "Error executing runner script {}: exit code {}, stderr: '{}'",
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // Get the actual exit code
+            let exit_code = output.status.code().unwrap_or(-1);
+
+            let path = temp_script.into_temp_path();
+            return Err(anyhow!(
+                "Script execution failed with exit code {}.\n  Script path: {}\n  STDOUT: {}\n  STDERR: {}",
+                exit_code,
                 path.display(),
-                output.status,
-                stderr
-            );
+                stdout.trim(),
+                stderr.trim()
+            ));
         }
 
         Ok(())
