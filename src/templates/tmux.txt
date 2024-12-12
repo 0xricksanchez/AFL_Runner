@@ -1,5 +1,6 @@
 #!/bin/bash
 set -eu
+set +o history # Temporarily turn off history
 
 # Set HISTCONTROL to ignorespace
 HISTCONTROL="ignorespace"
@@ -16,6 +17,12 @@ COMMANDS=(
 	{% endfor %}
 )
 
+# Check if session does not exist yet
+tmux has-session -t $SESSION_NAME 2>/dev/null && {
+    echo "Session '$SESSION_NAME' already exists. Aborting." >&2
+    exit 1
+}
+
 # Start a new tmux session (detached)
 tmux -2u new-session -d -s $SESSION_NAME
 
@@ -30,7 +37,7 @@ wait_for_shell() {
     local marker="AFLR_SHELL_READY_$$"  # Use PID to make marker unique
     
     # Send echo command with our marker
-    tmux send-keys -t "$SESSION_NAME:$window" "echo '$marker'" C-m
+    tmux send-keys -t "$SESSION_NAME:$window" " echo '$marker'" C-m
     
     while [ $attempt -le $max_attempts ]; do
         if tmux capture-pane -p -t "$SESSION_NAME:$window" | grep -q "$marker"; then
@@ -60,30 +67,46 @@ for i in "${!COMMANDS[@]}"; do
         tmux send-keys -t $SESSION_NAME:$WINDOW_NAME " { ${COMMANDS[$i]} & echo \$! > $TEMP_PID_FILE; clear; fg; }" C-m
     fi
     
-    # Add a small delay between windows
+    # Add a small delay to ensure the command has started
     sleep 0.2
 done
 
 # Wait for all commands to start and PIDs to be written
 sleep 1
 
-# Capture the PIDs from the temporary files
+# Capture the PIDs and verify processes are running
 for i in "${!COMMANDS[@]}"; do
-	TEMP_PID_FILE="/tmp/aflr_pid_${i}.txt"
-	if [ -f "$TEMP_PID_FILE" ]; then
-		PID=$(cat "$TEMP_PID_FILE")
-		if [ -n "$PID" ]; then
-			if [ -z "$AFLR_PID_LIST" ]; then
-				AFLR_PID_LIST="$PID"
-			else
-				AFLR_PID_LIST="$AFLR_PID_LIST:$PID"
-			fi
-		fi
-		rm "$TEMP_PID_FILE"
-	fi
+    TEMP_PID_FILE="/tmp/aflr_pid_${i}.txt"
+    if [ -f "$TEMP_PID_FILE" ]; then
+        PID=$(cat "$TEMP_PID_FILE")
+        if [ -n "$PID" ]; then
+            # Check if the process is actually running
+            if kill -0 "$PID" 2>/dev/null; then
+                if [ -z "$AFLR_PID_LIST" ]; then
+                    AFLR_PID_LIST="$PID"
+                else
+                    AFLR_PID_LIST="$AFLR_PID_LIST:$PID"
+                fi
+            else
+                echo "Process $PID (command: ${COMMANDS[$i]}) failed to start or crashed immediately!" >&2
+                exit 1
+            fi
+        fi
+        rm "$TEMP_PID_FILE"
+    else
+        echo "PID file not found for command: ${COMMANDS[$i]}" >&2
+        exit 1
+    fi
 done
 
 # Redirect tmux server log to a specific file
 tmux pipe-pane -o -t $SESSION_NAME "cat >> $LOG_FILE"
 
-echo $AFLR_PID_LIST > "$PID_FILE"
+if [ -z "$AFLR_PID_LIST" ]; then
+    echo "Failed to start AFLR session '$SESSION_NAME'" >&2
+    exit 1
+else
+    echo $AFLR_PID_LIST > "$PID_FILE"
+fi
+
+set -o history # Turn history back on

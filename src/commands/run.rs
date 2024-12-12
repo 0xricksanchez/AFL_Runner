@@ -58,23 +58,13 @@ impl<'a> RunCommand<'a> {
         )
     }
 
-    fn execute_session<T: SessionManager>(
-        session: &Session<T>,
-        args: &RunArgs,
-        session_type: &str,
-    ) -> Result<()> {
+    fn execute_session<T: SessionManager>(session: &Session<T>, args: &RunArgs) -> Result<()> {
         if args.tui {
-            session
-                .run_with_tui(&args.gen_args.output_dir.clone().unwrap())
-                .with_context(|| format!("Failed to run TUI {session_type} session"))?;
+            session.run_with_tui(&args.gen_args.output_dir.clone().unwrap())?;
         } else {
-            session
-                .run()
-                .with_context(|| format!("Failed to run {session_type} session"))?;
+            session.run()?;
             if !args.detached {
-                session
-                    .attach()
-                    .with_context(|| format!("Failed to attach to {session_type} session"))?;
+                session.attach()?
             }
         }
         Ok(())
@@ -120,12 +110,12 @@ impl Command for RunCommand<'_> {
             SessionRunner::Screen => {
                 let screen = ScreenSession::new(&sname, &afl_commands.to_string_vec(), pid_fn_path)
                     .context("Failed to create Screen session")?;
-                Self::execute_session(&screen, &merged_args, "Screen")
+                Self::execute_session(&screen, &merged_args)
             }
             SessionRunner::Tmux => {
                 let tmux = TmuxSession::new(&sname, &afl_commands.to_string_vec(), pid_fn_path)
                     .context("Failed to create Tmux session")?;
-                Self::execute_session(&tmux, &merged_args, "Tmux")
+                Self::execute_session(&tmux, &merged_args)
             }
         }
     }

@@ -29,11 +29,18 @@ fn main() -> Result<()> {
     }?;
 
     // Execute command
-    match &cli_args.cmd {
+    let result = match &cli_args.cmd {
         Commands::Gen(args) => GenCommand::new(args, &arg_aggregator).execute(),
         Commands::Run(args) => RunCommand::new(args, &arg_aggregator).execute(),
         Commands::Cov(args) => CovCommand::new(args, &arg_aggregator).execute(),
         Commands::Tui(args) => RenderCommand::new(args).execute(),
         Commands::Kill(args) => KillCommand::new(args).execute(),
+    };
+
+    if let Err(e) = result {
+        eprintln!("{}", e);
+        std::process::exit(1);
     }
+
+    Ok(())
 }

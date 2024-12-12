@@ -1,5 +1,6 @@
 #!/bin/bash
 set -eu
+set +o history # Temporarily turn off history
 
 # Set HISTCONTROL to ignorespace
 HISTCONTROL="ignorespace"
@@ -95,3 +96,4 @@ screen -S $SESSION_NAME -X startup_message off
 screen -S $SESSION_NAME -X logfile $LOG_FILE
 
 echo $AFLR_PID_LIST > "$PID_FILE"
+set -o history # turn history back on
