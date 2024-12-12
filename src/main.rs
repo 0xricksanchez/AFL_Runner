@@ -1,11 +1,5 @@
 use anyhow::Result;
-use argument_aggregator::ArgumentAggregator;
 use clap::Parser;
-use cli::{Cli, Commands};
-use commands::{
-    cov::CovCommand, gen::GenCommand, kill::KillCommand, render_tui::RenderCommand,
-    run::RunCommand, Command,
-};
 
 pub mod afl;
 pub mod argument_aggregator;
@@ -14,6 +8,13 @@ pub mod commands;
 pub mod runners;
 pub mod tui;
 pub mod utils;
+
+use argument_aggregator::ArgumentAggregator;
+use cli::{Cli, Commands};
+use commands::{
+    cov::CovCommand, gen::GenCommand, kill::KillCommand, render_tui::RenderCommand,
+    run::RunCommand, Command,
+};
 
 fn main() -> Result<()> {
     let cli_args = Cli::parse();

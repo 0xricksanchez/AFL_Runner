@@ -1,10 +1,11 @@
+use anyhow::{Context, Result};
+use std::path::Path;
+
 use crate::{
     cli::KillArgs,
     commands::Command,
     runners::{screen::ScreenSession, tmux::TmuxSession},
 };
-use anyhow::{Context, Result};
-use std::path::Path;
 
 pub struct KillCommand<'a> {
     args: &'a KillArgs,

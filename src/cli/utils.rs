@@ -1,8 +1,9 @@
 use std::io;
+use std::process::Command;
 
 /// Get possible tmux session names for completion
 fn get_session_names() -> io::Result<Vec<String>> {
-    let output = std::process::Command::new("tmux").arg("ls").output()?;
+    let output = Command::new("tmux").arg("ls").output()?;
 
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout)

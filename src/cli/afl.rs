@@ -1,5 +1,6 @@
-use crate::afl::mode::Mode;
 use serde::Deserialize;
+
+use crate::afl::mode::Mode;
 
 #[derive(Deserialize, Default, Debug, Clone)]
 pub struct AflArgs {

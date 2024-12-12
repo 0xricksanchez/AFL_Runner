@@ -1,6 +1,7 @@
-use crate::afl::mode::Mode;
 use clap::{ArgAction, Args};
 use std::path::PathBuf;
+
+use crate::afl::mode::Mode;
 
 #[derive(Args, Clone, Debug, Default)]
 pub struct GenArgs {

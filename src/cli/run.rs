@@ -1,6 +1,6 @@
-use super::GenArgs;
 use clap::Args;
 
+use super::GenArgs;
 use crate::cli::SessionRunner;
 
 #[derive(Args, Clone, Debug, Default)]

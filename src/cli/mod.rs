@@ -15,18 +15,17 @@ mod tui;
 mod utils;
 
 pub use afl::AflArgs;
+use constants::{AFL_CORPUS, AFL_OUTPUT};
 pub use cov::CovArgs;
-pub use coverage::CoverageArgs;
+use coverage::CoverageArgs;
 pub use gen::GenArgs;
 pub use kill::KillArgs;
-pub use misc::MiscArgs;
+use misc::MiscArgs;
 pub use run::RunArgs;
-pub use session::SessionArgs;
+use session::SessionArgs;
 pub use session::SessionRunner;
-pub use target::TargetArgs;
+use target::TargetArgs;
 pub use tui::TuiArgs;
-
-pub use constants::{AFL_CORPUS, AFL_OUTPUT};
 
 /// Command-line interface for the Parallelized `AFLPlusPlus` Campaign Runner
 #[derive(Parser, Debug, Clone)]
@@ -72,7 +71,7 @@ pub trait ConfigMerge<T> {
     fn merge_with_config(&self, config: &Config) -> T;
 }
 
-impl ConfigMerge<Self> for crate::cli::GenArgs {
+impl ConfigMerge<Self> for GenArgs {
     fn merge_with_config(&self, config: &Config) -> Self {
         let merge_path = |opt: Option<std::path::PathBuf>, cfg_str: Option<String>| {
             opt.or_else(|| {
@@ -93,9 +92,9 @@ impl ConfigMerge<Self> for crate::cli::GenArgs {
                 .or_else(|| config.target.args.clone().filter(|args| !args.is_empty())),
             runners: Some(self.runners.or(config.afl_cfg.runners).unwrap_or(1)),
             input_dir: merge_path(self.input_dir.clone(), config.afl_cfg.seed_dir.clone())
-                .or_else(|| Some(std::path::PathBuf::from(crate::cli::constants::AFL_CORPUS))),
+                .or_else(|| Some(std::path::PathBuf::from(AFL_CORPUS))),
             output_dir: merge_path(self.output_dir.clone(), config.afl_cfg.solution_dir.clone())
-                .or_else(|| Some(std::path::PathBuf::from(crate::cli::constants::AFL_OUTPUT))),
+                .or_else(|| Some(std::path::PathBuf::from(AFL_OUTPUT))),
             dictionary: merge_path(self.dictionary.clone(), config.afl_cfg.dictionary.clone()),
             afl_binary: self
                 .afl_binary
@@ -109,7 +108,7 @@ impl ConfigMerge<Self> for crate::cli::GenArgs {
     }
 }
 
-impl ConfigMerge<Self> for crate::cli::RunArgs {
+impl ConfigMerge<Self> for RunArgs {
     fn merge_with_config(&self, config: &Config) -> Self {
         let gen_args = self.gen_args.merge_with_config(config);
         let session_runner = config
@@ -145,7 +144,7 @@ impl ConfigMerge<Self> for crate::cli::RunArgs {
     }
 }
 
-impl ConfigMerge<Self> for crate::cli::CovArgs {
+impl ConfigMerge<Self> for CovArgs {
     fn merge_with_config(&self, config: &Config) -> Self {
         let merge_path = |opt: Option<std::path::PathBuf>, cfg_str: Option<String>| {
             opt.or_else(|| {
@@ -162,7 +161,7 @@ impl ConfigMerge<Self> for crate::cli::CovArgs {
                 .clone()
                 .or_else(|| config.target.args.clone().filter(|args| !args.is_empty())),
             output_dir: merge_path(self.output_dir.clone(), config.afl_cfg.solution_dir.clone())
-                .or_else(|| Some(std::path::PathBuf::from(crate::cli::constants::AFL_OUTPUT))),
+                .or_else(|| Some(std::path::PathBuf::from(AFL_OUTPUT))),
             split_report: config.coverage.split_report.unwrap_or(self.split_report),
             text_report: match config.coverage.report_type.as_deref() {
                 Some("HTML" | "html") => false,

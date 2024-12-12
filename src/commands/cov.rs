@@ -1,8 +1,9 @@
+use anyhow::Result;
+
 use crate::{
     afl::coverage::CoverageCollector, argument_aggregator::ArgumentAggregator, cli::CovArgs,
     commands::Command,
 };
-use anyhow::Result;
 
 pub struct CovCommand<'a> {
     args: &'a CovArgs,

@@ -1,3 +1,6 @@
+use anyhow::{Context, Result};
+use std::path::Path;
+
 use crate::{
     afl::{base_cfg::Bcfg, cmd::Printable, cmd_gen::AFLCmdGenerator, harness::Harness},
     argument_aggregator::ArgumentAggregator,
@@ -5,8 +8,6 @@ use crate::{
     cli::GenArgs,
     commands::Command,
 };
-use anyhow::{Context, Result};
-use std::path::Path;
 
 pub struct GenCommand<'a> {
     args: &'a GenArgs,

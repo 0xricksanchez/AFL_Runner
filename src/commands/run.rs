@@ -1,3 +1,9 @@
+use anyhow::{bail, Context, Result};
+use std::{
+    hash::{DefaultHasher, Hasher},
+    path::Path,
+};
+
 use crate::{
     afl::cmd::ToStringVec,
     argument_aggregator::ArgumentAggregator,
@@ -8,11 +14,6 @@ use crate::{
         screen::ScreenSession,
         tmux::TmuxSession,
     },
-};
-use anyhow::{bail, Context, Result};
-use std::{
-    hash::{DefaultHasher, Hasher},
-    path::Path,
 };
 
 pub struct RunCommand<'a> {
@@ -95,7 +96,9 @@ impl Command for RunCommand<'_> {
         )
         .context("Failed to create AFL++ runner")?;
 
-        let afl_commands = afl_generator.run().context("Failed to run AFL++ generator")?;
+        let afl_commands = afl_generator
+            .run()
+            .context("Failed to run AFL++ generator")?;
 
         if merged_args.dry_run {
             println!("{afl_commands:?}");
