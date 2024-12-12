@@ -73,4 +73,3 @@ compdef _aflr aflr
 
     Ok(())
 }
-
