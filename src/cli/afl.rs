@@ -2,7 +2,7 @@ use crate::afl::mode::Mode;
 use serde::Deserialize;
 
 #[derive(Deserialize, Default, Debug, Clone)]
-pub struct AflConfig {
+pub struct AflArgs {
     /// Number of AFL runners
     pub runners: Option<u32>,
     /// Path to the AFL binary

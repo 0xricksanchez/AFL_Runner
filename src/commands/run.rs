@@ -1,7 +1,7 @@
 use crate::{
     afl::cmd::ToStringVec,
     argument_aggregator::ArgumentAggregator,
-    cli::{args::SessionRunner, RunArgs},
+    cli::{constants, RunArgs, SessionRunner},
     commands::{gen::GenCommand, Command},
     runners::{
         runner::{Session, SessionManager},
@@ -43,7 +43,7 @@ impl<'a> RunCommand<'a> {
                     "{}_{}_{}",
                     target,
                     args.gen_args.input_dir.as_ref().map_or_else(
-                        || crate::cli::AFL_CORPUS.into(),
+                        || constants::AFL_CORPUS.into(),
                         |dir| dir.file_name().unwrap_or_default().to_string_lossy()
                     ),
                     target_args,

@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 #[derive(Deserialize, Default, Debug, Clone)]
-pub struct CoverageConfig {
+pub struct CoverageArgs {
     /// HTML- or Text-based coverage report
     pub report_type: Option<String>,
     /// Split coverage report

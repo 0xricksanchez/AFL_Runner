@@ -1,7 +1,7 @@
 use super::GenArgs;
 use clap::Args;
 
-use crate::cli::args::SessionRunner;
+use crate::cli::SessionRunner;
 
 #[derive(Args, Clone, Debug, Default)]
 #[allow(clippy::struct_excessive_bools)]

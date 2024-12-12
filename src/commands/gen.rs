@@ -1,6 +1,7 @@
 use crate::{
     afl::{base_cfg::Bcfg, cmd::Printable, cmd_gen::AFLCmdGenerator},
     argument_aggregator::ArgumentAggregator,
+    cli::constants,
     cli::GenArgs,
     commands::Command,
     harness::Harness,
@@ -52,7 +53,7 @@ impl<'a> GenCommand<'a> {
             gen_args
                 .input_dir
                 .clone()
-                .unwrap_or_else(|| Path::new(crate::cli::AFL_CORPUS).to_path_buf()),
+                .unwrap_or_else(|| Path::new(constants::AFL_CORPUS).to_path_buf()),
             gen_args
                 .output_dir
                 .clone()

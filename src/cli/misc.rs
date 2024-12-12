@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 #[derive(Deserialize, Default, Debug, Clone)]
-pub struct MiscConfig {
+pub struct MiscArgs {
     /// Enable TUI mode
     pub tui: Option<bool>,
     /// Enabled detached mode

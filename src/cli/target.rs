@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 #[derive(Deserialize, Default, Debug, Clone)]
-pub struct TargetConfig {
+pub struct TargetArgs {
     /// Path to the target binary
     pub path: Option<String>,
     /// Path to the sanitizer binary
