@@ -1,10 +1,9 @@
 use crate::{
-    afl::{base_cfg::Bcfg, cmd::Printable, cmd_gen::AFLCmdGenerator},
+    afl::{base_cfg::Bcfg, cmd::Printable, cmd_gen::AFLCmdGenerator, harness::Harness},
     argument_aggregator::ArgumentAggregator,
     cli::constants,
     cli::GenArgs,
     commands::Command,
-    harness::Harness,
 };
 use anyhow::{Context, Result};
 use std::path::Path;

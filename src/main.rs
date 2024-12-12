@@ -11,12 +11,7 @@ pub mod afl;
 pub mod argument_aggregator;
 pub mod cli;
 pub mod commands;
-pub mod coverage;
-pub mod data_collection;
-pub mod harness;
 pub mod runners;
-pub mod seed;
-pub mod session;
 pub mod tui;
 pub mod utils;
 

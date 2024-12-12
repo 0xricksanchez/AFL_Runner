@@ -1,4 +1,4 @@
-use crate::{cli::TuiArgs, commands::Command, session::CampaignData, tui::Tui};
+use crate::{cli::TuiArgs, commands::Command, tui::session::CampaignData, tui::Tui};
 use anyhow::{bail, Context, Result};
 use std::path::Path;
 

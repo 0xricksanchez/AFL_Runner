@@ -1,6 +1,6 @@
 use crate::{
-    argument_aggregator::ArgumentAggregator, cli::CovArgs, commands::Command,
-    coverage::CoverageCollector,
+    afl::coverage::CoverageCollector, argument_aggregator::ArgumentAggregator, cli::CovArgs,
+    commands::Command,
 };
 use anyhow::Result;
 

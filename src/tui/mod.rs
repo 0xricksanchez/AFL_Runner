@@ -1,3 +1,6 @@
+pub mod data_collection;
+pub mod session;
+
 use anyhow::Result;
 use std::io;
 use std::path::Path;
@@ -5,8 +8,8 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use crate::data_collection::DataFetcher;
-use crate::session::{CampaignData, CrashInfoDetails};
+use crate::tui::data_collection::DataFetcher;
+use crate::tui::session::{CampaignData, CrashInfoDetails};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };

@@ -8,8 +8,7 @@ use std::thread;
 use std::time::Duration;
 use tempfile::NamedTempFile;
 
-use crate::session::CampaignData;
-use crate::tui::Tui;
+use crate::tui::{session::CampaignData, Tui};
 use crate::utils::system::{get_user_input, mkdir_helper};
 
 /// Template files for different session managers
