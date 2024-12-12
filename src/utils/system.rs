@@ -42,19 +42,19 @@ pub fn create_ramdisk() -> Result<String> {
     Ok(folder)
 }
 
-/// Validates if a path points to the AFL binary
+/// Validates if a path points to the AFL++ binary
 #[inline]
 fn is_valid_afl_binary(path: &Path) -> bool {
     path.exists() && path.is_file() && path.ends_with("afl-fuzz")
 }
 
-/// Retrieves the path to the AFL binary
+/// Retrieves the path to the AFL++ binary
 ///
 /// # Returns
-/// * `Result<PathBuf>` - Path to the AFL binary
+/// * `Result<PathBuf>` - Path to the AFL++ binary
 ///
 /// # Errors
-/// * If the AFL binary is not found
+/// * If the AFL++ binary is not found
 pub fn find_binary_in_path<P>(custom_path: Option<P>) -> Result<PathBuf>
 where
     P: Into<PathBuf>,

@@ -252,7 +252,7 @@ impl Tui {
     /// Renders the title section of the TUI
     fn render_title(f: &mut Frame, session_data: &CampaignData, area: Rect) {
         let title = Paragraph::new(format!(
-            "AFL {} - {} - Fuzzing campaign runner by @0xricksanchez",
+            "AFL++ {} - {} - Fuzzing campaign runner by @0xricksanchez",
             session_data.misc.afl_version, session_data.misc.afl_banner
         ))
         .alignment(Alignment::Center)

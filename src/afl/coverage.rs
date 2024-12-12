@@ -550,7 +550,7 @@ mod tests {
         let test_dir = PathBuf::from("/tmp").join(format!("test_coverage_{}", Uuid::new_v4()));
         fs::create_dir(&test_dir)?;
 
-        // Create a mock AFL output directory
+        // Create a mock AFL++ output directory
         let afl_dir = test_dir.join("afl_out");
         fs::create_dir(&afl_dir)?;
 

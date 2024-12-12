@@ -93,9 +93,9 @@ impl Command for RunCommand<'_> {
             raw_afl_flags.as_ref(),
             merged_args.is_ramdisk,
         )
-        .context("Failed to create AFL runner")?;
+        .context("Failed to create AFL++ runner")?;
 
-        let afl_commands = afl_generator.run().context("Failed to run AFL generator")?;
+        let afl_commands = afl_generator.run().context("Failed to run AFL++ generator")?;
 
         if merged_args.dry_run {
             println!("{afl_commands:?}");

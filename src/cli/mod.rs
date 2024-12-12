@@ -60,7 +60,7 @@ pub struct Config {
     pub target: TargetArgs,
     /// Coverage configuration
     pub coverage: CoverageArgs,
-    /// AFL configuration
+    /// AFL++ configuration
     pub afl_cfg: AflArgs,
     /// Session configuration
     pub session: SessionArgs,

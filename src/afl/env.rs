@@ -9,7 +9,7 @@ use rand::Rng;
 use crate::afl::mode::Mode;
 use crate::utils::system;
 
-/// Enum representing the different AFL environment flags
+/// Enum representing the different AFL++ environment flags
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AFLFlag {
     /// `AFL_AUTORESUME` will resume a fuzz run (same as providing -i -) for an existing out folder, even if a different -i was provided.
@@ -76,7 +76,7 @@ impl FromStr for AFLFlag {
             "AFL_IMPORT_FIRST" => Ok(Self::ImportFirst),
             "AFL_FAST_CAL" => Ok(Self::FastCal),
             "AFL_CMPLOG_ONLY_NEW" => Ok(Self::CmplogOnlyNew),
-            _ => Err(format!("Unknown AFL flag: {s}")),
+            _ => Err(format!("Unknown AFL++ flag: {s}")),
         }
     }
 }
@@ -153,7 +153,7 @@ impl AFLEnv {
         envs
     }
 
-    /// Enables the specified AFL flag
+    /// Enables the specified AFL++ flag
     #[inline]
     pub fn enable_flag(&mut self, flag: AFLFlag) -> &mut Self {
         self.flags.insert(flag);
@@ -200,7 +200,7 @@ impl AFLEnv {
         command
     }
 
-    /// Applies a flag to a percentage of AFL configurations
+    /// Applies a flag to a percentage of AFL++ configurations
     fn apply_flags(configs: &mut [Self], flag: &AFLFlag, percentage: f64, rng: &mut impl Rng) {
         #[allow(clippy::cast_possible_truncation)]
         #[allow(clippy::cast_sign_loss)]

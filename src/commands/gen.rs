@@ -21,7 +21,7 @@ impl<'a> GenCommand<'a> {
         }
     }
 
-    /// Create an AFL runner
+    /// Create an AFL++ runner
     ///
     /// # Errors
     /// * If any of the provided target binaries are invalid
@@ -77,10 +77,10 @@ impl Command for GenCommand<'_> {
     fn execute(&self) -> Result<()> {
         let (merged_args, raw_afl_flags) = self.arg_aggregator.merge_gen_args(self.args)?;
         let afl_generator = Self::create_afl_runner(&merged_args, raw_afl_flags.as_ref(), false)
-            .context("Failed to create AFL runner")?;
+            .context("Failed to create AFL++ runner")?;
         afl_generator
             .run()
-            .context("Failed to run AFL generator")?
+            .context("Failed to run AFL++ generator")?
             .print();
         Ok(())
     }
