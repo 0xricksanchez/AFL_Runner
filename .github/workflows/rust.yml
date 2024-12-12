@@ -44,10 +44,18 @@ jobs:
             wget https://apt.llvm.org/llvm.sh
             chmod +x llvm.sh
             sudo ./llvm.sh 18
+            sudo apt-get update
             sudo apt-get install -y lcov
           fi
           sudo ln -sf /usr/lib/llvm-18/bin/llvm-profdata /usr/local/bin/llvm-profdata
           sudo ln -sf /usr/lib/llvm-18/bin/llvm-cov /usr/local/bin/llvm-cov
+          # Verify genhtml is available
+          which genhtml || sudo apt-get install -y lcov
+
+          # Verify all required tools are available
+          for tool in llvm-profdata llvm-cov genhtml lcov; do
+            which $tool
+          done
 
       - name: Add fake afl-fuzz into path
         run: |
