@@ -265,6 +265,14 @@ LDFLAGS = "--coverage"
 
 # ----------------- RUN CAMPAIGN -----------------
 
+[tasks.gen]
+dependencies = ["build_aflr", "build_libxml2", "get_dict"]
+description = "Use aflr to generate the campaign"
+script_runner = "@shell"
+script = """
+../target/release/aflr gen --config aflr_config.toml
+"""
+
 [tasks.run]
 dependencies = ["build_aflr", "build_libxml2", "get_corpus", "get_dict"]
 description = "Run aflr with the optimizal settings"

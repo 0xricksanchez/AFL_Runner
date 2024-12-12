@@ -2,27 +2,26 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 
+use crate::afl::env::AFLEnv;
+use crate::afl::harness::Harness;
 use crate::afl::mode::Mode;
 use crate::afl::strategies::{AFLStrategy, CmpcovConfig, CmplogConfig};
 use crate::afl::{base_cfg::Bcfg, cmd::AFLCmd};
-use crate::harness::Harness;
-use crate::seed::Xorshift64;
-use crate::{afl::env::AFLEnv, system_utils};
+use crate::utils::seed::Xorshift64;
+use crate::utils::system::find_binary_in_path;
 use anyhow::{Context, Result};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 
-use system_utils::find_binary_in_path;
-
 const RUNNER_THRESH: u32 = 32;
 
-/// Generates AFL commands based on the provided configuration
+/// Generates AFL++ commands based on the provided configuration
 pub struct AFLCmdGenerator {
     /// The harness configuration
     pub harness: Harness,
     /// AFL++ base configuration
     pub base_cfg: Bcfg,
-    /// Number of AFL runners
+    /// Number of AFL++ runners
     pub runners: u32,
     /// The mode that determines the amount of parameters applied to the generated commands
     pub mode: Mode,
@@ -46,21 +45,25 @@ impl AFLCmdGenerator {
         }
     }
 
-    /// Retrieves AFL environment variables
+    /// Retrieves AFL++ environment variables
     fn get_afl_env_vars() -> Vec<String> {
         let gl_afl_env = std::env::vars()
             .filter(|(k, _)| k.starts_with("AFL_"))
             .map(|(k, v)| format!("{k}={v}"))
             .collect::<Vec<String>>();
         if !gl_afl_env.is_empty() {
-            println!("[!] Warning: Exported AFL environment variables found... Check generated commands!");
+            println!("[!] Warning: Exported AFL++ environment variables found... Check generated commands!");
         }
         gl_afl_env
     }
 
-    /// Generates AFL commands based on the configuration
+    /// Generates AFL++ commands based on the configuration
+    ///
+    /// # Errors
+    /// * If the set of intial commands cannot be constructed
+    /// * If dictionary path cannot be resolved
     pub fn run(&self) -> Result<Vec<AFLCmd>> {
-        let seed = Xorshift64::new(self.seed.unwrap_or(0)).next();
+        let seed = Xorshift64::new(self.seed.unwrap_or(0)).rand();
         let mut rng = StdRng::seed_from_u64(seed);
 
         let afl_envs = AFLEnv::new(
@@ -118,10 +121,9 @@ impl AFLCmdGenerator {
         Self::apply_global_env_vars(&mut cmds, &afl_env_vars);
 
         Ok(cmds)
-        //Ok(cmds.into_iter().map(|cmd| cmd.as_string()).collect())
     }
 
-    // Inherit global AFL environment variables that are not already set
+    // Inherit global AFL++ environment variables that are not already set
     fn apply_global_env_vars(cmds: &mut [AFLCmd], afl_env_vars: &[String]) {
         for cmd in cmds {
             let to_apply: Vec<_> = afl_env_vars
@@ -136,7 +138,7 @@ impl AFLCmdGenerator {
         }
     }
 
-    /// Creates initial AFL commands
+    /// Creates initial AFL++ commands
     fn create_initial_cmds(&self, afl_envs: &[AFLEnv]) -> Result<Vec<AFLCmd>> {
         let afl_binary = find_binary_in_path(self.base_cfg.afl_binary.clone())?;
         let target_binary = &self.harness.target_bin;
@@ -154,7 +156,7 @@ impl AFLCmdGenerator {
             .collect())
     }
 
-    /// Applies input and output directories to AFL commands
+    /// Applies input and output directories to AFL++ commands
     fn apply_directory(&self, cmds: &mut [AFLCmd]) {
         for cmd in cmds {
             cmd.with_input_dir(self.base_cfg.input_dir.clone())
@@ -162,7 +164,7 @@ impl AFLCmdGenerator {
         }
     }
 
-    /// Applies fuzzer roles to AFL commands
+    /// Applies fuzzer roles to AFL++ commands
     fn apply_fuzzer_roles(&self, cmds: &mut [AFLCmd], cmpcov_idxs: &HashSet<usize>, mode: Mode) {
         let get_file_stem = |path: &PathBuf| -> String {
             path.file_stem()
@@ -206,7 +208,7 @@ impl AFLCmdGenerator {
         }
     }
 
-    /// Applies dictionary to AFL commands
+    /// Applies dictionary to AFL++ commands
     fn apply_dictionary(&self, cmds: &mut [AFLCmd]) -> Result<()> {
         if let Some(dict) = &self.base_cfg.dictionary {
             let dict_path = fs::canonicalize(dict).context("Failed to resolve dictionary path")?;
@@ -217,7 +219,7 @@ impl AFLCmdGenerator {
         Ok(())
     }
 
-    /// Applies sanitizer or target binary to AFL commands
+    /// Applies sanitizer or target binary to AFL++ commands
     fn apply_sanitizer_or_target_binary(&self, cmds: &mut [AFLCmd]) {
         if let Some(cmd) = cmds.first_mut() {
             let binary = self
@@ -229,7 +231,7 @@ impl AFLCmdGenerator {
         }
     }
 
-    /// Applies target arguments to AFL commands
+    /// Applies target arguments to AFL++ commands
     fn apply_target_args(&self, cmds: &mut [AFLCmd]) {
         if let Some(args) = &self.harness.target_args {
             for cmd in cmds {
@@ -487,7 +489,7 @@ mod tests {
     fn test_afl_relay_seed() {
         let (_temp_dir, generator) = setup_test_generator();
         let cmds = generator.run().unwrap();
-        let expected_seed = Xorshift64::new(generator.seed.unwrap()).next();
+        let expected_seed = Xorshift64::new(generator.seed.unwrap()).rand();
 
         assert!(cmds[0].to_string().contains("-s"));
         assert!(cmds[0].to_string().contains(&format!("{}", expected_seed)));

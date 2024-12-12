@@ -36,19 +36,6 @@ impl<T> LogRingBuffer<T> {
         }
     }
 
-    //pub fn get(&self, index: usize) -> Option<&T> {
-    //    if index >= self.count {
-    //        None
-    //    } else {
-    //        let actual_index = (self.tail + index) % self.capacity;
-    //        self.buffer.get(actual_index)
-    //    }
-    //}
-
-    //pub fn len(&self) -> usize {
-    //    self.count
-    //}
-
     pub fn join(&self, sep: &str, reverse: bool) -> String
     where
         T: std::fmt::Display,

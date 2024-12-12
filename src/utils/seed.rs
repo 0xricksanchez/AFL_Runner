@@ -13,7 +13,7 @@ impl Xorshift64 {
         }
     }
 
-    pub fn next(&mut self) -> u64 {
+    pub fn rand(&mut self) -> u64 {
         let x = self.state;
         self.state ^= self.state << 13;
         self.state ^= self.state >> 17;

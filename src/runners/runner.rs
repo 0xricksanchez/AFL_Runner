@@ -8,9 +8,8 @@ use std::thread;
 use std::time::Duration;
 use tempfile::NamedTempFile;
 
-use crate::session::CampaignData;
-use crate::system_utils::{get_user_input, mkdir_helper};
-use crate::tui::Tui;
+use crate::tui::{session::CampaignData, Tui};
+use crate::utils::system::{get_user_input, mkdir_helper};
 
 /// Template files for different session managers
 pub mod templates {
@@ -27,6 +26,10 @@ pub struct SessionCommand {
 }
 
 impl SessionCommand {
+    /// Parse a command string into a `SessionCommand`
+    ///
+    /// # Errors
+    /// * If the input or output directories could not be found
     pub fn new(cmd: &str) -> Result<Self> {
         let parts: Vec<_> = cmd.split_whitespace().collect();
         let input_dir = parts
@@ -72,6 +75,9 @@ pub trait SessionManager: Sized {
     fn build_attach_command(session_name: &str) -> Command;
 
     /// Optional post-attachment setup (e.g., finding window ID in tmux)
+    ///
+    /// # Errors
+    /// * If the implementation specific setup fails
     fn post_attach_setup(_session_name: &str) -> Result<()> {
         Ok(())
     }
@@ -88,6 +94,10 @@ pub struct Session<T: SessionManager> {
 }
 
 impl<T: SessionManager> Session<T> {
+    /// Create a new session
+    ///
+    /// # Errors
+    /// * If any session command could not be parsed
     pub fn new(session_name: &str, commands: &[String], pid_file: &Path) -> Result<Self> {
         let commands = commands
             .iter()
@@ -115,15 +125,31 @@ impl<T: SessionManager> Session<T> {
             .unwrap_or(false)
     }
 
+    /// Kill the session
+    ///
+    /// # Errors
+    /// If `run_command` fails
     pub fn kill_session(&self) -> Result<()> {
         Self::run_command(T::build_kill_command(&self.name))
     }
 
+    /// Attach to the session
+    ///
+    /// # Errors
+    /// * If the session could not be attached
     pub fn attach(&self) -> Result<()> {
         T::post_attach_setup(&self.name)?;
         Self::run_command(T::build_attach_command(&self.name))
     }
 
+    /// Create a bash script to run the session
+    ///
+    /// # Errors
+    /// * If the template could not be loaded
+    /// * If the template could not be rendered
+    ///
+    /// # Panics
+    /// * If the log file or pid file paths are not valid UTF-8
     pub fn create_bash_script(&self) -> Result<String> {
         let mut engine = upon::Engine::new();
         engine.add_template("session", T::template())?;
@@ -147,6 +173,11 @@ impl<T: SessionManager> Session<T> {
         Ok(())
     }
 
+    /// Run the session
+    ///
+    /// # Errors
+    /// * If the session script could not be created
+    /// * If the session could not be started
     pub fn run(&self) -> Result<()> {
         self.setup_directories()?;
         self.confirm_start()?;
@@ -227,6 +258,10 @@ impl<T: SessionManager> Session<T> {
         Ok(())
     }
 
+    /// Run the session with a TUI
+    ///
+    /// # Errors
+    /// * If the session could not be started
     pub fn run_with_tui(&self, out_dir: &Path) -> Result<()> {
         let mut cdata = CampaignData::new();
         self.run()?;

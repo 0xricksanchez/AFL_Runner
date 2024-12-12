@@ -8,7 +8,7 @@ use std::{
 
 use sysinfo::{Pid, System};
 
-use crate::session::{CampaignData, CrashInfoDetails};
+use crate::tui::session::{CampaignData, CrashInfoDetails};
 
 macro_rules! update_stat {
     // Special case for floating point numbers

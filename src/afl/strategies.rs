@@ -5,8 +5,9 @@ use rand::seq::SliceRandom;
 use std::collections::HashSet;
 use std::{fmt, path::PathBuf};
 
-/// These structs contain the AFL strategies and their probabilities of being applied in the command generation.
-/// The values and probabilities are loosely based on the following AFL documentation:
+/// These structs contain the AFL++ strategies and their probabilities of being applied in the command generation.
+///
+/// The values and probabilities are loosely based on the following AFL++ documentation:
 /// `https://github.com/AFLplusplus/AFLplusplus/blob/stable/docs/fuzzing_in_depth.md#c-using-multiple-cores`
 /// Static empty set for default case
 pub static EMPTY_INDICES: Lazy<HashSet<usize>> = Lazy::new(HashSet::new);
@@ -106,7 +107,7 @@ impl CmplogConfig {
     }
 }
 
-/// Represents different types of AFL mutation modes
+/// Represents different types of AFL++ mutation modes
 #[derive(Debug, Clone, Copy)]
 pub enum MutationMode {
     Explore,
@@ -175,7 +176,7 @@ pub enum ApplicationMode {
     Multiple,
 }
 
-/// Configuration for optional AFL features
+/// Configuration for optional AFL++ features
 #[derive(Debug, Clone)]
 pub struct MiscFeatures {
     /// Probability of enabling `MOpt` mutator -L 0 flag
@@ -196,7 +197,7 @@ impl Default for MiscFeatures {
     }
 }
 
-/// Comprehensive AFL strategy configuration
+/// Comprehensive AFL++ strategy configuration
 #[derive(Debug, Clone, Default)]
 pub struct AFLStrategy {
     /// Available mutation modes with their probabilities
@@ -257,7 +258,7 @@ impl AFLStrategy {
             .with_ci()
     }
 
-    /// Applies the strategy to a slice of AFL commands
+    /// Applies the strategy to a slice of AFL++ commands
     pub fn apply<R: rand::Rng>(
         &mut self,
         cmds: &mut [AFLCmd],
@@ -439,7 +440,7 @@ impl AFLStrategy {
         }
     }
 
-    /// Applies CMPLOG instrumentation to the specified number of AFL commands
+    /// Applies CMPLOG instrumentation to the specified number of AFL++ commands
     fn apply_cmplog<R: rand::Rng>(&self, cmds: &mut [AFLCmd], rng: &mut R) {
         if self.cmplog_config.is_none() {
             return;
@@ -650,7 +651,7 @@ mod tests {
         rand::rngs::StdRng::seed_from_u64(42)
     }
 
-    // Helper function to create test AFL commands
+    // Helper function to create test AFL++ commands
     fn create_test_cmds(count: usize) -> Vec<AFLCmd> {
         let binary = PathBuf::from("/bin/afl-fuzz");
         let target = PathBuf::from("/bin/target");

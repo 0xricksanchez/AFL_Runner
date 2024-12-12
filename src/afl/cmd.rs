@@ -1,17 +1,17 @@
 use std::path::PathBuf;
 
-/// Represents an AFL command configuration
+/// Represents an AFL++ command configuration
 #[derive(Debug, Clone)]
 pub struct AFLCmd {
-    /// Path to the AFL binary
+    /// Path to the AFL++ binary
     pub afl_binary: PathBuf,
-    /// Environment variables for the AFL command
+    /// Environment variables for the AFL++ command
     pub env: Vec<String>,
     /// Input directory for AFL
     pub input_dir: PathBuf,
     /// Output directory for AFL
     pub output_dir: PathBuf,
-    /// Miscellaneous AFL flags
+    /// Miscellaneous AFL++ flags
     pub misc_afl_flags: Vec<String>,
     /// Path to the target binary
     pub target_binary: PathBuf,
@@ -32,7 +32,7 @@ impl AFLCmd {
         }
     }
 
-    /// Sets the environment variables for the AFL command
+    /// Sets the environment variables for the AFL++ command
     pub fn with_env(&mut self, env: Vec<String>, is_prepend: bool) -> &mut Self {
         if is_prepend {
             env.iter().for_each(|e| self.env.insert(0, e.clone()));
@@ -54,7 +54,7 @@ impl AFLCmd {
         self
     }
 
-    /// Sets the miscellaneous AFL flags
+    /// Sets the miscellaneous AFL++ flags
     pub fn with_misc_flags(&mut self, misc_flags: Vec<String>) -> &mut Self {
         self.misc_afl_flags = misc_flags;
         self
@@ -66,12 +66,12 @@ impl AFLCmd {
         self
     }
 
-    /// Adds a flag to the miscellaneous AFL flags
+    /// Adds a flag to the miscellaneous AFL++ flags
     pub fn add_flag(&mut self, flag: String) {
         self.misc_afl_flags.push(flag);
     }
 
-    /// Assembles the AFL command into a string
+    /// Assembles the AFL++ command into a string
     pub fn assemble(&self) -> String {
         let mut cmd_parts = Vec::new();
         cmd_parts.extend(self.env.iter().cloned());

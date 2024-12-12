@@ -2,7 +2,7 @@ use chrono::{DateTime, Local};
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 
-use crate::log_buffer::LogRingBuffer;
+use crate::utils::log_buffer::LogRingBuffer;
 
 #[derive(Default, Debug, Clone)]
 pub struct Stats<T> {

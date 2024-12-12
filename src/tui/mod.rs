@@ -1,12 +1,4 @@
 use anyhow::Result;
-use std::io;
-use std::path::Path;
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
-
-use crate::data_collection::DataFetcher;
-use crate::session::{CampaignData, CrashInfoDetails};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
@@ -19,6 +11,13 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
     Terminal,
 };
+use std::{io, path::Path, sync::mpsc, thread, time::Duration};
+
+pub mod data_collection;
+pub mod session;
+
+use crate::tui::data_collection::DataFetcher;
+use crate::tui::session::{CampaignData, CrashInfoDetails};
 
 // Constants moved to a dedicated section for better visibility
 const SLOW_EXEC_PS_THRESHOLD: f64 = 250.0;
@@ -69,6 +68,9 @@ pub struct Tui {
 
 impl Tui {
     /// Creates a new `Tui` instance
+    ///
+    /// # Errors
+    /// Returns an error if the terminal backend cannot be created
     pub fn new() -> io::Result<Self> {
         let backend = CrosstermBackend::new(io::stdout());
         let terminal = Terminal::new(backend)?;
@@ -94,6 +96,9 @@ impl Tui {
     }
 
     /// Runs the TUI standalone with the specified output directory
+    ///
+    /// # Errors
+    /// Returns an error if the TUI fails to run
     pub fn run(output_dir: &Path, pid_file: Option<&Path>, cdata: &mut CampaignData) -> Result<()> {
         let output_dir = output_dir.to_path_buf();
         cdata.log("Initialized TUI");
@@ -243,7 +248,7 @@ impl Tui {
     /// Renders the title section of the TUI
     fn render_title(f: &mut Frame, session_data: &CampaignData, area: Rect) {
         let title = Paragraph::new(format!(
-            "AFL {} - {} - Fuzzing campaign runner by @0xricksanchez",
+            "AFL++ {} - {} - Fuzzing campaign runner by @0xricksanchez",
             session_data.misc.afl_version, session_data.misc.afl_banner
         ))
         .alignment(Alignment::Center)

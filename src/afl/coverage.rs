@@ -10,7 +10,7 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::system_utils::get_user_input;
+use crate::utils::system::get_user_input;
 
 #[derive(Debug)]
 struct QueueDirectory {
@@ -178,6 +178,9 @@ impl CoverageCollector {
     /// This function processes all queue files, generates raw coverage data,
     /// and creates either a unified report or separate reports for each fuzzer instance
     /// based on the configuration.
+    ///
+    /// # Errors
+    /// * If the AFL++ output directory cannot be read
     pub fn collect(&mut self) -> Result<()> {
         let queue_dirs = self.find_queue_directories()?;
 
@@ -420,8 +423,7 @@ impl CoverageCollector {
 
         let total_time = start_time.elapsed();
         println!(
-            "[+] Finished processing {} files in {:.1}s ({:.1} files/sec)",
-            total_files,
+            "  [+] Finished in {:.1}s ({:.1} files/sec)",
             total_time.as_secs_f64(),
             total_files as f64 / total_time.as_secs_f64()
         );
@@ -548,7 +550,7 @@ mod tests {
         let test_dir = PathBuf::from("/tmp").join(format!("test_coverage_{}", Uuid::new_v4()));
         fs::create_dir(&test_dir)?;
 
-        // Create a mock AFL output directory
+        // Create a mock AFL++ output directory
         let afl_dir = test_dir.join("afl_out");
         fs::create_dir(&afl_dir)?;
 

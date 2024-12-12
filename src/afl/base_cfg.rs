@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::system_utils::create_ramdisk;
+use crate::utils::system::create_ramdisk;
 
 #[derive(Clone, Debug, Default)]
 pub struct Bcfg {
@@ -10,9 +10,9 @@ pub struct Bcfg {
     pub output_dir: PathBuf,
     /// Path to the dictionary file/directory
     pub dictionary: Option<String>,
-    /// Raw AFL flags
+    /// Raw AFL++ flags
     pub raw_afl_flags: Option<String>,
-    /// Path to the AFL binary
+    /// Path to the AFL++ binary
     pub afl_binary: Option<String>,
     /// Path to the `RAMDisk`
     pub ramdisk: Option<String>,
