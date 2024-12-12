@@ -1,8 +1,8 @@
 use crate::{
     afl::{base_cfg::Bcfg, cmd::Printable, cmd_gen::AFLCmdGenerator},
+    argument_aggregator::ArgumentAggregator,
     cli::GenArgs,
     commands::Command,
-    config_manager::ConfigManager,
     harness::Harness,
 };
 use anyhow::{Context, Result};
@@ -10,14 +10,14 @@ use std::path::Path;
 
 pub struct GenCommand<'a> {
     args: &'a GenArgs,
-    config_manager: &'a ConfigManager,
+    arg_aggregator: &'a ArgumentAggregator,
 }
 
 impl<'a> GenCommand<'a> {
-    pub fn new(args: &'a GenArgs, config_manager: &'a ConfigManager) -> Self {
+    pub fn new(args: &'a GenArgs, arg_aggregator: &'a ArgumentAggregator) -> Self {
         Self {
             args,
-            config_manager,
+            arg_aggregator,
         }
     }
 
@@ -75,7 +75,7 @@ impl<'a> GenCommand<'a> {
 
 impl Command for GenCommand<'_> {
     fn execute(&self) -> Result<()> {
-        let (merged_args, raw_afl_flags) = self.config_manager.merge_gen_args(self.args)?;
+        let (merged_args, raw_afl_flags) = self.arg_aggregator.merge_gen_args(self.args)?;
         let afl_generator = Self::create_afl_runner(&merged_args, raw_afl_flags.as_ref(), false)
             .context("Failed to create AFL runner")?;
         afl_generator

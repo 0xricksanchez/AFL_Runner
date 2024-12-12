@@ -5,12 +5,12 @@ use std::{env, fs, path::PathBuf};
 pub static DEFAULT_AFL_CONFIG: &str = "aflr_cfg.toml";
 
 #[derive(Debug)]
-pub struct ConfigManager {
+pub struct ArgumentAggregator {
     config: Option<Config>,
     default_config_path: PathBuf,
 }
 
-impl Default for ConfigManager {
+impl Default for ArgumentAggregator {
     fn default() -> Self {
         let default_path = env::current_dir()
             .unwrap_or_default()
@@ -22,7 +22,7 @@ impl Default for ConfigManager {
     }
 }
 
-impl ConfigManager {
+impl ArgumentAggregator {
     pub fn new() -> Self {
         Self::default()
     }

@@ -1,8 +1,8 @@
 use crate::{
     afl::cmd::ToStringVec,
+    argument_aggregator::ArgumentAggregator,
     cli::{args::SessionRunner, RunArgs},
     commands::{gen::GenCommand, Command},
-    config_manager::ConfigManager,
     runners::{
         runner::{Session, SessionManager},
         screen::ScreenSession,
@@ -17,14 +17,14 @@ use std::{
 
 pub struct RunCommand<'a> {
     args: &'a RunArgs,
-    config_manager: &'a ConfigManager,
+    arg_aggregator: &'a ArgumentAggregator,
 }
 
 impl<'a> RunCommand<'a> {
-    pub fn new(args: &'a RunArgs, config_manager: &'a ConfigManager) -> Self {
+    pub fn new(args: &'a RunArgs, arg_aggregator: &'a ArgumentAggregator) -> Self {
         Self {
             args,
-            config_manager,
+            arg_aggregator,
         }
     }
 
@@ -82,7 +82,7 @@ impl<'a> RunCommand<'a> {
 
 impl Command for RunCommand<'_> {
     fn execute(&self) -> Result<()> {
-        let (merged_args, raw_afl_flags) = self.config_manager.merge_run_args(self.args)?;
+        let (merged_args, raw_afl_flags) = self.arg_aggregator.merge_run_args(self.args)?;
 
         if merged_args.tui && merged_args.detached {
             bail!("TUI and detached mode cannot be used together");

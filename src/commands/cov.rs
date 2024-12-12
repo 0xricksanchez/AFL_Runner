@@ -1,25 +1,26 @@
 use crate::{
-    cli::CovArgs, commands::Command, config_manager::ConfigManager, coverage::CoverageCollector,
+    argument_aggregator::ArgumentAggregator, cli::CovArgs, commands::Command,
+    coverage::CoverageCollector,
 };
 use anyhow::Result;
 
 pub struct CovCommand<'a> {
     args: &'a CovArgs,
-    config_manager: &'a ConfigManager,
+    arg_aggregator: &'a ArgumentAggregator,
 }
 
 impl<'a> CovCommand<'a> {
-    pub fn new(args: &'a CovArgs, config_manager: &'a ConfigManager) -> Self {
+    pub fn new(args: &'a CovArgs, arg_aggregator: &'a ArgumentAggregator) -> Self {
         Self {
             args,
-            config_manager,
+            arg_aggregator,
         }
     }
 }
 
 impl Command for CovCommand<'_> {
     fn execute(&self) -> Result<()> {
-        let merged_args = self.config_manager.merge_cov_args(self.args)?;
+        let merged_args = self.arg_aggregator.merge_cov_args(self.args)?;
         let mut cov_collector =
             CoverageCollector::new(merged_args.target.unwrap(), merged_args.output_dir.unwrap())?;
 
