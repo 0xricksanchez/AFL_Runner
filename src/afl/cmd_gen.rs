@@ -2,17 +2,16 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 
+use crate::afl::env::AFLEnv;
 use crate::afl::mode::Mode;
 use crate::afl::strategies::{AFLStrategy, CmpcovConfig, CmplogConfig};
 use crate::afl::{base_cfg::Bcfg, cmd::AFLCmd};
 use crate::harness::Harness;
 use crate::seed::Xorshift64;
-use crate::{afl::env::AFLEnv, system_utils};
+use crate::utils::system::find_binary_in_path;
 use anyhow::{Context, Result};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
-
-use system_utils::find_binary_in_path;
 
 const RUNNER_THRESH: u32 = 32;
 

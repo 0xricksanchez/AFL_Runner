@@ -14,12 +14,11 @@ pub mod config_manager;
 pub mod coverage;
 pub mod data_collection;
 pub mod harness;
-pub mod log_buffer;
 pub mod runners;
 pub mod seed;
 pub mod session;
-pub mod system_utils;
 pub mod tui;
+pub mod utils;
 
 fn main() -> Result<()> {
     let cli_args = Cli::parse();

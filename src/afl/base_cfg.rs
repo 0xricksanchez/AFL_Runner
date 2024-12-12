@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::system_utils::create_ramdisk;
+use crate::utils::system::create_ramdisk;
 
 #[derive(Clone, Debug, Default)]
 pub struct Bcfg {

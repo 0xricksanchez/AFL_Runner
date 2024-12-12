@@ -9,8 +9,8 @@ use std::time::Duration;
 use tempfile::NamedTempFile;
 
 use crate::session::CampaignData;
-use crate::system_utils::{get_user_input, mkdir_helper};
 use crate::tui::Tui;
+use crate::utils::system::{get_user_input, mkdir_helper};
 
 /// Template files for different session managers
 pub mod templates {

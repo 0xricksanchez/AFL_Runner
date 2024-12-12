@@ -10,7 +10,7 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::system_utils::get_user_input;
+use crate::utils::system::get_user_input;
 
 #[derive(Debug)]
 struct QueueDirectory {
