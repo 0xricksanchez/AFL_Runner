@@ -27,9 +27,9 @@ pub use session::SessionRunner;
 use target::TargetArgs;
 pub use tui::TuiArgs;
 
-/// Command-line interface for the Parallelized `AFLPlusPlus` Campaign Runner
+/// Command-line interface for the `AFL++` Campaign Toolbelt
 #[derive(Parser, Debug, Clone)]
-#[command(name = "Parallelized AFLPlusPlus Campaign Runner")]
+#[command(name = "AFLPlusPlus (multi-core) campaign toolbelt")]
 #[command(author = "C.K. <admin@0x434b.dev>")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 pub struct Cli {
@@ -54,7 +54,7 @@ pub enum Commands {
 }
 
 #[derive(Deserialize, Default, Debug, Clone)]
-pub struct Config {
+pub struct Args {
     /// Target configuration
     pub target: TargetArgs,
     /// Coverage configuration
@@ -67,12 +67,12 @@ pub struct Config {
     pub misc: MiscArgs,
 }
 
-pub trait ConfigMerge<T> {
-    fn merge_with_config(&self, config: &Config) -> T;
+pub trait ArgMerge<T> {
+    fn merge_with_config(&self, args: &Args) -> T;
 }
 
-impl ConfigMerge<Self> for GenArgs {
-    fn merge_with_config(&self, config: &Config) -> Self {
+impl ArgMerge<Self> for GenArgs {
+    fn merge_with_config(&self, args: &Args) -> Self {
         let merge_path = |opt: Option<std::path::PathBuf>, cfg_str: Option<String>| {
             opt.or_else(|| {
                 cfg_str
@@ -82,36 +82,36 @@ impl ConfigMerge<Self> for GenArgs {
         };
 
         Self {
-            target: merge_path(self.target.clone(), config.target.path.clone()),
-            san_target: merge_path(self.san_target.clone(), config.target.san_path.clone()),
-            cmpl_target: merge_path(self.cmpl_target.clone(), config.target.cmpl_path.clone()),
-            cmpc_target: merge_path(self.cmpc_target.clone(), config.target.cmpc_path.clone()),
+            target: merge_path(self.target.clone(), args.target.path.clone()),
+            san_target: merge_path(self.san_target.clone(), args.target.san_path.clone()),
+            cmpl_target: merge_path(self.cmpl_target.clone(), args.target.cmpl_path.clone()),
+            cmpc_target: merge_path(self.cmpc_target.clone(), args.target.cmpc_path.clone()),
             target_args: self
                 .target_args
                 .clone()
-                .or_else(|| config.target.args.clone().filter(|args| !args.is_empty())),
-            runners: Some(self.runners.or(config.afl_cfg.runners).unwrap_or(1)),
-            input_dir: merge_path(self.input_dir.clone(), config.afl_cfg.seed_dir.clone())
+                .or_else(|| args.target.args.clone().filter(|args| !args.is_empty())),
+            runners: Some(self.runners.or(args.afl_cfg.runners).unwrap_or(1)),
+            input_dir: merge_path(self.input_dir.clone(), args.afl_cfg.seed_dir.clone())
                 .or_else(|| Some(std::path::PathBuf::from(AFL_CORPUS))),
-            output_dir: merge_path(self.output_dir.clone(), config.afl_cfg.solution_dir.clone())
+            output_dir: merge_path(self.output_dir.clone(), args.afl_cfg.solution_dir.clone())
                 .or_else(|| Some(std::path::PathBuf::from(AFL_OUTPUT))),
-            dictionary: merge_path(self.dictionary.clone(), config.afl_cfg.dictionary.clone()),
+            dictionary: merge_path(self.dictionary.clone(), args.afl_cfg.dictionary.clone()),
             afl_binary: self
                 .afl_binary
                 .clone()
-                .or_else(|| config.afl_cfg.afl_binary.clone().filter(|b| !b.is_empty())),
-            mode: config.afl_cfg.mode.unwrap_or(self.mode),
-            seed: self.seed.or(config.misc.seed),
-            use_seed_afl: config.misc.use_seed_afl.unwrap_or(self.use_seed_afl),
+                .or_else(|| args.afl_cfg.afl_binary.clone().filter(|b| !b.is_empty())),
+            mode: args.afl_cfg.mode.unwrap_or(self.mode),
+            seed: self.seed.or(args.misc.seed),
+            use_seed_afl: args.misc.use_seed_afl.unwrap_or(self.use_seed_afl),
             config: self.config.clone(),
         }
     }
 }
 
-impl ConfigMerge<Self> for RunArgs {
-    fn merge_with_config(&self, config: &Config) -> Self {
-        let gen_args = self.gen_args.merge_with_config(config);
-        let session_runner = config
+impl ArgMerge<Self> for RunArgs {
+    fn merge_with_config(&self, args: &Args) -> Self {
+        let gen_args = self.gen_args.merge_with_config(args);
+        let session_runner = args
             .session
             .runner
             .as_deref()
@@ -119,33 +119,33 @@ impl ConfigMerge<Self> for RunArgs {
 
         Self {
             gen_args,
-            dry_run: self.dry_run || config.session.dry_run.unwrap_or(false),
+            dry_run: self.dry_run || args.session.dry_run.unwrap_or(false),
             session_runner,
             session_name: self
                 .session_name
                 .clone()
-                .or_else(|| config.session.name.clone().filter(|s| !s.is_empty())),
+                .or_else(|| args.session.name.clone().filter(|s| !s.is_empty())),
             tui: if self.dry_run {
                 false
             } else {
-                self.tui || config.misc.tui.unwrap_or(false)
+                self.tui || args.misc.tui.unwrap_or(false)
             },
             detached: if self.dry_run {
                 false
             } else {
-                self.detached || config.misc.detached.unwrap_or(false)
+                self.detached || args.misc.detached.unwrap_or(false)
             },
             is_ramdisk: if self.is_ramdisk {
                 false
             } else {
-                self.is_ramdisk || config.misc.is_ramdisk.unwrap_or(false)
+                self.is_ramdisk || args.misc.is_ramdisk.unwrap_or(false)
             },
         }
     }
 }
 
-impl ConfigMerge<Self> for CovArgs {
-    fn merge_with_config(&self, config: &Config) -> Self {
+impl ArgMerge<Self> for CovArgs {
+    fn merge_with_config(&self, args: &Args) -> Self {
         let merge_path = |opt: Option<std::path::PathBuf>, cfg_str: Option<String>| {
             opt.or_else(|| {
                 cfg_str
@@ -155,15 +155,15 @@ impl ConfigMerge<Self> for CovArgs {
         };
 
         Self {
-            target: merge_path(self.target.clone(), config.target.cov_path.clone()),
+            target: merge_path(self.target.clone(), args.target.cov_path.clone()),
             target_args: self
                 .target_args
                 .clone()
-                .or_else(|| config.target.args.clone().filter(|args| !args.is_empty())),
-            output_dir: merge_path(self.output_dir.clone(), config.afl_cfg.solution_dir.clone())
+                .or_else(|| args.target.args.clone().filter(|args| !args.is_empty())),
+            output_dir: merge_path(self.output_dir.clone(), args.afl_cfg.solution_dir.clone())
                 .or_else(|| Some(std::path::PathBuf::from(AFL_OUTPUT))),
-            split_report: config.coverage.split_report.unwrap_or(self.split_report),
-            text_report: match config.coverage.report_type.as_deref() {
+            split_report: args.coverage.split_report.unwrap_or(self.split_report),
+            text_report: match args.coverage.report_type.as_deref() {
                 Some("HTML" | "html") => false,
                 Some("TEXT" | "text") => true,
                 Some(unknown) => {
@@ -177,15 +177,13 @@ impl ConfigMerge<Self> for CovArgs {
                 None => self.text_report,
             },
             show_args: self.show_args.clone().or_else(|| {
-                config
-                    .coverage
+                args.coverage
                     .misc_show_args
                     .clone()
                     .filter(|args| !args.is_empty())
             }),
             report_args: self.report_args.clone().or_else(|| {
-                config
-                    .coverage
+                args.coverage
                     .misc_report_args
                     .clone()
                     .filter(|args| !args.is_empty())
@@ -209,7 +207,7 @@ mod tests {
             ..GenArgs::default()
         };
 
-        let config = Config {
+        let config = Args {
             target: TargetArgs {
                 path: Some("/default/path".into()),
                 ..TargetArgs::default()
@@ -218,7 +216,7 @@ mod tests {
                 runners: Some(2),
                 ..AflArgs::default()
             },
-            ..Config::default()
+            ..Args::default()
         };
 
         let merged = args.merge_with_config(&config);
@@ -236,12 +234,12 @@ mod tests {
             ..RunArgs::default()
         };
 
-        let config = Config {
+        let config = Args {
             session: SessionArgs {
                 runner: Some("screen".into()),
                 ..SessionArgs::default()
             },
-            ..Config::default()
+            ..Args::default()
         };
 
         let merged = args.merge_with_config(&config);

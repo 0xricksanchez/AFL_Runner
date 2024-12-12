@@ -1,4 +1,4 @@
-use crate::cli::{Config, ConfigMerge, CovArgs, GenArgs, RunArgs};
+use crate::cli::{ArgMerge, Args, CovArgs, GenArgs, RunArgs};
 use anyhow::{bail, Context, Result};
 use std::{env, fs, path::PathBuf};
 
@@ -6,7 +6,7 @@ static DEFAULT_AFL_CONFIG: &str = "aflr_cfg.toml";
 
 #[derive(Debug)]
 pub struct ArgumentAggregator {
-    config: Option<Config>,
+    config: Option<Args>,
     default_config_path: PathBuf,
 }
 
