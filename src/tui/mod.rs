@@ -1,15 +1,4 @@
-pub mod data_collection;
-pub mod session;
-
 use anyhow::Result;
-use std::io;
-use std::path::Path;
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
-
-use crate::tui::data_collection::DataFetcher;
-use crate::tui::session::{CampaignData, CrashInfoDetails};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
@@ -22,6 +11,13 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
     Terminal,
 };
+use std::{io, path::Path, sync::mpsc, thread, time::Duration};
+
+pub mod data_collection;
+pub mod session;
+
+use crate::tui::data_collection::DataFetcher;
+use crate::tui::session::{CampaignData, CrashInfoDetails};
 
 // Constants moved to a dedicated section for better visibility
 const SLOW_EXEC_PS_THRESHOLD: f64 = 250.0;

@@ -1,7 +1,11 @@
 use anyhow::{bail, Context, Result};
 use std::path::Path;
 
-use crate::{cli::TuiArgs, commands::Command, tui::session::CampaignData, tui::Tui};
+use crate::{
+    cli::TuiArgs,
+    commands::Command,
+    tui::{session::CampaignData, Tui},
+};
 
 pub struct RenderCommand<'a> {
     args: &'a TuiArgs,
