@@ -512,34 +512,39 @@ impl CoverageCollector {
             anyhow::bail!("No .profraw files found in {}", raw_cov_dir.display());
         }
 
-        // Create temporary directories for batch processing
+        // Create temporary directory for batch processing
         let temp_dir = TempDir::new()?;
-        let mut temp_merged_files = Vec::new();
+        
+        // Process files in parallel batches
+        let temp_merged_files: Result<Vec<_>> = profraw_files
+            .par_chunks(1000)
+            .enumerate()
+            .map(|(i, chunk)| {
+                let temp_output = temp_dir.path().join(format!("temp_merged_{}.profdata", i));
+                
+                let output = Command::new("llvm-profdata")
+                    .arg("merge")
+                    .arg("-sparse")
+                    .args(chunk)
+                    .arg("-o")
+                    .arg(&temp_output)
+                    .output()?;
 
-        // Process files in batches of 1000
-        for (i, chunk) in profraw_files.chunks(1000).enumerate() {
-            let temp_output = temp_dir.path().join(format!("temp_merged_{}.profdata", i));
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    anyhow::bail!(
+                        "Failed to merge coverage files (batch {}):\nCommand: llvm-profdata merge -sparse [...] -o {}\nError: {}",
+                        i,
+                        temp_output.display(),
+                        stderr
+                    );
+                }
 
-            let output = Command::new("llvm-profdata")
-                .arg("merge")
-                .arg("-sparse")
-                .args(chunk)
-                .arg("-o")
-                .arg(&temp_output)
-                .output()?;
+                Ok(temp_output)
+            })
+            .collect();
 
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                anyhow::bail!(
-                "Failed to merge coverage files (batch {}):\nCommand: llvm-profdata merge -sparse [...] -o {}\nError: {}",
-                i,
-                temp_output.display(),
-                stderr
-            );
-            }
-
-            temp_merged_files.push(temp_output);
-        }
+        let temp_merged_files = temp_merged_files?;
 
         // Final merge of temporary files
         let output = Command::new("llvm-profdata")
@@ -553,10 +558,10 @@ impl CoverageCollector {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             anyhow::bail!(
-            "Failed to merge temporary coverage files:\nCommand: llvm-profdata merge -sparse [...] -o {}\nError: {}",
-            output_file.display(),
-            stderr
-        );
+                "Failed to merge temporary coverage files:\nCommand: llvm-profdata merge -sparse [...] -o {}\nError: {}",
+                output_file.display(),
+                stderr
+            );
         }
 
         Ok(())
