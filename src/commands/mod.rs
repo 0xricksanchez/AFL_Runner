@@ -1,3 +1,4 @@
+pub mod add_seed;
 pub mod cov;
 pub mod gen;
 pub mod kill;

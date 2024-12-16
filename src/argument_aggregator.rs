@@ -1,4 +1,4 @@
-use crate::cli::{ArgMerge, Args, CovArgs, GenArgs, RunArgs};
+use crate::cli::{AddSeedArgs, ArgMerge, Args, CovArgs, GenArgs, RunArgs};
 use anyhow::{bail, Context, Result};
 use std::{env, fs, path::PathBuf};
 
@@ -87,6 +87,17 @@ impl ArgumentAggregator {
     /// # Errors
     /// * If the config cannot be merged
     pub fn merge_cov_args(&self, args: &CovArgs) -> Result<CovArgs> {
+        Ok(self
+            .config
+            .as_ref()
+            .map_or_else(|| args.clone(), |config| args.merge_with_config(config)))
+    }
+
+    /// Merge the provided adding seeds arguments with the config
+    ///
+    /// # Errors
+    /// * If the config cannot be merged
+    pub fn merge_add_seed_args(&self, args: &AddSeedArgs) -> Result<AddSeedArgs> {
         Ok(self
             .config
             .as_ref()

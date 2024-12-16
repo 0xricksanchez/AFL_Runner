@@ -520,7 +520,7 @@ impl CoverageCollector {
             .par_chunks(1000)
             .enumerate()
             .map(|(i, chunk)| {
-                let temp_output = temp_dir.path().join(format!("temp_merged_{}.profdata", i));
+                let temp_output = temp_dir.path().join(format!("temp_merged_{i}.profdata"));
                 
                 let output = Command::new("llvm-profdata")
                     .arg("merge")

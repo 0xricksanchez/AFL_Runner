@@ -64,7 +64,7 @@ impl<'a> RunCommand<'a> {
         } else {
             session.run()?;
             if !args.detached {
-                session.attach()?
+                session.attach()?;
             }
         }
         Ok(())
