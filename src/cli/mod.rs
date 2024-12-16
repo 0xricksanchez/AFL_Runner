@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use serde::Deserialize;
 
+mod add_seed;
 mod afl;
 pub mod constants;
 mod cov;
@@ -14,6 +15,7 @@ mod target;
 mod tui;
 mod utils;
 
+pub use add_seed::AddSeedArgs;
 pub use afl::AflArgs;
 use constants::{AFL_CORPUS, AFL_OUTPUT};
 pub use cov::CovArgs;
@@ -51,6 +53,8 @@ pub enum Commands {
     Tui(TuiArgs),
     /// Kills a running session and all spawned processes inside
     Kill(KillArgs),
+    /// Allows adding new seeds to a running campaign
+    AddSeed(AddSeedArgs),
 }
 
 #[derive(Deserialize, Default, Debug, Clone)]
@@ -189,6 +193,30 @@ impl ArgMerge<Self> for CovArgs {
                     .filter(|args| !args.is_empty())
             }),
             config: self.config.clone(),
+        }
+    }
+}
+
+impl ArgMerge<Self> for AddSeedArgs {
+    fn merge_with_config(&self, args: &Args) -> Self {
+        let merge_path = |opt: Option<std::path::PathBuf>, cfg_str: Option<String>| {
+            opt.or_else(|| {
+                cfg_str
+                    .filter(|p| !p.is_empty())
+                    .map(std::path::PathBuf::from)
+            })
+        };
+
+        Self {
+            target: merge_path(self.target.clone(), args.target.path.clone()),
+            target_args: self
+                .target_args
+                .clone()
+                .or_else(|| args.target.args.clone().filter(|args| !args.is_empty())),
+            output_dir: merge_path(self.output_dir.clone(), args.afl_cfg.solution_dir.clone())
+                .or_else(|| Some(std::path::PathBuf::from(AFL_OUTPUT))),
+            config: self.config.clone(),
+            seed: self.seed.clone(),
         }
     }
 }

@@ -12,8 +12,8 @@ pub mod utils;
 use argument_aggregator::ArgumentAggregator;
 use cli::{Cli, Commands};
 use commands::{
-    cov::CovCommand, gen::GenCommand, kill::KillCommand, render_tui::RenderCommand,
-    run::RunCommand, Command,
+    add_seed::AddSeedCommand, cov::CovCommand, gen::GenCommand, kill::KillCommand,
+    render_tui::RenderCommand, run::RunCommand, Command,
 };
 
 fn main() -> Result<()> {
@@ -25,6 +25,7 @@ fn main() -> Result<()> {
         Commands::Gen(args) => arg_aggregator.load(args.config.as_ref()),
         Commands::Run(args) => arg_aggregator.load(args.gen_args.config.as_ref()),
         Commands::Cov(args) => arg_aggregator.load(args.config.as_ref()),
+        Commands::AddSeed(args) => arg_aggregator.load(args.config.as_ref()),
         _ => Ok(()),
     }?;
 
@@ -35,10 +36,11 @@ fn main() -> Result<()> {
         Commands::Cov(args) => CovCommand::new(args, &arg_aggregator).execute(),
         Commands::Tui(args) => RenderCommand::new(args).execute(),
         Commands::Kill(args) => KillCommand::new(args).execute(),
+        Commands::AddSeed(args) => AddSeedCommand::new(args, &arg_aggregator).execute(),
     };
 
     if let Err(e) = result {
-        eprintln!("{}", e);
+        eprintln!("{e}");
         std::process::exit(1);
     }
 
