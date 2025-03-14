@@ -1,11 +1,11 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::path::Path;
 
 use crate::{
     afl::{base_cfg::Bcfg, cmd::Printable, cmd_gen::AFLCmdGenerator, harness::Harness},
     argument_aggregator::ArgumentAggregator,
-    cli::constants,
     cli::GenArgs,
+    cli::constants,
     commands::Command,
 };
 
@@ -79,10 +79,11 @@ impl Command for GenCommand<'_> {
     fn execute(&self) -> Result<()> {
         let (merged_args, raw_afl_flags) = self.arg_aggregator.merge_gen_args(self.args)?;
         let afl_generator = Self::create_afl_runner(&merged_args, raw_afl_flags.as_ref(), false)
-            .context("Failed to create AFL++ runner")?;
+            .map_err(|e| anyhow::anyhow!("Failed to create AFL++ runner: {}", e))?;
+
         afl_generator
             .run()
-            .context("Failed to run AFL++ generator")?
+            .map_err(|e| anyhow::anyhow!("Failed to run AFL++ generator: {}", e))?
             .print();
         Ok(())
     }
