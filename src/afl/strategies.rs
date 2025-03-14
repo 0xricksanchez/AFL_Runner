@@ -1,7 +1,6 @@
 use crate::afl::cmd::AFLCmd;
 use crate::afl::mode::Mode;
-use once_cell::sync::Lazy;
-use rand::seq::SliceRandom;
+use rand::{prelude::IndexedRandom, seq::SliceRandom};
 use std::collections::HashSet;
 use std::{fmt, path::PathBuf};
 
@@ -10,7 +9,7 @@ use std::{fmt, path::PathBuf};
 /// The values and probabilities are loosely based on the following AFL++ documentation:
 /// `https://github.com/AFLplusplus/AFLplusplus/blob/stable/docs/fuzzing_in_depth.md#c-using-multiple-cores`
 /// Static empty set for default case
-pub static EMPTY_INDICES: Lazy<HashSet<usize>> = Lazy::new(HashSet::new);
+pub static EMPTY_INDICES: std::sync::LazyLock<HashSet<usize>> = std::sync::LazyLock::new(HashSet::new);
 
 /// Configuration for CMPCOV instrumentation
 #[derive(Debug, Clone)]
@@ -409,7 +408,7 @@ impl AFLStrategy {
                                     }
                                 }
                             } else {
-                                let cmd_idx = rng.gen_range(0..cmds.len());
+                                let cmd_idx = rng.random_range(0..cmds.len());
                                 cmds[cmd_idx].misc_afl_flags.push(arg.clone());
                             }
                         }
@@ -421,7 +420,7 @@ impl AFLStrategy {
                 if cmds.len() >= 8 {
                     for cmd in cmds {
                         for (arg, prob) in &optional_args {
-                            if !cmd.misc_afl_flags.contains(arg) && rng.gen::<f64>() < *prob {
+                            if !cmd.misc_afl_flags.contains(arg) && rng.random::<f64>() < *prob {
                                 cmd.misc_afl_flags.push(arg.clone());
                             }
                         }

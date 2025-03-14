@@ -1,6 +1,6 @@
 pub mod add_seed;
 pub mod cov;
-pub mod gen;
+pub mod generate;
 pub mod kill;
 pub mod render_tui;
 pub mod run;

@@ -10,8 +10,8 @@ use crate::afl::{base_cfg::Bcfg, cmd::AFLCmd};
 use crate::utils::seed::Xorshift64;
 use crate::utils::system::find_binary_in_path;
 use anyhow::{Context, Result};
-use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
 
 const RUNNER_THRESH: u32 = 32;
 
@@ -33,7 +33,9 @@ impl AFLCmdGenerator {
     /// Creates a new `AFLCmdGenerator` instance
     pub fn new(harness: Harness, runners: u32, meta: &Bcfg, mode: Mode, seed: Option<u64>) -> Self {
         if runners > RUNNER_THRESH {
-            println!("[!] Warning: Performance degradation may occur with more than 32 runners. Observe campaign results carefully.");
+            println!(
+                "[!] Warning: Performance degradation may occur with more than 32 runners. Observe campaign results carefully."
+            );
         }
 
         Self {
@@ -52,7 +54,9 @@ impl AFLCmdGenerator {
             .map(|(k, v)| format!("{k}={v}"))
             .collect::<Vec<String>>();
         if !gl_afl_env.is_empty() {
-            println!("[!] Warning: Exported AFL++ environment variables found... Check generated commands!");
+            println!(
+                "[!] Warning: Exported AFL++ environment variables found... Check generated commands!"
+            );
         }
         gl_afl_env
     }
@@ -393,9 +397,10 @@ mod tests {
         assert!(!cmds.is_empty());
 
         println!("{:?}", cmds);
-        assert!(cmds
-            .iter()
-            .any(|cmd| cmd.to_string().contains("cmpcov-binary")));
+        assert!(
+            cmds.iter()
+                .any(|cmd| cmd.to_string().contains("cmpcov-binary"))
+        );
     }
 
     #[test]
@@ -440,10 +445,10 @@ mod tests {
 
     #[test]
     fn test_environment_variables() {
-        std::env::set_var("AFL_TEST_VAR", "test_value");
+        unsafe { std::env::set_var("AFL_TEST_VAR", "test_value") };
         let env_vars = AFLCmdGenerator::get_afl_env_vars();
         assert!(env_vars.iter().any(|v| v == "AFL_TEST_VAR=test_value"));
-        std::env::remove_var("AFL_TEST_VAR");
+        unsafe { std::env::remove_var("AFL_TEST_VAR") };
     }
 
     #[test]

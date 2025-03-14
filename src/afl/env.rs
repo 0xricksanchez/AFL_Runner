@@ -208,7 +208,7 @@ impl AFLEnv {
         let count = (configs.len() as f64 * percentage) as usize;
         let mut indices = HashSet::new();
         while indices.len() < count {
-            indices.insert(rng.gen_range(0..configs.len()));
+            indices.insert(rng.random_range(0..configs.len()));
         }
         for index in indices {
             configs[index].enable_flag(flag.clone());

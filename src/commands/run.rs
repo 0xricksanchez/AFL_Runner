@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::{
     hash::{DefaultHasher, Hasher},
     path::Path,
@@ -7,8 +7,8 @@ use std::{
 use crate::{
     afl::cmd::ToStringVec,
     argument_aggregator::ArgumentAggregator,
-    cli::{constants, RunArgs, SessionRunner},
-    commands::{gen::GenCommand, Command},
+    cli::{RunArgs, SessionRunner, constants},
+    commands::{Command, generate::GenCommand},
     runners::{
         runner::{Session, SessionManager},
         screen::ScreenSession,
