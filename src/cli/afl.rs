@@ -18,4 +18,6 @@ pub struct AflArgs {
     pub afl_flags: Option<String>,
     /// Mode to generate commands
     pub mode: Option<Mode>,
+    /// Nyx mode
+    pub nyx_mode: Option<bool>,
 }

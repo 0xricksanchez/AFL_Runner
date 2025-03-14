@@ -179,17 +179,31 @@ impl AFLCmdGenerator {
 
         let target_fname = get_file_stem(&self.harness.target_bin);
 
+        if self.harness.nyx_mode {
+            cmds.iter_mut()
+                .for_each(|cmd| cmd.add_flag("-Y".to_string()));
+        }
+
         if let Some(cmd) = cmds.first_mut() {
-            match mode {
-                Mode::CIFuzzing => {
+            match (mode, self.harness.nyx_mode) {
+                (Mode::CIFuzzing, false) => {
                     cmd.add_flag(format!("-S s_{target_fname}"));
                 }
-                _ => {
+                (_, false) => {
                     cmd.add_flag(format!("-M m_{target_fname}"));
+                }
+                (_, true) => {
+                    cmd.add_flag(format!("-M 0"));
                 }
             }
         }
+
         for (i, cmd) in cmds.iter_mut().skip(1).enumerate() {
+            if self.harness.nyx_mode {
+                cmd.add_flag(format!("-S {}", i + 1));
+                continue;
+            }
+
             let suffix = if cmd.misc_afl_flags.iter().any(|f| f.contains("-c")) {
                 format!("_{target_fname}_cl")
             } else {
@@ -264,6 +278,7 @@ mod tests {
             cmpcov_bin: None,
             target_args: None,
             cov_bin: None,
+            nyx_mode: false,
         }
     }
 

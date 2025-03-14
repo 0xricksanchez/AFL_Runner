@@ -108,6 +108,7 @@ impl ArgMerge<Self> for GenArgs {
             seed: self.seed.or(args.misc.seed),
             use_seed_afl: args.misc.use_seed_afl.unwrap_or(self.use_seed_afl),
             config: self.config.clone(),
+            nyx_mode: args.afl_cfg.nyx_mode.unwrap_or(self.nyx_mode),
         }
     }
 }
