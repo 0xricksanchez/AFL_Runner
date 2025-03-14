@@ -278,7 +278,7 @@ mod tests {
         fs::create_dir(&input_dir).unwrap();
         fs::create_dir(&output_dir).unwrap();
 
-        let afl_base = Bcfg::new(input_dir.clone(), output_dir.clone());
+        let afl_base = Bcfg::new(input_dir, output_dir);
 
         let generator = AFLCmdGenerator::new(
             create_test_harness(),
@@ -396,7 +396,7 @@ mod tests {
         let cmds = result.unwrap();
         assert!(!cmds.is_empty());
 
-        println!("{:?}", cmds);
+        println!("{cmds:?}");
         assert!(
             cmds.iter()
                 .any(|cmd| cmd.to_string().contains("cmpcov-binary"))
@@ -479,7 +479,7 @@ mod tests {
         let generator_with_defaults = AFLCmdGenerator::new(
             create_test_harness(),
             2,
-            &generator.base_cfg.clone(),
+            &generator.base_cfg,
             Mode::MultipleCores,
             None,
         );
@@ -497,6 +497,6 @@ mod tests {
         let expected_seed = Xorshift64::new(generator.seed.unwrap()).rand();
 
         assert!(cmds[0].to_string().contains("-s"));
-        assert!(cmds[0].to_string().contains(&format!("{}", expected_seed)));
+        assert!(cmds[0].to_string().contains(&format!("{expected_seed}")));
     }
 }

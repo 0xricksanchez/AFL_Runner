@@ -527,7 +527,7 @@ mod tests {
     use std::io::Write;
     use tempfile::TempDir;
 
-    const MOCK_STATS_CONTENT: &str = r#"
+    const MOCK_STATS_CONTENT: &str = r"
         fuzzer_pid : 1234
         execs_done : 1000000
         execs_per_sec : 277.77
@@ -537,7 +537,7 @@ mod tests {
         bitmap_cvg : 45.5%
         afl_banner : test_fuzzer
         afl_version : 4.05c
-    "#;
+    ";
 
     #[test]
     fn test_fuzzer_metrics_parsing() {
@@ -629,16 +629,15 @@ mod tests {
             let stats_dir = temp_dir.path().join(fuzzer_name);
             fs::create_dir(&stats_dir).unwrap();
             let stats_content = format!(
-                r#"
+                r"
                 fuzzer_pid : 1234
                 execs_done : 1000000
                 execs_per_sec : 277.77
                 pending_favs : 100
                 pending_total : 500
-                stability : {}%
+                stability : {stability}%
                 bitmap_cvg : 45.5%
-                "#,
-                stability
+                "
             );
             let stats_file = stats_dir.join("fuzzer_stats");
             File::create(&stats_file)
@@ -665,7 +664,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let mut campaign_data = CampaignData::new();
 
-        let stats_content = r#"
+        let stats_content = r"
             fuzzer_pid : 1234
             execs_done : 1000000
             execs_per_sec : 277.77
@@ -676,7 +675,7 @@ mod tests {
             afl_banner : test_fuzzer
             afl_version : 4.05c
             run_time : 3600
-        "#;
+        ";
 
         let stats_dir = temp_dir.path().join("fuzzer01");
         fs::create_dir(&stats_dir).unwrap();
@@ -706,11 +705,11 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let mut campaign_data = CampaignData::new();
 
-        let stats_content = r#"
+        let stats_content = r"
         fuzzer_pid : 1234
         time_wo_finds : 341
         last_find : 1730983297
-    "#;
+    ";
 
         let stats_dir = temp_dir.path().join("fuzzer01");
         fs::create_dir(&stats_dir).unwrap();
@@ -743,16 +742,15 @@ mod tests {
             let stats_dir = temp_dir.path().join(fuzzer_name);
             fs::create_dir(&stats_dir).unwrap();
             let stats_content = format!(
-                r#"
+                r"
                 fuzzer_pid : 1234
-                execs_done : {}
-                execs_per_sec : {}
+                execs_done : {execs}
+                execs_per_sec : {execs_per_sec}
                 pending_favs : 100
                 pending_total : 500
-                stability : {}%
-                bitmap_cvg : {}%
-                "#,
-                execs, execs_per_sec, stability, coverage
+                stability : {stability}%
+                bitmap_cvg : {coverage}%
+                "
             );
             let stats_file = stats_dir.join("fuzzer_stats");
             File::create(&stats_file)
@@ -786,7 +784,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let mut campaign_data = CampaignData::new();
 
-        let stats_content = r#"
+        let stats_content = r"
             fuzzer_pid : 1234
             execs_done : 0
             execs_per_sec : 0.0
@@ -794,7 +792,7 @@ mod tests {
             pending_total : 0
             stability : 0.00%
             bitmap_cvg : 0.0%
-        "#;
+        ";
 
         let stats_dir = temp_dir.path().join("fuzzer01");
         fs::create_dir(&stats_dir).unwrap();

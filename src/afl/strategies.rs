@@ -801,7 +801,7 @@ mod tests {
             strategy.apply(&mut cmds, &mut rng, false);
 
             // In Multiple mode, both flags should be present
-            println!("cmds: {:?}", cmds);
+            println!("cmds: {cmds:?}");
             for cmd in &cmds[1..] {
                 assert!(cmd.misc_afl_flags.contains(&"-L 0".to_string()));
                 assert!(cmd.misc_afl_flags.contains(&"-Z".to_string()));

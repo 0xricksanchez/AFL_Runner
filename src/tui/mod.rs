@@ -792,8 +792,7 @@ mod tests {
             assert_eq!(
                 Tui::format_solution_time(&total_runtime, solution_time),
                 expected,
-                "Failed for solution_time: {}",
-                solution_time
+                "Failed for solution_time: {solution_time}"
             );
         }
     }
@@ -812,8 +811,7 @@ mod tests {
             assert_eq!(
                 Tui::format_int_to_hint(int_val),
                 Tui::format_float_to_hfloat(float_val),
-                "Mismatch between int and float formatting for value: {}",
-                int_val
+                "Mismatch between int and float formatting for value: {int_val}"
             );
         }
     }
