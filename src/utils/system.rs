@@ -1,11 +1,12 @@
 use std::{
     fs,
-    io::{self, stdin, Read},
+    io::BufReader,
+    io::{self, Read, stdin},
     path::{Path, PathBuf},
     process::Command,
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use sysinfo::System;
 use uuid::Uuid;
 
@@ -149,11 +150,13 @@ fn should_clean_directory(dir: &Path) -> io::Result<bool> {
 
 /// Gets user input from stdin
 pub fn get_user_input() -> char {
-    std::io::stdin()
-        .bytes()
-        .next()
-        .and_then(std::result::Result::ok)
-        .map_or('y', |byte| {
+    let stdin = std::io::stdin();
+    let mut reader = BufReader::new(stdin.lock());
+    let mut buffer = [0; 1];
+
+    match reader.read(&mut buffer) {
+        Ok(1) => {
+            let byte = buffer[0];
             let b = byte as char;
             if b.is_ascii_alphabetic() {
                 b.to_lowercase().next().unwrap_or('y')
@@ -162,7 +165,9 @@ pub fn get_user_input() -> char {
             } else {
                 b
             }
-        })
+        }
+        _ => 'y', // Default value for errors or empty input
+    }
 }
 
 #[cfg(test)]
@@ -189,10 +194,10 @@ mod tests {
         let bin_path = dir.path().join("afl-fuzz");
         File::create(&bin_path).unwrap();
 
-        env::set_var("AFL_PATH", bin_path.to_str().unwrap());
+        unsafe { env::set_var("AFL_PATH", bin_path.to_str().unwrap()) };
         let result = find_binary_in_path::<PathBuf>(None);
         assert!(result.is_ok());
-        env::remove_var("AFL_PATH");
+        unsafe { env::remove_var("AFL_PATH") };
     }
 
     #[test]

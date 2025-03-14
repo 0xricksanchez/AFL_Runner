@@ -10,8 +10,8 @@ use crate::afl::{base_cfg::Bcfg, cmd::AFLCmd};
 use crate::utils::seed::Xorshift64;
 use crate::utils::system::find_binary_in_path;
 use anyhow::{Context, Result};
-use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
 
 const RUNNER_THRESH: u32 = 32;
 
@@ -33,7 +33,9 @@ impl AFLCmdGenerator {
     /// Creates a new `AFLCmdGenerator` instance
     pub fn new(harness: Harness, runners: u32, meta: &Bcfg, mode: Mode, seed: Option<u64>) -> Self {
         if runners > RUNNER_THRESH {
-            println!("[!] Warning: Performance degradation may occur with more than 32 runners. Observe campaign results carefully.");
+            println!(
+                "[!] Warning: Performance degradation may occur with more than 32 runners. Observe campaign results carefully."
+            );
         }
 
         Self {
@@ -52,7 +54,9 @@ impl AFLCmdGenerator {
             .map(|(k, v)| format!("{k}={v}"))
             .collect::<Vec<String>>();
         if !gl_afl_env.is_empty() {
-            println!("[!] Warning: Exported AFL++ environment variables found... Check generated commands!");
+            println!(
+                "[!] Warning: Exported AFL++ environment variables found... Check generated commands!"
+            );
         }
         gl_afl_env
     }
@@ -189,7 +193,7 @@ impl AFLCmdGenerator {
                     cmd.add_flag(format!("-M m_{target_fname}"));
                 }
                 (_, true) => {
-                    cmd.add_flag(format!("-M 0"));
+                    cmd.add_flag("-M 0".to_string());
                 }
             }
         }
@@ -289,7 +293,7 @@ mod tests {
         fs::create_dir(&input_dir).unwrap();
         fs::create_dir(&output_dir).unwrap();
 
-        let afl_base = Bcfg::new(input_dir.clone(), output_dir.clone());
+        let afl_base = Bcfg::new(input_dir, output_dir);
 
         let generator = AFLCmdGenerator::new(
             create_test_harness(),
@@ -407,10 +411,11 @@ mod tests {
         let cmds = result.unwrap();
         assert!(!cmds.is_empty());
 
-        println!("{:?}", cmds);
-        assert!(cmds
-            .iter()
-            .any(|cmd| cmd.to_string().contains("cmpcov-binary")));
+        println!("{cmds:?}");
+        assert!(
+            cmds.iter()
+                .any(|cmd| cmd.to_string().contains("cmpcov-binary"))
+        );
     }
 
     #[test]
@@ -455,10 +460,10 @@ mod tests {
 
     #[test]
     fn test_environment_variables() {
-        std::env::set_var("AFL_TEST_VAR", "test_value");
+        unsafe { std::env::set_var("AFL_TEST_VAR", "test_value") };
         let env_vars = AFLCmdGenerator::get_afl_env_vars();
         assert!(env_vars.iter().any(|v| v == "AFL_TEST_VAR=test_value"));
-        std::env::remove_var("AFL_TEST_VAR");
+        unsafe { std::env::remove_var("AFL_TEST_VAR") };
     }
 
     #[test]
@@ -489,7 +494,7 @@ mod tests {
         let generator_with_defaults = AFLCmdGenerator::new(
             create_test_harness(),
             2,
-            &generator.base_cfg.clone(),
+            &generator.base_cfg,
             Mode::MultipleCores,
             None,
         );
@@ -507,6 +512,6 @@ mod tests {
         let expected_seed = Xorshift64::new(generator.seed.unwrap()).rand();
 
         assert!(cmds[0].to_string().contains("-s"));
-        assert!(cmds[0].to_string().contains(&format!("{}", expected_seed)));
+        assert!(cmds[0].to_string().contains(&format!("{expected_seed}")));
     }
 }

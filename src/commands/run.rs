@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::{
     hash::{DefaultHasher, Hasher},
     path::Path,
@@ -7,8 +7,8 @@ use std::{
 use crate::{
     afl::cmd::ToStringVec,
     argument_aggregator::ArgumentAggregator,
-    cli::{constants, RunArgs, SessionRunner},
-    commands::{gen::GenCommand, Command},
+    cli::{RunArgs, SessionRunner, constants},
+    commands::{Command, generate::GenCommand},
     runners::{
         runner::{Session, SessionManager},
         screen::ScreenSession,
@@ -84,11 +84,11 @@ impl Command for RunCommand<'_> {
             raw_afl_flags.as_ref(),
             merged_args.is_ramdisk,
         )
-        .context("Failed to create AFL++ runner")?;
+        .map_err(|e| anyhow::anyhow!("Failed to create AFL++ runner: {}", e))?;
 
         let afl_commands = afl_generator
             .run()
-            .context("Failed to run AFL++ generator")?;
+            .map_err(|e| anyhow::anyhow!("Failed to run AFL++ generator: {}", e))?;
 
         if merged_args.dry_run {
             println!("{afl_commands:?}");

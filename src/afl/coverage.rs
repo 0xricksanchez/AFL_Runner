@@ -597,15 +597,15 @@ mod tests {
 
         // Create multiple fuzzer instance directories
         for i in 1..=3 {
-            let instance_dir = afl_dir.join(format!("fuzzer{:02}", i));
+            let instance_dir = afl_dir.join(format!("fuzzer{i:02}"));
             fs::create_dir(&instance_dir)?;
             let queue_dir = instance_dir.join("queue");
             fs::create_dir(&queue_dir)?;
 
             // Create multiple test input files
             for j in 0..3 {
-                let input_file = queue_dir.join(format!("id:{:06}", j));
-                File::create(&input_file)?.write_all(format!("test input {}", j).as_bytes())?;
+                let input_file = queue_dir.join(format!("id:{j:06}"));
+                File::create(&input_file)?.write_all(format!("test input {j}").as_bytes())?;
             }
         }
 
@@ -633,7 +633,7 @@ mod tests {
 
         let binary_path = test_dir.join("test_binary");
         Command::new("clang")
-            .args(&["-fprofile-instr-generate", "-fcoverage-mapping"])
+            .args(["-fprofile-instr-generate", "-fcoverage-mapping"])
             .arg("-o")
             .arg(&binary_path)
             .arg(&source_path)

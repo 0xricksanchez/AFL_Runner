@@ -12,8 +12,8 @@ pub mod utils;
 use argument_aggregator::ArgumentAggregator;
 use cli::{Cli, Commands};
 use commands::{
-    add_seed::AddSeedCommand, cov::CovCommand, gen::GenCommand, kill::KillCommand,
-    render_tui::RenderCommand, run::RunCommand, Command,
+    Command, add_seed::AddSeedCommand, cov::CovCommand, generate::GenCommand, kill::KillCommand,
+    render_tui::RenderCommand, run::RunCommand,
 };
 
 fn main() -> Result<()> {
