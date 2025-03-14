@@ -10,6 +10,10 @@ pub enum HarnessError {
     InvalidBinary(PathBuf),
     /// Path resolution failed
     PathResolution(PathBuf, String), // Changed to String to make it Clone}
+    /// Nyx mode feature not supported
+    NyxModeFeature(String),
+    /// Nyx mode share directory not found or invalid
+    NyxModeShareDir,
 }
 
 impl fmt::Display for HarnessError {
@@ -18,6 +22,15 @@ impl fmt::Display for HarnessError {
             Self::InvalidBinary(path) => write!(f, "Invalid binary path: {}", path.display()),
             Self::PathResolution(path, err) => {
                 write!(f, "Failed to resolve path {}: {}", path.display(), err)
+            }
+            Self::NyxModeFeature(feature) => {
+                write!(f, "Feature not supported in Nyx mode: {}", feature)
+            }
+            Self::NyxModeShareDir => {
+                write!(
+                    f,
+                    "Target is not a nyx share directory or the directory does not exist"
+                )
             }
         }
     }
@@ -45,6 +58,8 @@ pub struct Harness {
     /// Additional arguments for the harness
     /// If the harness reads from stdin, use @@ as placeholder
     pub target_args: Option<String>,
+    /// Nyx mode (`-Y`)
+    pub nyx_mode: bool,
 }
 
 impl Harness {
@@ -54,6 +69,7 @@ impl Harness {
     ///
     /// * `target_binary` - Path to the target binary
     /// * `target_args` - Optional vector of arguments for the harness
+    /// * `nyx_mode` - Nyx mode (`-Y`)
     ///
     /// # Errors
     ///
@@ -61,8 +77,9 @@ impl Harness {
     pub fn new<P: AsRef<Path>>(
         target_binary: P,
         target_args: Option<Vec<String>>,
+        nyx_mode: bool,
     ) -> Result<Self, HarnessError> {
-        let target_bin = Self::resolve_binary(target_binary.as_ref())?;
+        let target_bin = Self::resolve_binary(target_binary.as_ref(), nyx_mode)?;
         let target_args = target_args.map(|args| args.join(" "));
 
         Ok(Self {
@@ -72,15 +89,21 @@ impl Harness {
             cmpcov_bin: None,
             cov_bin: None,
             target_args,
+            nyx_mode,
         })
     }
 
     /// Helper method to process optional binary paths
-    fn process_optional_binary<P>(binary: Option<P>) -> Result<Option<PathBuf>, HarnessError>
+    fn process_optional_binary<P>(
+        binary: Option<P>,
+        nyx_mode: bool,
+    ) -> Result<Option<PathBuf>, HarnessError>
     where
         P: Into<PathBuf> + AsRef<Path>,
     {
-        binary.map(Self::resolve_binary).transpose()
+        binary
+            .map(|b| Self::resolve_binary(b, nyx_mode))
+            .transpose()
     }
 
     /// Sets the sanitizer binary
@@ -91,7 +114,7 @@ impl Harness {
     where
         P: Into<PathBuf> + AsRef<Path>,
     {
-        self.sanitizer_bin = Self::process_optional_binary(sanitizer_bin)?;
+        self.sanitizer_bin = Self::process_optional_binary(sanitizer_bin, self.nyx_mode)?;
         Ok(self)
     }
 
@@ -103,7 +126,10 @@ impl Harness {
     where
         P: Into<PathBuf> + AsRef<Path>,
     {
-        self.cmplog_bin = Self::process_optional_binary(cmplog_bin)?;
+        if cmplog_bin.is_some() && self.nyx_mode {
+            return Err(HarnessError::NyxModeFeature("cmplog".to_string()));
+        }
+        self.cmplog_bin = Self::process_optional_binary(cmplog_bin, self.nyx_mode)?;
         Ok(self)
     }
 
@@ -115,7 +141,7 @@ impl Harness {
     where
         P: Into<PathBuf> + AsRef<Path>,
     {
-        self.cmpcov_bin = Self::process_optional_binary(cmpcov_bin)?;
+        self.cmpcov_bin = Self::process_optional_binary(cmpcov_bin, self.nyx_mode)?;
         Ok(self)
     }
 
@@ -127,7 +153,10 @@ impl Harness {
     where
         P: Into<PathBuf> + AsRef<Path>,
     {
-        self.cov_bin = Self::process_optional_binary(cov_bin)?;
+        if cov_bin.is_some() && self.nyx_mode {
+            return Err(HarnessError::NyxModeFeature("coverage".to_string()));
+        }
+        self.cov_bin = Self::process_optional_binary(cov_bin, self.nyx_mode)?;
         Ok(self)
     }
 
@@ -136,18 +165,23 @@ impl Harness {
     /// # Arguments
     ///
     /// * `binary` - Path to the binary to resolve
+    /// * `nyx_mode` - Nyx mode (`-Y`)
     ///
     /// # Returns
     ///
     /// * `Result<PathBuf, HarnessError>` - Canonical path if successful
-    fn resolve_binary<P>(binary: P) -> Result<PathBuf, HarnessError>
+    fn resolve_binary<P>(binary: P, nyx_mode: bool) -> Result<PathBuf, HarnessError>
     where
         P: Into<PathBuf> + AsRef<Path>,
     {
         // Convert once to PathBuf to avoid multiple conversions
         let binary_path = binary.into();
 
-        if !binary_path.is_file() {
+        if nyx_mode {
+            if !binary_path.is_dir() || !binary_path.exists() {
+                return Err(HarnessError::NyxModeShareDir);
+            }
+        } else if !binary_path.is_file() {
             return Err(HarnessError::InvalidBinary(binary_path));
         }
 
@@ -176,7 +210,7 @@ mod tests {
         File::create(&bin_path).unwrap();
         let target_args = vec!["--arg1".to_string(), "--arg2".to_string()];
 
-        let harness = Harness::new(&bin_path, Some(target_args)).unwrap();
+        let harness = Harness::new(&bin_path, Some(target_args), false).unwrap();
         assert_eq!(harness.target_bin, fs::canonicalize(&bin_path).unwrap());
         assert_eq!(harness.target_args, Some(("--arg1 --arg2").to_string()));
     }
@@ -185,7 +219,7 @@ mod tests {
     fn test_invalid_binary() {
         let non_existent = PathBuf::from("/nonexistent/binary");
         assert!(matches!(
-            Harness::new(&non_existent, None),
+            Harness::new(&non_existent, None, false),
             Err(HarnessError::InvalidBinary(_))
         ));
     }
@@ -196,7 +230,7 @@ mod tests {
         let main_bin = create_test_binary(dir.path(), "main_binary");
         let san_bin = create_test_binary(dir.path(), "san_binary");
 
-        let harness = Harness::new(&main_bin, None)?.with_sanitizer(Some(san_bin))?;
+        let harness = Harness::new(&main_bin, None, false)?.with_sanitizer(Some(san_bin))?;
 
         assert!(harness.sanitizer_bin.is_some());
         assert!(harness.cmplog_bin.is_none());
@@ -210,7 +244,7 @@ mod tests {
         let san_bin = create_test_binary(dir.path(), "san_binary");
         let cmp_bin = create_test_binary(dir.path(), "cmp_binary");
 
-        let harness = Harness::new(&main_bin, None)?
+        let harness = Harness::new(&main_bin, None, false)?
             .with_sanitizer(Some(&san_bin))?
             .with_cmplog(Some(&cmp_bin))?
             .with_coverage(Some(cmp_bin.clone()))?;
@@ -227,7 +261,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let main_bin = create_test_binary(dir.path(), "main_binary");
 
-        let harness = Harness::new(&main_bin, None)?
+        let harness = Harness::new(&main_bin, None, false)?
             .with_sanitizer(None::<PathBuf>)?
             .with_cmplog(None::<PathBuf>)?;
 
@@ -244,7 +278,7 @@ mod tests {
         let invalid_bin = dir.path().join("nonexistent");
 
         let result =
-            Harness::new(&main_bin, None).and_then(|h| h.with_sanitizer(Some(invalid_bin)));
+            Harness::new(&main_bin, None, false).and_then(|h| h.with_sanitizer(Some(invalid_bin)));
 
         assert!(matches!(result, Err(HarnessError::InvalidBinary(_))));
     }
@@ -254,22 +288,22 @@ mod tests {
         let bin_path = create_test_binary(dir.path(), "test_binary");
 
         // Test with PathBuf
-        let result = Harness::resolve_binary(bin_path.clone());
+        let result = Harness::resolve_binary(bin_path.clone(), false);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), fs::canonicalize(&bin_path).unwrap());
 
         // Test with &Path
-        let result = Harness::resolve_binary(&bin_path);
+        let result = Harness::resolve_binary(&bin_path, false);
         assert!(result.is_ok());
 
         // Test with &str
-        let result = Harness::resolve_binary(bin_path.to_str().unwrap());
+        let result = Harness::resolve_binary(bin_path.to_str().unwrap(), false);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_resolve_binary_invalid() {
-        let result = Harness::resolve_binary(PathBuf::from("/nonexistent/binary"));
+        let result = Harness::resolve_binary(PathBuf::from("/nonexistent/binary"), false);
         assert!(matches!(result, Err(HarnessError::InvalidBinary(_))));
     }
 }

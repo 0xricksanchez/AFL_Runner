@@ -29,6 +29,10 @@ pub struct GenArgs {
     #[arg(help = "Target binary arguments, including @@ if needed", raw = true)]
     pub target_args: Option<Vec<String>>,
 
+    /// Nyx mode toggle
+    #[arg(long, help = "Use AFL++'s Nyx mode", action = ArgAction::SetTrue)]
+    pub nyx_mode: bool,
+
     /// Amount of processes to spin up
     #[arg(
         short = 'n',
