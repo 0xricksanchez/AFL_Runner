@@ -9,7 +9,8 @@ use std::{fmt, path::PathBuf};
 /// The values and probabilities are loosely based on the following AFL++ documentation:
 /// `https://github.com/AFLplusplus/AFLplusplus/blob/stable/docs/fuzzing_in_depth.md#c-using-multiple-cores`
 /// Static empty set for default case
-pub static EMPTY_INDICES: std::sync::LazyLock<HashSet<usize>> = std::sync::LazyLock::new(HashSet::new);
+pub static EMPTY_INDICES: std::sync::LazyLock<HashSet<usize>> =
+    std::sync::LazyLock::new(HashSet::new);
 
 /// Configuration for CMPCOV instrumentation
 #[derive(Debug, Clone)]
@@ -968,7 +969,6 @@ mod tests {
         fn test_single_cmplog() {
             let mut rng = get_test_rng();
             let mut cmds = create_test_cmds(5);
-
             let mut strategy_bld = AFLStrategy::builder(Mode::MultipleCores);
             strategy_bld.with_cmplog(CmplogConfig {
                 binary: PathBuf::from("/bin/cmplog"),
@@ -979,9 +979,11 @@ mod tests {
 
             strat.apply(&mut cmds, &mut rng, false);
 
-            assert!(cmds[3]
-                .misc_afl_flags
-                .contains(&format!("-l 2AT -c {}", Path::new("/bin/cmplog").display())));
+            assert!(
+                cmds[1]
+                    .misc_afl_flags
+                    .contains(&format!("-l 2AT -c {}", Path::new("/bin/cmplog").display()))
+            );
         }
 
         #[test]
