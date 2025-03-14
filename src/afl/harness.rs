@@ -24,7 +24,7 @@ impl fmt::Display for HarnessError {
                 write!(f, "Failed to resolve path {}: {}", path.display(), err)
             }
             Self::NyxModeFeature(feature) => {
-                write!(f, "Feature not supported in Nyx mode: {}", feature)
+                write!(f, "Feature not supported in Nyx mode: {feature}")
             }
             Self::NyxModeShareDir => {
                 write!(

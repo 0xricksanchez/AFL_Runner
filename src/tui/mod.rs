@@ -1,15 +1,15 @@
 use anyhow::Result;
 use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use ratatui::{
+    Terminal,
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
     prelude::*,
     style::{Color, Style},
     text::Span,
     widgets::{Block, Borders, Paragraph, Wrap},
-    Terminal,
 };
 use std::{io, path::Path, sync::mpsc, thread, time::Duration};
 
@@ -106,12 +106,14 @@ impl Tui {
 
         let (tx, rx) = mpsc::channel();
 
-        thread::spawn(move || loop {
-            let session_data = dfetcher.collect_session_data().clone();
-            if tx.send(session_data).is_err() {
-                break;
+        thread::spawn(move || {
+            loop {
+                let session_data = dfetcher.collect_session_data().clone();
+                if tx.send(session_data).is_err() {
+                    break;
+                }
+                thread::sleep(Duration::from_secs(1));
             }
-            thread::sleep(Duration::from_secs(1));
         });
 
         Self::new()
@@ -757,14 +759,14 @@ mod tests {
         assert_eq!(Tui::format_last_event(&empty_events, &total_runtime), "N/A");
 
         // Test with recent event (3500 seconds = 58:20 remaining)
-        let recent_events = vec![create_crash_info(3500000, "fuzzer1")]; // 3500 seconds
+        let recent_events = vec![create_crash_info(3_500_000, "fuzzer1")]; // 3500 seconds
         assert_eq!(
             Tui::format_last_event(&recent_events, &total_runtime),
             "01:40"
         );
 
         // Test with future event (should return N/A)
-        let future_events = vec![create_crash_info(4000000, "fuzzer1")]; // 4000 seconds
+        let future_events = vec![create_crash_info(4_000_000, "fuzzer1")]; // 4000 seconds
         assert_eq!(
             Tui::format_last_event(&future_events, &total_runtime),
             "N/A"
@@ -777,15 +779,15 @@ mod tests {
 
         let test_cases = vec![
             // 7200 - 7000 = 200 seconds = ~3.33 minutes ago
-            (7000000, "3 minute(s) ago"),
+            (7_000_000, "3 minute(s) ago"),
             // 7200 - 3600 = 3600 seconds = 1 hour ago
-            (3600000, "1 hour(s) ago"),
+            (3_600_000, "1 hour(s) ago"),
             // 7200 - 5400 = 1800 seconds = 30 minutes ago
-            (5400000, "30 minute(s) ago"),
+            (5_400_000, "30 minute(s) ago"),
             // Current time
-            (7200000, "0 second(s) ago"),
+            (7_200_000, "0 second(s) ago"),
             // Future time
-            (7300000, "Solution found in the future"),
+            (7_300_000, "Solution found in the future"),
         ];
 
         for (solution_time, expected) in test_cases {

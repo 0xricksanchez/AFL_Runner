@@ -544,7 +544,7 @@ mod tests {
         let metrics = FuzzerMetrics::parse(MOCK_STATS_CONTENT);
 
         assert_eq!(metrics.pid, Some(1234));
-        assert_eq!(metrics.get::<usize>("execs_done"), Some(1000000));
+        assert_eq!(metrics.get::<usize>("execs_done"), Some(1_000_000));
         assert_eq!(metrics.get::<f64>("execs_per_sec"), Some(277.77));
         assert_eq!(metrics.get::<usize>("pending_favs"), Some(100));
         assert_eq!(metrics.get::<f64>("stability"), Some(100.00));
@@ -651,7 +651,7 @@ mod tests {
         fetcher.process_fuzzer_directories();
         fetcher.calculate_averages();
 
-        assert_eq!(fetcher.campaign_data.executions.count.cum, 3000000);
+        assert_eq!(fetcher.campaign_data.executions.count.cum, 3_000_000);
         assert!((fetcher.campaign_data.executions.per_sec.cum - 833.31).abs() < 0.01);
 
         assert!((fetcher.campaign_data.stability.max - 100.0).abs() < f64::EPSILON);
@@ -765,8 +765,8 @@ mod tests {
         fetcher.calculate_averages();
 
         // Test cumulative averages
-        assert_eq!(fetcher.campaign_data.executions.count.cum, 3300000);
-        assert_eq!(fetcher.campaign_data.executions.count.avg, 3300000); // Only one fuzzer alive
+        assert_eq!(fetcher.campaign_data.executions.count.cum, 3_300_000);
+        assert_eq!(fetcher.campaign_data.executions.count.avg, 3_300_000); // Only one fuzzer alive
         assert!((fetcher.campaign_data.executions.per_sec.cum - 785.0).abs() < 0.01);
 
         // Test min-max based averages

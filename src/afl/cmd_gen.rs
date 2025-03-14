@@ -193,7 +193,7 @@ impl AFLCmdGenerator {
                     cmd.add_flag(format!("-M m_{target_fname}"));
                 }
                 (_, true) => {
-                    cmd.add_flag(format!("-M 0"));
+                    cmd.add_flag("-M 0".to_string());
                 }
             }
         }
