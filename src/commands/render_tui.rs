@@ -19,7 +19,7 @@ impl<'a> RenderCommand<'a> {
     fn validate_output_dir(output_dir: &Path) -> Result<()> {
         for entry in output_dir.read_dir()? {
             let path = entry?.path();
-            if path.is_dir() {
+            if path.is_dir() && !path.to_str().unwrap().contains("workdir") {
                 let fuzzer_stats = path.join("fuzzer_stats");
                 if !fuzzer_stats.exists() {
                     bail!(

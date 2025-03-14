@@ -37,6 +37,7 @@ impl<'a> GenCommand<'a> {
         let harness = Harness::new(
             gen_args.target.clone().unwrap(),
             gen_args.target_args.clone(),
+            gen_args.nyx_mode,
         )?
         .with_sanitizer(gen_args.san_target.clone())?
         .with_cmplog(gen_args.cmpl_target.clone())?

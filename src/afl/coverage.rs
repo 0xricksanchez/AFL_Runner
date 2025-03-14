@@ -514,7 +514,7 @@ impl CoverageCollector {
 
         // Create temporary directory for batch processing
         let temp_dir = TempDir::new()?;
-        
+
         // Process files in parallel batches
         let temp_merged_files: Result<Vec<_>> = profraw_files
             .par_chunks(1000)
