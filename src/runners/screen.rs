@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use crate::runners::runner::{templates, Session, SessionManager};
+use crate::runners::runner::{Session, SessionManager, templates};
 
 /// Screen session manager implementation
 pub struct Screen;

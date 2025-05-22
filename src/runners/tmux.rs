@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::process::Command;
 
-use crate::runners::runner::{templates, Session, SessionManager};
+use crate::runners::runner::{Session, SessionManager, templates};
 
 /// Tmux session manager implementation
 pub struct Tmux;

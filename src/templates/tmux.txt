@@ -1,9 +1,6 @@
 #!/bin/bash
 set -eu
-set +o history # Temporarily turn off history
-
-# Set HISTCONTROL to ignorespace
-HISTCONTROL="ignorespace"
+# HISTCONTROL="ignorespace" # For this script itself
 
 # Define the session name
 SESSION_NAME="{{ session_name }}"
@@ -18,95 +15,171 @@ COMMANDS=(
 )
 
 # Check if session does not exist yet
-tmux has-session -t $SESSION_NAME 2>/dev/null && {
+if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     echo "Session '$SESSION_NAME' already exists. Aborting." >&2
     exit 1
-}
+fi
 
 # Start a new tmux session (detached)
-tmux -2u new-session -d -s $SESSION_NAME
+tmux -2u new-session -d -s "$SESSION_NAME"
 
 # Initialize the PID list
 AFLR_PID_LIST=""
 
-# Function to wait for shell to be ready
+# Function to wait for shell to be ready in a pane
 wait_for_shell() {
-    local window=$1
-    local max_attempts=10
+    local target_spec="$1" # e.g., session_name:window_name
+    local max_attempts=30  # 3 seconds total
     local attempt=1
-    local marker="AFLR_SHELL_READY_$$"  # Use PID to make marker unique
-    
-    # Send echo command with our marker
-    tmux send-keys -t "$SESSION_NAME:$window" " echo '$marker'" C-m
-    
-    while [ $attempt -le $max_attempts ]; do
-        if tmux capture-pane -p -t "$SESSION_NAME:$window" | grep -q "$marker"; then
-            sleep 0.1  # Small delay to ensure shell is fully ready after marker
+    local marker="AFLR_SHELL_READY_${$}_${RANDOM}"
+
+    # Send echo command with our marker. Leading space for history.
+    tmux send-keys -t "$target_spec" " echo '$marker'" C-m
+
+    while [ "$attempt" -le "$max_attempts" ]; do
+        if tmux capture-pane -p -t "$target_spec" | grep -qF "$marker"; then
+            sleep 0.1 # Small delay to ensure shell is fully ready after marker
             return 0
         fi
         sleep 0.1
         attempt=$((attempt + 1))
     done
+    echo "Error: Shell in pane '$target_spec' did not become ready (marker: $marker not found)." >&2
+    # For debugging, uncomment below:
+    # echo "DEBUG: Pane content for $target_spec on wait_for_shell timeout:" >&2
+    # tmux capture-pane -p -t "$target_spec" >&2
     return 1
 }
+
+# Function to get shell type in a pane using tmux's knowledge
+get_pane_shell_type() {
+    local target_spec="$1"
+    local pane_cmd_output
+    local shell_name_tmp
+    # Max attempts for display-message to return non-empty. Should be quick.
+    local max_attempts=10 # 10 * 0.1s = 1 second.
+    local attempt=1
+
+    while [ "$attempt" -le "$max_attempts" ]; do
+        # Get the command running in the pane directly from tmux
+        pane_cmd_output=$(tmux display-message -p -t "$target_spec" '#{pane_current_command}')
+        
+        if [ -n "$pane_cmd_output" ]; then
+            # Extract the basename of the command (e.g., /usr/bin/bash -> bash)
+            shell_name_tmp=$(basename "$pane_cmd_output")
+
+            # Uncomment for debugging what tmux reports as the pane command:
+            # echo "DEBUG: For target '$target_spec', pane_current_command is '$pane_cmd_output', basename is '$shell_name_tmp'." >&2
+
+            if [[ "$shell_name_tmp" == *bash* ]]; then echo "bash"; return 0; fi
+            if [[ "$shell_name_tmp" == *fish* ]]; then echo "fish"; return 0; fi
+            if [[ "$shell_name_tmp" == *zsh* ]]; then echo "zsh"; return 0; fi
+            # Covers 'sh', 'dash', and other simple or versioned names like 'bash-5.1'
+            if [[ "$shell_name_tmp" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+                echo "$shell_name_tmp" # Return the detected name
+                return 0
+            fi
+            
+            # If output was received but not classified by specific checks above
+            echo "Warning: Unclassified pane command '$pane_cmd_output' (basename '$shell_name_tmp') for target '$target_spec'. Defaulting to 'bash'." >&2
+            echo "bash" # Default to bash
+            return 1 # Indicate it's a fallback/guess
+        fi
+        sleep 0.1 # Wait a bit if pane_current_command is not yet set (e.g., pane initializing)
+        attempt=$((attempt + 1))
+    done
+    
+    echo "Warning: Could not determine shell for '$target_spec' (pane_current_command was empty after $max_attempts attempts). Defaulting to 'bash'." >&2
+    echo "bash" 
+    return 1 # Indicate failure / fallback
+}
+
 
 # Create and rename a window for each command
 for i in "${!COMMANDS[@]}"; do
     WINDOW_NAME="window-$i"
-    TEMP_PID_FILE="/tmp/aflr_pid_${i}.txt"
-    
-    if [ $i -eq 0 ]; then
-        # For the first command, send it to the first window and rename it
-        tmux rename-window -t $SESSION_NAME $WINDOW_NAME
-        wait_for_shell "$WINDOW_NAME"
-        tmux send-keys -t $SESSION_NAME " { ${COMMANDS[$i]} & echo \$! > $TEMP_PID_FILE; clear; fg; }" C-m
+    TEMP_PID_FILE="/tmp/aflr_pid_${SESSION_NAME}_${i}_$$.txt"
+    rm -f "$TEMP_PID_FILE" # Clean up any old temp file
+
+    current_target_spec=""
+
+    if [ "$i" -eq 0 ]; then
+        tmux rename-window -t "$SESSION_NAME" "$WINDOW_NAME"
+        current_target_spec="$SESSION_NAME:$WINDOW_NAME"
     else
-        # For subsequent commands, create new windows and rename them
-        tmux new-window -t $SESSION_NAME -n $WINDOW_NAME
-        wait_for_shell "$WINDOW_NAME"
-        tmux send-keys -t $SESSION_NAME:$WINDOW_NAME " { ${COMMANDS[$i]} & echo \$! > $TEMP_PID_FILE; clear; fg; }" C-m
+        tmux new-window -t "$SESSION_NAME" -n "$WINDOW_NAME"
+        current_target_spec="$SESSION_NAME:$WINDOW_NAME"
+    fi
+
+    if ! wait_for_shell "$current_target_spec"; then
+        echo "Aborting due to shell readiness failure in $current_target_spec." >&2
+        tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+        exit 1
+    fi
+
+    # Clear the marker left by wait_for_shell from the pane display
+    tmux send-keys -t "$current_target_spec" " clear" C-m
+    sleep 0.2 # Give clear a moment to execute
+
+    # Detect the shell type.
+    _detected_shell=$(get_pane_shell_type "$current_target_spec")
+    
+    # Uncomment for debugging the detected shell:
+    # echo "INFO: Detected shell in $current_target_spec as '$_detected_shell'."
+
+    _command_to_send_in_pane=""
+    # Ensure commands sent to panes start with a space to try and avoid shell history
+    if [[ "$_detected_shell" == "fish" ]]; then
+        _command_to_send_in_pane=" ${COMMANDS[$i]} &; set TMUX_SCRIPT_LAST_PID (jobs -q --last --pid); echo \$TMUX_SCRIPT_LAST_PID > \"$TEMP_PID_FILE\"; clear; fg %1 2>/dev/null || true"
+    else # Bash, Zsh, sh, dash, etc. (POSIX-like $!)
+        _command_to_send_in_pane=" { ${COMMANDS[$i]} & echo \$! > \"$TEMP_PID_FILE\"; clear; fg %1 2>/dev/null || true; }"
     fi
     
-    # Add a small delay to ensure the command has started
+    tmux send-keys -t "$current_target_spec" "$_command_to_send_in_pane" C-m
+    
+    # Add a small delay for the command to start/background before piping output
+    sleep 0.1 
+    tmux pipe-pane -o -t "$current_target_spec" "cat >> \"$LOG_FILE\""
+    
+    # Delay before processing the next window
     sleep 0.2
 done
 
-# Wait for all commands to start and PIDs to be written
-sleep 1
+echo "Waiting for PIDs to be written..."
+sleep 1.5 # Increased wait time for all commands to start and write PIDs
 
 # Capture the PIDs and verify processes are running
 for i in "${!COMMANDS[@]}"; do
-    TEMP_PID_FILE="/tmp/aflr_pid_${i}.txt"
+    TEMP_PID_FILE="/tmp/aflr_pid_${SESSION_NAME}_${i}_$$.txt"
+    PID_VALUE=""
+
     if [ -f "$TEMP_PID_FILE" ]; then
-        PID=$(cat "$TEMP_PID_FILE")
-        if [ -n "$PID" ]; then
-            # Check if the process is actually running
-            if kill -0 "$PID" 2>/dev/null; then
+        PID_VALUE=$(cat "$TEMP_PID_FILE")
+        if [[ "$PID_VALUE" =~ ^[0-9]+$ ]]; then # Validate PID is a number
+            if kill -0 "$PID_VALUE" 2>/dev/null; then # Check if process is running
                 if [ -z "$AFLR_PID_LIST" ]; then
-                    AFLR_PID_LIST="$PID"
+                    AFLR_PID_LIST="$PID_VALUE"
                 else
-                    AFLR_PID_LIST="$AFLR_PID_LIST:$PID"
+                    AFLR_PID_LIST="$AFLR_PID_LIST:$PID_VALUE"
                 fi
             else
-                echo "Process $PID (command: ${COMMANDS[$i]}) failed to start or crashed immediately!" >&2
-                exit 1
+                echo "Process $PID_VALUE (command: ${COMMANDS[$i]}) not running or crashed. Check $LOG_FILE." >&2
             fi
+        else
+            echo "Invalid PID '$PID_VALUE' found in $TEMP_PID_FILE for command: ${COMMANDS[$i]}. Likely a shell detection or command execution issue. Check $LOG_FILE." >&2
         fi
         rm "$TEMP_PID_FILE"
     else
-        echo "PID file not found for command: ${COMMANDS[$i]}" >&2
-        exit 1
+        echo "PID file $TEMP_PID_FILE not found for command: ${COMMANDS[$i]}. Process likely failed to start correctly. Check $LOG_FILE." >&2
     fi
 done
 
-# Redirect tmux server log to a specific file
-tmux pipe-pane -o -t $SESSION_NAME "cat >> $LOG_FILE"
-
 if [ -z "$AFLR_PID_LIST" ]; then
-    echo "Failed to start AFLR session '$SESSION_NAME'" >&2
+    echo "Failed to start any AFLR processes in session '$SESSION_NAME'. Check $LOG_FILE." >&2
+    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true # Clean up session
     exit 1
 else
-    echo $AFLR_PID_LIST > "$PID_FILE"
+    echo "$AFLR_PID_LIST" > "$PID_FILE"
+    echo "AFLR session '$SESSION_NAME' started with PIDs: $AFLR_PID_LIST. Log: $LOG_FILE. PID file: $PID_FILE"
+    echo "Attach with: tmux attach -t $SESSION_NAME"
 fi
-
-set -o history # Turn history back on

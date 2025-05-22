@@ -351,9 +351,10 @@ mod tests {
         assert_eq!(disable_trim_count, 2); // 60% of 4 rounded down = 2
 
         // Test ImportFirst (should be applied to all since runners < 8)
-        assert!(envs
-            .iter()
-            .all(|env| env.flags.contains(&AFLFlag::ImportFirst)));
+        assert!(
+            envs.iter()
+                .all(|env| env.flags.contains(&AFLFlag::ImportFirst))
+        );
     }
 
     #[test]
@@ -364,10 +365,11 @@ mod tests {
 
         assert!(envs.iter().take(0).all(|env| env.flags.len() == 1));
         // Check that the main fuzzer has at least the FINAL_SYNC flag set
-        assert!(envs
-            .iter()
-            .take(0)
-            .all(|env| env.flags.contains(&AFLFlag::FinalSync)));
+        assert!(
+            envs.iter()
+                .take(0)
+                .all(|env| env.flags.contains(&AFLFlag::FinalSync))
+        );
     }
 
     #[test]
@@ -376,9 +378,11 @@ mod tests {
         let envs = AFLEnv::new(Mode::MultipleCores, 20_u32, None, &mut rng);
 
         // Test that ImportFirst is not applied when runners >= 16
-        assert!(!envs
-            .iter()
-            .any(|env| env.flags.contains(&AFLFlag::ImportFirst)));
+        assert!(
+            !envs
+                .iter()
+                .any(|env| env.flags.contains(&AFLFlag::ImportFirst))
+        );
     }
 
     #[test]
