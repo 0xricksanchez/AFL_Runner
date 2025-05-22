@@ -55,7 +55,7 @@ impl AFLCmdGenerator {
             .collect::<Vec<String>>();
         if !gl_afl_env.is_empty() {
             println!(
-                "[!] Warning: Exported AFL++ environment variables found... Check generated commands!"
+                "[!] Warning: Exported AFL++ environment variables found {:?}... Check generated commands!", gl_afl_env
             );
         }
         gl_afl_env
