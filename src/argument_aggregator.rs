@@ -1,5 +1,5 @@
 use crate::cli::{AddSeedArgs, ArgMerge, Args, CovArgs, GenArgs, RunArgs};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::{env, fs, path::PathBuf};
 
 static DEFAULT_AFL_CONFIG: &str = "aflr_cfg.toml";

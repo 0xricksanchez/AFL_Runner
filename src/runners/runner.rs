@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use std::fs;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -8,7 +8,7 @@ use std::thread;
 use std::time::Duration;
 use tempfile::NamedTempFile;
 
-use crate::tui::{session::CampaignData, Tui};
+use crate::tui::{Tui, session::CampaignData};
 use crate::utils::system::{get_user_input, mkdir_helper};
 
 /// Template files for different session managers
